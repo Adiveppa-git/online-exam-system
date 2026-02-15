@@ -56,17 +56,7 @@ if (isset($_POST['update'])) {
 <div class="wrapper">
 
     <!-- SIDEBAR -->
-    <div class="sidebar">
-        <h2>Student Panel</h2>
-
-        <a href="dashboard.php">Dashboard</a>
-        <a href="exams.php">Available Exams</a>
-        <a href="result.php">My Results</a>
-        <a href="change_credentials.php" class="active">
-            Change Email / Password
-        </a>
-        <a href="../auth/logout.php">Logout</a>
-    </div>
+    <?php include "../student/sidebar.php"; ?>
 
     <!-- CONTENT -->
     <div class="content">

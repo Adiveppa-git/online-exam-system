@@ -39,32 +39,8 @@ $results = $conn->query("
 <div class="wrapper">
 
     <!-- ===== STUDENT SIDEBAR ===== -->
-    <div class="sidebar">
-        <h2>Student Panel</h2>
+    <?php include "sidebar.php"; ?>
 
-        <a href="dashboard.php"
-           class="<?= $current_page=='dashboard.php' ? 'active' : '' ?>">
-            Dashboard
-        </a>
-
-        <a href="exams.php"
-           class="<?= $current_page=='exams.php' ? 'active' : '' ?>">
-            Available Exams
-        </a>
-
-        <a href="result.php"
-           class="<?= $current_page=='result.php' ? 'active' : '' ?>">
-            My Results
-        </a>
-
-        <a href="../auth/change_password.php">
-            Change Password
-        </a>
-
-        <a href="../auth/logout.php">
-            Logout
-        </a>
-    </div>
 
     <!-- ===== CONTENT ===== -->
     <div class="content">

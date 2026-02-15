@@ -11,7 +11,7 @@ if (isset($_POST['send_otp']))
 {
     $name     = trim($_POST['name']);
     $email    = trim($_POST['email']);
-    $role     = $_POST['role'];
+    $role = "student";
     $password = $_POST['password'];
     $confirm  = $_POST['confirm_password'];
 
@@ -209,11 +209,6 @@ placeholder="Email"
 required>
 
 
-<select name="role" required>
-<option value="">Select Role</option>
-<option value="student">Student</option>
-<option value="admin">Admin</option>
-</select>
 
 
 <!-- PASSWORD -->
