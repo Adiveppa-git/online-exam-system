@@ -5,8 +5,7 @@ $mode = $_GET['mode'] ?? '';
 
 <style>
 
-/* ================= SIDEBAR BASE ================= */
-
+/* Sidebar base */
 .sidebar {
     width: 250px;
     height: 100vh;
@@ -15,62 +14,45 @@ $mode = $_GET['mode'] ?? '';
     position: fixed;
     top: 0;
     left: 0;
-    transition: all 0.3s ease;
-    overflow-x: hidden;
-    z-index: 2000;
+    transition: width 0.3s ease;
+    overflow: hidden;
 }
 
-/* CLOSED STATE (DESKTOP COLLAPSE) */
+/* CLOSED SIDEBAR */
 .sidebar.closed {
     width: 70px;
 }
 
-/* MOBILE HIDDEN STATE */
-@media (max-width: 768px) {
-
-    .sidebar {
-        transform: translateX(-100%);
-    }
-
-    .sidebar.active {
-        transform: translateX(0);
-    }
-
-}
-
-/* ================= HEADER ================= */
-
+/* Header */
 .sidebar-header {
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: space-between;
     padding: 15px;
 }
 
+/* Admin Panel text */
 .sidebar-header h2 {
     font-size: 20px;
     margin: 0;
     white-space: nowrap;
 }
 
-/* Hide text when collapsed */
+/* Hide Admin Panel text when closed */
 .sidebar.closed .sidebar-header h2 {
     display: none;
 }
 
-/* ================= HAMBURGER ================= */
-
+/* Hamburger */
 .hamburger {
     font-size: 22px;
     cursor: pointer;
     padding: 8px 12px;
-    background: rgba(255,255,255,0.15);
-    border-radius: 6px;
-    margin-left: auto;
+    background: rgba(255,255,255,0.1);
+    border-radius: 5px;
 }
 
-/* ================= LINKS ================= */
-
+/* Links */
 .sidebar a {
     display: block;
     padding: 12px 20px;
@@ -79,51 +61,25 @@ $mode = $_GET['mode'] ?? '';
     white-space: nowrap;
 }
 
-.sidebar a:hover {
-    background: #1b2838;
-}
-
+/* Hide ALL links when closed */
 .sidebar.closed a {
     display: none;
 }
 
+/* Keep hamburger visible always */
+.sidebar.closed .sidebar-header {
+    justify-content: center;
+}
+
+/* Active link (your existing style will override if exists) */
 .sidebar a.active {
     background: #2176ff;
     border-radius: 6px;
 }
 
-/* ================= MOBILE TOGGLE BUTTON ================= */
-
-.mobile-toggle {
-    display: none;
-    position: fixed;
-    top: 15px;
-    left: 15px;
-    font-size: 22px;
-    background: #2c3e50;
-    color: white;
-    padding: 8px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    z-index: 3000;
-}
-
-@media (max-width: 768px) {
-
-    .mobile-toggle {
-        display: block;
-    }
-
-}
-
 </style>
 
 
-<!-- MOBILE TOGGLE BUTTON -->
-<div class="mobile-toggle" onclick="toggleSidebar()">☰</div>
-
-
-<!-- SIDEBAR -->
 <div class="sidebar" id="sidebar">
 
     <div class="sidebar-header">
@@ -133,56 +89,45 @@ $mode = $_GET['mode'] ?? '';
 
     <a href="dashboard.php"
        class="<?= $current_page === 'dashboard.php' ? 'active' : '' ?>">
-       Dashboard
+        Dashboard
     </a>
 
     <a href="exams.php"
        class="<?= $current_page === 'exams.php' ? 'active' : '' ?>">
-       Manage Exams
+        Manage Exams
     </a>
 
     <a href="questions.php?mode=add"
        class="<?= ($current_page === 'questions.php' && $mode === 'add') ? 'active' : '' ?>">
-       Add Questions
+        Add Questions
     </a>
 
     <a href="questions.php?mode=manage"
        class="<?= ($current_page === 'questions.php' && $mode === 'manage') ? 'active' : '' ?>">
-       Manage Questions
+        Manage Questions
     </a>
 
     <a href="results.php"
        class="<?= $current_page === 'results.php' ? 'active' : '' ?>">
-       View Results
+        View Results
     </a>
 
     <a href="violation_report.php"
        class="<?= $current_page === 'violation_report.php' ? 'active' : '' ?>">
-       Violation Report
+        Violation Report
     </a>
 
     <a href="../auth/logout.php">
-       Logout
+        Logout
     </a>
 
 </div>
 
 
-<!-- STEP 1 FIX: JAVASCRIPT MUST BE INSIDE SCRIPT TAG -->
 <script>
 
-function toggleSidebar()
-{
-    const sidebar = document.getElementById("sidebar");
-
-    if(window.innerWidth <= 768)
-    {
-        sidebar.classList.toggle("active");
-    }
-    else
-    {
-        sidebar.classList.toggle("closed");
-    }
+function toggleSidebar() {
+    document.getElementById("sidebar").classList.toggle("closed");
 }
 
 </script>

@@ -24,6 +24,7 @@ $exams=$stmt->get_result();
 <!DOCTYPE html>
 <html>
 <head>
+    
 <title>Available Exams</title>
 <link rel="stylesheet" href="../assets/css/style.css">
 

@@ -36,6 +36,7 @@ $results = $conn->query($sql);
 <!DOCTYPE html>
 <html>
 <head>
+    
 <title>All Results</title>
 <link rel="stylesheet" href="../assets/css/style.css">
 

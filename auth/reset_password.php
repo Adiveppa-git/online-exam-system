@@ -37,6 +37,7 @@ if (isset($_POST['reset'])) {
 <!DOCTYPE html>
 <html>
 <head>
+
 <title>Reset Password</title>
 <link rel="stylesheet" href="../assets/css/style.css">
 </head>
