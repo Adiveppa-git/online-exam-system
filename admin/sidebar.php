@@ -16,31 +16,31 @@ $mode = $_GET['mode'] ?? '';
     left: 0;
     transition: width 0.3s ease;
     overflow: hidden;
+    z-index: 1000; /* IMPORTANT FIX */
 }
 
-/* CLOSED SIDEBAR */
 .sidebar.closed {
-    width: 70px;
+    width: 60px;
+    background: transparent;
 }
 
-/* Header */
+
 .sidebar-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start; /* keep them together */
+    gap: 15px; /* THIS creates proper gap */
     padding: 15px;
-}
-
-/* Admin Panel text */
-.sidebar-header h2 {
-    font-size: 20px;
-    margin: 0;
-    white-space: nowrap;
 }
 
 /* Hide Admin Panel text when closed */
 .sidebar.closed .sidebar-header h2 {
     display: none;
+}
+.sidebar-header h2 {
+    font-size: 20px;
+    margin: 0;
+    white-space: nowrap;
 }
 
 /* Hamburger */
@@ -49,7 +49,8 @@ $mode = $_GET['mode'] ?? '';
     cursor: pointer;
     padding: 8px 12px;
     background: rgba(255,255,255,0.1);
-    border-radius: 5px;
+    border-radius: px;
+    margin-left: auto;
 }
 
 /* Links */
@@ -76,7 +77,9 @@ $mode = $_GET['mode'] ?? '';
     background: #2176ff;
     border-radius: 6px;
 }
-
+.sidebar.closed .hamburger {
+    margin: auto;
+}
 </style>
 
 
@@ -84,7 +87,7 @@ $mode = $_GET['mode'] ?? '';
 
     <div class="sidebar-header">
         <h2>Admin Panel</h2>
-        <div class="hamburger" onclick="toggleSidebar()">☰</div>
+       <div class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</div>
     </div>
 
     <a href="dashboard.php"
@@ -123,11 +126,21 @@ $mode = $_GET['mode'] ?? '';
 
 </div>
 
-
 <script>
+function toggleSidebar(){
 
-function toggleSidebar() {
-    document.getElementById("sidebar").classList.toggle("closed");
+const sidebar = document.getElementById("sidebar");
+const hamburger = document.getElementById("hamburger");
+
+/* MOBILE + DESKTOP SAME LOGIC */
+
+sidebar.classList.toggle("closed");
+
+if(sidebar.classList.contains("closed")){
+hamburger.style.color="black";
+}else{
+hamburger.style.color="white";
 }
 
+}
 </script>

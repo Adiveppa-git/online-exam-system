@@ -57,13 +57,17 @@ ORDER BY id ASC
 <head>
 
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Admin Dashboard</title>
+
 <link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/mobile.css">
 
 </head>
 
+</script>
 <body>
-
 <div class="wrapper">
 
 <!-- SIDEBAR -->
@@ -73,11 +77,11 @@ ORDER BY id ASC
 <!-- MAIN CONTENT -->
 <div class="content">
 
-<h1>Welcome Admin, <?= htmlspecialchars($admin_name) ?></h1>
+<h1><span class="welcome-text">Welcome Admin</span>, <?= htmlspecialchars($admin_name) ?></h1>
 
-<p>Last login: <?= $last_login ?></p>
+<p class="last-login">Last login: <?= $last_login ?></p>
 
-<p>Use the sidebar to manage the Online Examination System.</p>
+<p class="sidebar-info">Use the sidebar to manage the Online Examination System.</p>
 
 <hr>
 

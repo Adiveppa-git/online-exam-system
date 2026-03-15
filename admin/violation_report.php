@@ -67,6 +67,8 @@ $result = $conn->query($sql);
 <title>Violation Report</title>
 
 <link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/mobile.css">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 
@@ -190,7 +192,7 @@ Export PDF
 
 
 <!-- TABLE -->
-
+<div class="card">
 <table>
 
 <tr>

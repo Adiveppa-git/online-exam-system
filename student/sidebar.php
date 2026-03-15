@@ -17,11 +17,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
     z-index: 1000; /* IMPORTANT FIX */
 }
 
-/* Closed sidebar */
 .sidebar.closed {
-    width: 70px;
+    width: 60px;
+    background: transparent;
 }
-
 /* Header */
 .sidebar-header {
     display: flex;
@@ -85,7 +84,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
     <div class="sidebar-header">
         <h2>Student Panel</h2>
-        <div class="hamburger" onclick="toggleSidebar()">☰</div>
+        <div class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</div>
+
     </div>
 
     <a href="../student/dashboard.php" class="<?= $current_page=='dashboard.php'?'active':'' ?>">
@@ -112,6 +112,17 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
 <script>
 function toggleSidebar() {
-    document.getElementById("sidebar").classList.toggle("closed");
+
+const sidebar = document.getElementById("sidebar");
+const hamburger = document.getElementById("hamburger");
+
+sidebar.classList.toggle("closed");
+
+if(sidebar.classList.contains("closed")){
+hamburger.style.color = "black";
+}else{
+hamburger.style.color = "white";
+}
+
 }
 </script>

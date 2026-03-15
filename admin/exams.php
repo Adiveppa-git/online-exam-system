@@ -82,7 +82,10 @@ FROM exams e ORDER BY id ASC
 
 <title>Manage Exams</title>
 
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/mobile.css">
 
 <style>
 
@@ -184,6 +187,7 @@ Add Exam
 
 </form>
 
+<div class="card">
 <table>
 
 <tr>

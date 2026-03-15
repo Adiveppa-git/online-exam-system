@@ -38,7 +38,9 @@ $results = $conn->query($sql);
 <head>
     
 <title>All Results</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/mobile.css">
 
 <style>
 .no-result{
@@ -57,7 +59,7 @@ $results = $conn->query($sql);
 <div class="content">
 
 <h1>All Results</h1>
-
+<div class="card">
 <table>
 
 <tr>
