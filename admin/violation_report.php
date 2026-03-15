@@ -116,6 +116,47 @@ font-weight:600;
 background:#157347;
 }
 
+
+/* ===================================== */
+/* VIOLATION REPORT MOBILE FIX */
+/* ===================================== */
+
+@media (max-width:768px){
+
+.filter-box{
+flex-direction:column;
+align-items:flex-start;
+gap:12px;
+}
+
+.filter-box select{
+width:100%;
+box-sizing:border-box;
+}
+
+.filter-btn,
+.export-btn{
+width:100%;
+text-align:center;
+box-sizing:border-box;   /* ⭐ FIX */
+}
+
+.card{
+overflow-x:auto;
+}
+
+.card table{
+min-width:600px;
+}
+
+table th,
+table td{
+font-size:14px;
+padding:10px;
+}
+
+}
+
 </style>
 
 </head>

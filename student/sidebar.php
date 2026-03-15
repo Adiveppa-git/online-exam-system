@@ -109,20 +109,53 @@ $current_page = basename($_SERVER['PHP_SELF']);
     </a>
 
 </div>
-
 <script>
-function toggleSidebar() {
 
 const sidebar = document.getElementById("sidebar");
 const hamburger = document.getElementById("hamburger");
 
+/* RESTORE SIDEBAR STATE WHEN PAGE LOADS */
+
+document.addEventListener("DOMContentLoaded", function(){
+
+const state = localStorage.getItem("sidebar-state");
+
+if(state === "closed"){
+sidebar.classList.add("closed");
+hamburger.style.color="black";
+}
+
+});
+
+/* TOGGLE SIDEBAR */
+
+function toggleSidebar(){
+
 sidebar.classList.toggle("closed");
 
 if(sidebar.classList.contains("closed")){
-hamburger.style.color = "black";
+hamburger.style.color="black";
+localStorage.setItem("sidebar-state","closed");
 }else{
-hamburger.style.color = "white";
+hamburger.style.color="white";
+localStorage.setItem("sidebar-state","open");
 }
 
 }
+
+/* CLOSE SIDEBAR WHEN MENU LINK CLICKED */
+
+document.querySelectorAll("#sidebar a").forEach(function(link){
+
+link.addEventListener("click",function(){
+
+sidebar.classList.add("closed");
+hamburger.style.color="black";
+
+localStorage.setItem("sidebar-state","closed");
+
+});
+
+});
+
 </script>

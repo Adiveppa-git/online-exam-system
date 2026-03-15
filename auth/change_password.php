@@ -63,9 +63,13 @@ if (isset($_POST['update_password']))
 <html>
 <head>
 
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Change Password</title>
 
 <link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/student_mobile.css">
 
 <!-- FONT AWESOME -->
 <link rel="stylesheet"
@@ -74,118 +78,105 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
 <style>
 
 /* CONTENT FULL WIDTH */
-.content
-{
-    margin-left:240px;
-    padding:40px;
-    width:calc(100% - 240px);
-    box-sizing:border-box;
+.content{
+margin-left:240px;
+padding:40px;
+width:calc(100% - 240px);
+box-sizing:border-box;
 }
 
 /* PASSWORD CONTAINER */
-.password-container
-{
-    max-width:500px;
-    background:#ffffff;
-    padding:30px;
-    border-radius:8px;
-    box-shadow:0 0 15px rgba(0,0,0,0.1);
+.password-container{
+max-width:500px;
+background:#ffffff;
+padding:30px;
+border-radius:8px;
+box-shadow:0 0 15px rgba(0,0,0,0.1);
 }
 
 /* FORM GROUP */
-.form-group
-{
-    margin-bottom:20px;
+.form-group{
+margin-bottom:20px;
 }
 
 /* LABEL */
-.form-group label
-{
-    display:block;
-    font-weight:600;
-    margin-bottom:6px;
+.form-group label{
+display:block;
+font-weight:600;
+margin-bottom:6px;
 }
 
 /* PASSWORD BOX */
-.password-box
-{
-    position:relative;
+.password-box{
+position:relative;
 }
 
 /* INPUT */
-.password-box input
-{
-    width:100%;
-    height:45px;
-    padding:10px;
-    padding-right:45px;
-    font-size:16px;
-    border:1px solid #ccc;
-    border-radius:6px;
-    box-sizing:border-box;
+.password-box input{
+width:100%;
+height:45px;
+padding:10px;
+padding-right:45px;
+font-size:16px;
+border:1px solid #ccc;
+border-radius:6px;
+box-sizing:border-box;
 }
 
 /* EYE ICON */
-.password-box i
-{
-    position:absolute;
-    right:14px;
-    top:50%;
-    transform:translateY(-50%);
-    cursor:pointer;
-    color:#666;
-    font-size:16px;
+.password-box i{
+position:absolute;
+right:14px;
+top:50%;
+transform:translateY(-50%);
+cursor:pointer;
+color:#666;
+font-size:16px;
 }
 
-.password-box i:hover
-{
-    color:#0d6efd;
+.password-box i:hover{
+color:#0d6efd;
 }
 
 /* BUTTON */
-.password-container button
-{
-    width:100%;
-    height:45px;
-    background:#0d6efd;
-    color:white;
-    border:none;
-    font-size:16px;
-    font-weight:bold;
-    border-radius:6px;
-    cursor:pointer;
+.password-container button{
+width:100%;
+height:45px;
+background:#0d6efd;
+color:white;
+border:none;
+font-size:16px;
+font-weight:bold;
+border-radius:6px;
+cursor:pointer;
 }
 
-.password-container button:hover
-{
-    background:#0b5ed7;
+.password-container button:hover{
+background:#0b5ed7;
 }
 
 /* MESSAGES */
-.success
-{
-    background:#d4edda;
-    color:#155724;
-    padding:10px;
-    margin-bottom:15px;
-    border-radius:6px;
-    font-weight:bold;
+.success{
+background:#d4edda;
+color:#155724;
+padding:10px;
+margin-bottom:15px;
+border-radius:6px;
+font-weight:bold;
 }
 
-.error
-{
-    background:#f8d7da;
-    color:#721c24;
-    padding:10px;
-    margin-bottom:15px;
-    border-radius:6px;
-    font-weight:bold;
+.error{
+background:#f8d7da;
+color:#721c24;
+padding:10px;
+margin-bottom:15px;
+border-radius:6px;
+font-weight:bold;
 }
 
 </style>
 
 </head>
-
 <body>
 
 <div class="wrapper">

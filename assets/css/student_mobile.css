@@ -1,0 +1,282 @@
+/* ===================================== */
+/* STUDENT MOBILE RESPONSIVE */
+/* ===================================== */
+
+@media (max-width:768px){
+
+/* STOP DESKTOP GRID */
+
+.dashboard-cards{
+grid-template-columns:1fr !important;
+gap:15px !important;
+margin-top:20px;
+}
+
+/* CARD FIX */
+
+.dashboard-cards .card{
+width:100% !important;
+min-width:unset !important;
+}
+
+/* CONTENT FULL WIDTH */
+
+.content{
+margin-left:0 !important;
+width:100% !important;
+padding:15px !important;
+}
+
+/* PAGE TITLE */
+
+.content h1{
+font-size:22px;
+margin-top:10px;
+}
+
+/* TABLE SCROLL */
+
+table{
+display:block;
+width:100%;
+overflow-x:auto;
+white-space:nowrap;
+}
+
+/* TABLE TEXT */
+
+th,td{
+font-size:14px;
+padding:10px;
+}
+
+/* SECTION SPACING */
+
+.section{
+margin-top:20px;
+}
+
+/* REMOVE DESKTOP MIN WIDTH */
+
+.card{
+min-width:0 !important;
+}
+
+}
+/* ===================================== */
+/* STUDENT HAMBURGER POSITION FIX */
+/* ===================================== */
+
+@media (max-width:768px){
+
+.sidebar.closed .hamburger{
+position:fixed;
+top:18px;
+left:15px;
+background:#ffffff;
+color:#000;
+box-shadow:0 2px 6px rgba(0,0,0,0.15);
+z-index:3000;
+}
+
+/* push welcome text right */
+
+.content h1{
+padding-left:55px;
+}
+
+}
+/* ===================================== */
+/* EXAM PAGE MOBILE FIX */
+/* ===================================== */
+
+@media (max-width:768px){
+
+.exam-wrapper{
+flex-direction:column;
+}
+
+/* question navigation panel */
+
+.question-panel{
+width:100%;
+height:auto;
+display:flex;
+flex-wrap:wrap;
+justify-content:center;
+gap:6px;
+padding:15px;
+}
+
+/* question buttons */
+
+.q-btn{
+width:36px;
+height:36px;
+font-size:14px;
+margin:3px;
+}
+
+/* exam content */
+
+.exam-content{
+padding:20px 15px;
+}
+
+/* question box */
+
+.question-box{
+padding:18px;
+margin-top:20px;
+}
+
+/* navigation buttons */
+
+.actions{
+flex-direction:column;
+gap:10px;
+}
+
+.nav-btn{
+width:100%;
+}
+
+/* submit button */
+
+.submit-btn{
+width:100%;
+}
+
+/* timer position */
+
+.timer{
+top:10px;
+right:10px;
+font-size:16px;
+}
+
+/* warning box */
+
+.warning-box{
+top:45px;
+right:10px;
+font-size:14px;
+padding:10px 15px;
+}
+
+}
+/* ===================================== */
+/* CHANGE PASSWORD PAGE */
+/* ===================================== */
+
+.profile-form{
+max-width:400px;
+background:#fff;
+padding:25px;
+border-radius:8px;
+box-shadow:0 3px 10px rgba(0,0,0,0.08);
+margin-top:20px;
+}
+
+.profile-form label{
+display:block;
+font-weight:600;
+margin-top:15px;
+margin-bottom:6px;
+}
+
+.profile-form input{
+width:100%;
+padding:10px;
+border:1px solid #ccc;
+border-radius:6px;
+font-size:15px;
+}
+
+.profile-form button{
+margin-top:20px;
+background:#0d6efd;
+color:white;
+border:none;
+padding:12px;
+border-radius:6px;
+cursor:pointer;
+width:100%;
+font-weight:600;
+}
+
+.profile-form button:hover{
+background:#0b5ed7;
+}
+
+
+/* MOBILE */
+
+@media (max-width:768px){
+
+.profile-form{
+max-width:100%;
+padding:18px;
+}
+
+}
+/* ===================================== */
+/* AVAILABLE EXAMS PAGE */
+/* ===================================== */
+
+@media (max-width:768px){
+
+/* make exam table scroll */
+
+.content table{
+display:block;
+overflow-x:auto;
+white-space:nowrap;
+}
+
+/* smaller text */
+
+.content table th,
+.content table td{
+font-size:14px;
+padding:10px;
+}
+
+/* center action buttons */
+
+.attempt-btn,
+.btn-disabled{
+display:inline-block;
+padding:4px 6px;
+}
+
+}
+/* ===================================== */
+/* STUDENT RESULT PAGE */
+/* ===================================== */
+
+@media (max-width:768px){
+
+/* make result table scrollable */
+
+.content table{
+display:block;
+overflow-x:auto;
+white-space:nowrap;
+}
+
+/* adjust text size */
+
+.content table th,
+.content table td{
+font-size:14px;
+padding:10px;
+}
+
+/* status alignment */
+
+.content table td:last-child{
+font-weight:bold;
+}
+
+}

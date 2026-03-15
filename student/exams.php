@@ -24,9 +24,14 @@ $exams=$stmt->get_result();
 <!DOCTYPE html>
 <html>
 <head>
-    
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Available Exams</title>
+
 <link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/student_mobile.css">
 
 <style>
 .attempt-btn{
@@ -34,6 +39,7 @@ color:#0d6efd;
 font-weight:bold;
 text-decoration:underline;
 }
+
 .btn-disabled{
 color:gray;
 font-weight:bold;

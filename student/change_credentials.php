@@ -48,8 +48,15 @@ if (isset($_POST['update'])) {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Change Email & Password</title>
-    <link rel="stylesheet" href="../assets/css/style.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Change Email & Password</title>
+
+<link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/student_mobile.css">
+
 </head>
 <body>
 
@@ -68,28 +75,25 @@ if (isset($_POST['update'])) {
             </p>
         <?php endif; ?>
 
-        <form method="post" style="max-width:400px">
+      <form method="post" class="profile-form">
 
-            <label>Email</label>
-            <input type="email"
-                   name="email"
-                   value="<?= htmlspecialchars($user['email']) ?>"
-                   required>
+<label>Email</label>
+<input type="email"
+name="email"
+value="<?= htmlspecialchars($user['email']) ?>"
+required>
 
-            <br><br>
+<label>New Password</label>
+<input type="password"
+name="password"
+placeholder="Minimum 6 characters"
+required>
 
-            <label>New Password</label>
-            <input type="password"
-                   name="password"
-                   placeholder="Minimum 6 characters"
-                   required>
+<button type="submit" name="update">
+Update
+</button>
 
-            <br><br>
-
-            <button type="submit" name="update">
-                Update
-            </button>
-        </form>
+</form>  
     </div>
 
 </div>

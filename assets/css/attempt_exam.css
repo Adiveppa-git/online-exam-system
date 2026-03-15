@@ -1,0 +1,201 @@
+/* ===================================== */
+/* ATTEMPT EXAM PAGE (DESKTOP + MOBILE)  */
+/* ===================================== */
+
+/* wrapper */
+
+.exam-wrapper{
+display:flex;
+min-height:100vh;
+}
+
+/* LEFT PANEL */
+
+.question-panel{
+width:230px;
+background:#1f2d3d;
+color:#fff;
+padding:20px;
+box-sizing:border-box;
+}
+
+.question-panel h3{
+margin-top:0;
+}
+
+/* question buttons */
+
+.q-btn{
+width:42px;
+height:42px;
+border-radius:50%;
+border:none;
+margin:5px;
+cursor:pointer;
+font-weight:bold;
+}
+
+/* states */
+
+.not-visited{background:#e53935;color:#fff;}
+.visited{background:#fbc02d;color:#000;}
+.answered{background:#43a047;color:#fff;}
+.active{background:#1e88e5 !important;color:#fff;}
+
+/* RIGHT CONTENT */
+
+.exam-content{
+flex:1;
+padding:40px;
+background:#f4f6f8;
+box-sizing:border-box;
+}
+
+/* QUESTION BOX */
+
+.question-box{
+background:#fff;
+padding:30px;
+border-radius:8px;
+max-width:750px;
+margin:auto;
+}
+
+/* options */
+
+.options label{
+display:block;
+margin:12px 0;
+font-size:16px;
+}
+
+/* navigation buttons */
+
+.actions{
+margin-top:25px;
+display:flex;
+justify-content:space-between;
+}
+
+.nav-btn{
+background:#1e88e5;
+color:#fff;
+border:none;
+padding:10px 26px;
+border-radius:5px;
+cursor:pointer;
+}
+
+/* submit */
+
+.submit-btn{
+background:#e53935;
+color:#fff;
+padding:14px 32px;
+border:none;
+border-radius:5px;
+font-size:16px;
+cursor:pointer;
+margin-top:30px;
+display:block;
+margin-left:auto;
+margin-right:auto;
+}
+
+/* timer */
+
+.timer{
+position:fixed;
+top:20px;
+right:30px;
+color:red;
+font-weight:bold;
+font-size:20px;
+}
+
+/* warning */
+
+.warning-box{
+position:fixed;
+top:60px;
+right:30px;
+background:#ffc107;
+color:#000;
+padding:12px 20px;
+border-radius:6px;
+font-weight:bold;
+display:none;
+z-index:9999;
+}
+
+/* ===================================== */
+/* MOBILE */
+/* ===================================== */
+
+@media (max-width:768px){
+
+.exam-wrapper{
+flex-direction:column;
+}
+
+/* panel moves to top */
+
+.question-panel{
+width:100%;
+text-align:center;
+}
+
+/* numbers horizontal */
+
+.question-panel button{
+display:inline-block;
+}
+/* legend in one row */
+
+.question-panel > div{
+display:flex;
+justify-content:center;
+flex-wrap:wrap;
+gap:10px;
+font-size:13px;
+}
+
+.question-panel > div div{
+display:flex;
+align-items:center;
+gap:4px;
+}
+/* question box full width */
+
+.exam-content{
+padding:20px;
+}
+
+.question-box{
+max-width:100%;
+}
+
+/* buttons stacked */
+
+.actions{
+flex-direction:column;
+gap:10px;
+}
+
+.nav-btn{
+width:100%;
+}
+
+.submit-btn{
+width:100%;
+}
+
+/* timer */
+
+.timer{
+top:10px;
+right:10px;
+font-size:16px;
+}
+
+}

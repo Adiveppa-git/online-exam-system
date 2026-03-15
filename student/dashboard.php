@@ -128,25 +128,36 @@ ORDER BY e.id DESC
 <!DOCTYPE html>
 <html>
 <head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Student Dashboard</title>
+
 <link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/student_mobile.css">
 
 <style>
 
 .dashboard-cards{
 display:grid;
-grid-template-columns: repeat(4, 1fr);
-gap:20px;
-margin:20px 0;
+grid-template-columns:repeat(4,1fr);
+gap:30px;
+margin-top:25px;
+margin-bottom:10px;
 }
 
+@media (max-width:768px){
+.dashboard-cards{
+grid-template-columns:1fr;
+}
+}
 
 .card{
 background:rgba(255,255,255,0.9);
 padding:20px;
 border-radius:10px;
 box-shadow:0 4px 10px rgba(0,0,0,0.1);
-min-width:220px;
 }
 
 .card h3{
@@ -163,7 +174,6 @@ color:#0d6efd;
 .section{
 margin-top:30px;
 }
-
 </style>
 
 </head>

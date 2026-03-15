@@ -227,7 +227,7 @@ html, body {
 
     margin-left: 240px;
 
-    padding:30px 30px 30px 70px;
+    padding:30px 60px 30px 70px;
 
     width: calc(100% - 240px);
 
@@ -643,12 +643,14 @@ font-weight:500;
 
 .dashboard-cards{
 display:grid;
-grid-template-columns:repeat(4,1fr);
-gap:30px;              /* space between cards */
+grid-template-columns:repeat(4,minmax(0,1fr));
+gap:30px;
 margin-top:25px;
 margin-bottom:10px;
 }
-
+.card{
+min-width:0;
+}
 /* extra spacing inside cards */
 
 .dashboard-cards .card{

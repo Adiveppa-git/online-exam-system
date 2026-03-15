@@ -35,110 +35,16 @@ $duration = $exam['duration'] * 60;
 <html>
 <head>
 
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Attempt Exam</title>
+
 <link rel="stylesheet" href="../assets/css/style.css">
 
-<style>
+<link rel="stylesheet" href="../assets/css/attempt_exam.css">
 
-body{
-margin:0;
-font-family:Arial;
-}
 
-.exam-wrapper{
-display:flex;
-}
-
-.question-panel{
-width:230px;
-background:#1f2d3d;
-color:#fff;
-padding:20px;
-height:100vh;
-}
-
-.q-btn{
-width:42px;
-height:42px;
-border-radius:50%;
-border:none;
-margin:5px;
-cursor:pointer;
-font-weight:bold;
-}
-
-.not-visited{background:#e53935;color:#fff;}
-.visited{background:#fbc02d;color:#000;}
-.answered{background:#43a047;color:#fff;}
-.active{background:#1e88e5 !important;color:#fff;}
-
-.exam-content{
-flex:1;
-padding:45px 35px;
-background:#f4f6f8;
-}
-
-.question-box{
-background:#fff;
-padding:30px;
-border-radius:8px;
-margin-top:40px;
-}
-
-.options label{
-display:block;
-margin:12px 0;
-}
-
-.actions{
-margin-top:30px;
-display:flex;
-justify-content:space-between;
-}
-
-.nav-btn{
-background:#1e88e5;
-color:#fff;
-border:none;
-padding:10px 26px;
-border-radius:5px;
-cursor:pointer;
-}
-
-.submit-btn{
-background:#e53935;
-color:#fff;
-padding:14px 32px;
-border:none;
-border-radius:5px;
-font-size:16px;
-cursor:pointer;
-margin-top:35px;
-}
-
-.timer{
-position:fixed;
-top:20px;
-right:30px;
-color:red;
-font-weight:bold;
-font-size:20px;
-}
-
-.warning-box{
-position:fixed;
-top:60px;
-right:30px;
-background:#ffc107;
-color:#000;
-padding:12px 20px;
-border-radius:6px;
-font-weight:bold;
-display:none;
-z-index:9999;
-}
-
-</style>
 
 </head>
 
