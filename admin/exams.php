@@ -79,7 +79,10 @@ if (isset($_POST['add_exam'])) {
         header("Location: exams.php");
         exit;
     }
-    /* UPDATE EXAM */
+}
+
+
+/* UPDATE EXAM */
 if (isset($_POST['update_exam'])) {
 
     $exam_id = (int)$_POST['exam_id'];
@@ -98,7 +101,6 @@ if (isset($_POST['update_exam'])) {
 
     header("Location: exams.php");
     exit;
-}
 }
 
 /* FETCH EXAMS */
