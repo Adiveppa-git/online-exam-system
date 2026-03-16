@@ -111,7 +111,7 @@ SELECT COUNT(DISTINCT r2.score)+1
 FROM results r2
 WHERE r2.exam_id = r.exam_id
 AND r2.score > r.score
-) AS rank
+) AS student_rank
 FROM results r
 JOIN exams e ON e.id = r.exam_id
 WHERE r.user_id = $user_id
@@ -356,7 +356,7 @@ $percent=round(($obtained/$total)*100,2);
 <td><?= $percent ?>%</td>
 
 <td style="font-weight:bold;color:#0d6efd">
-<?= $row['rank'] ?>
+<?= $row['student_rank'] ?>
 </td>
 
 </tr>
