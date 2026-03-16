@@ -9,7 +9,20 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
 }
 
 $message = "";
+/* FETCH EXAM FOR EDIT */
+$edit_exam = null;
 
+if (isset($_GET['edit'])) {
+
+    $exam_id = (int)$_GET['edit'];
+
+    $stmt = $conn->prepare("SELECT * FROM exams WHERE id=?");
+    $stmt->bind_param("i", $exam_id);
+    $stmt->execute();
+
+    $result = $stmt->get_result();
+    $edit_exam = $result->fetch_assoc();
+}
 /* DELETE EXAM */
 if (isset($_GET['delete'])) {
 
@@ -66,6 +79,26 @@ if (isset($_POST['add_exam'])) {
         header("Location: exams.php");
         exit;
     }
+    /* UPDATE EXAM */
+if (isset($_POST['update_exam'])) {
+
+    $exam_id = (int)$_POST['exam_id'];
+    $title = trim($_POST['title']);
+    $duration = (int)$_POST['duration'];
+    $marks = (int)$_POST['marks'];
+
+    $stmt = $conn->prepare("
+        UPDATE exams
+        SET title=?, duration=?, marks_per_question=?
+        WHERE id=?
+    ");
+
+    $stmt->bind_param("siii", $title, $duration, $marks, $exam_id);
+    $stmt->execute();
+
+    header("Location: exams.php");
+    exit;
+}
 }
 
 /* FETCH EXAMS */
@@ -166,23 +199,29 @@ margin-bottom:10px;
 
 <form method="post" class="exam-form">
 
+<?php if($edit_exam): ?>
+<input type="hidden" name="exam_id" value="<?= $edit_exam['id'] ?>">
+<?php endif; ?>
 <input type="text"
 name="title"
 placeholder="Exam Name"
+value="<?= $edit_exam['title'] ?? '' ?>"
 required>
 
 <input type="number"
 name="duration"
 placeholder="Duration (minutes)"
+value="<?= $edit_exam['duration'] ?? '' ?>"
 required>
 
 <input type="number"
 name="marks"
 placeholder="Marks per Question"
+value="<?= $edit_exam['marks_per_question'] ?? '' ?>"
 required>
 
-<button type="submit" name="add_exam">
-Add Exam
+<button type="submit" name="<?= $edit_exam ? 'update_exam' : 'add_exam' ?>">
+<?= $edit_exam ? 'Update Exam' : 'Add Exam' ?>
 </button>
 
 </form>
