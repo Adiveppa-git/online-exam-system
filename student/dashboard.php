@@ -102,18 +102,20 @@ ORDER BY exams.id DESC
 
 $ranks = $conn->query("
 SELECT 
-e.title,
-r.score,
-e.marks_per_question,
-(SELECT COUNT(*) FROM questions WHERE exam_id=e.id) AS total_questions,
-(
-SELECT COUNT(DISTINCT r2.score)+1
-FROM results r2
-WHERE r2.exam_id = r.exam_id
-AND r2.score > r.score
-) AS student_rank
+    e.title,
+    r.score,
+    e.marks_per_question,
+    (SELECT COUNT(*) 
+     FROM questions 
+     WHERE exam_id = e.id) AS total_questions,
+    (
+        SELECT COUNT(*) + 1
+        FROM results r2
+        WHERE r2.exam_id = r.exam_id
+        AND r2.score > r.score
+    ) AS user_position
 FROM results r
-JOIN exams e ON e.id = r.exam_id
+INNER JOIN exams e ON e.id = r.exam_id
 WHERE r.user_id = $user_id
 ORDER BY e.id DESC
 ");
@@ -356,7 +358,7 @@ $percent=round(($obtained/$total)*100,2);
 <td><?= $percent ?>%</td>
 
 <td style="font-weight:bold;color:#0d6efd">
-<?= $row['student_rank'] ?>
+<?= $row['user_position'] ?>
 </td>
 
 </tr>
