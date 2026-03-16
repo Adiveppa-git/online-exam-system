@@ -103,23 +103,18 @@ ORDER BY exams.id DESC
 $ranks = $conn->query("
 SELECT 
 e.title,
-ranked.rank,
-ranked.score,
-ranked.total_questions,
-ranked.marks_per_question
-FROM (
-    SELECT 
-    r.exam_id,
-    r.user_id,
-    r.score,
-    e.marks_per_question,
-    (SELECT COUNT(*) FROM questions WHERE exam_id=e.id) AS total_questions,
-    DENSE_RANK() OVER (PARTITION BY r.exam_id ORDER BY r.score DESC) AS rank
-    FROM results r
-    JOIN exams e ON e.id = r.exam_id
-) ranked
-JOIN exams e ON e.id = ranked.exam_id
-WHERE ranked.user_id = $user_id
+r.score,
+e.marks_per_question,
+(SELECT COUNT(*) FROM questions WHERE exam_id=e.id) AS total_questions,
+(
+SELECT COUNT(DISTINCT r2.score)+1
+FROM results r2
+WHERE r2.exam_id = r.exam_id
+AND r2.score > r.score
+) AS rank
+FROM results r
+JOIN exams e ON e.id = r.exam_id
+WHERE r.user_id = $user_id
 ORDER BY e.id DESC
 ");
 
