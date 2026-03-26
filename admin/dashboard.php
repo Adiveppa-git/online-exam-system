@@ -33,7 +33,8 @@ $total_attempts = $conn->query(
 
 /* ================= RECENT ACTIVITY (LAST 4) ================= */
 $recent_activity = $conn->query("
-SELECT users.name, exams.title, results.score
+SELECT users.name, exams.title, results.score, exams.marks_per_question,
+(SELECT COUNT(*) FROM questions WHERE exam_id = exams.id) AS total_questions
 FROM results
 JOIN users ON users.id = results.user_id
 JOIN exams ON exams.id = results.exam_id
@@ -118,7 +119,9 @@ ORDER BY id ASC
 <tr>
 <th>Student</th>
 <th>Exam</th>
-<th>Score</th>
+<th>Marks</th>
+<th>Percentage</th>
+<th>Status</th>
 </tr>
 
 <?php while($row = $recent_activity->fetch_assoc()): ?>
@@ -126,7 +129,21 @@ ORDER BY id ASC
 <tr>
 <td><?= htmlspecialchars($row['name']) ?></td>
 <td><?= htmlspecialchars($row['title']) ?></td>
-<td><?= $row['score'] ?></td>
+<?php
+$total = $row['total_questions'] * $row['marks_per_question'];
+$obtained = $row['score'] * $row['marks_per_question'];
+
+$percent = round(($obtained / $total) * 100, 2);
+$status = $percent >= 40 ? "PASS" : "FAIL";
+?>
+
+<td><?= $obtained ?> / <?= $total ?></td>
+
+<td><?= $percent ?>%</td>
+
+<td style="color:<?= $status=="PASS"?"green":"red" ?>;font-weight:bold">
+<?= $status ?>
+</td>
 </tr>
 
 <?php endwhile; ?>
