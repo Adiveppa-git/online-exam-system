@@ -233,7 +233,7 @@ border:1px solid #ccc;
 }
 
 .edit-link {
-    background: #0d6efd;
+    background: #0de9fd;
 }
 
 .delete-link {
