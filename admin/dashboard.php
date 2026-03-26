@@ -50,8 +50,6 @@ ORDER BY id ASC
 ");
 
 ?>
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -66,15 +64,11 @@ ORDER BY id ASC
 
 </head>
 
-</script>
 <body>
 <div class="wrapper">
 
-<!-- SIDEBAR -->
 <?php include "sidebar.php"; ?>
 
-
-<!-- MAIN CONTENT -->
 <div class="content">
 
 <h1><span class="welcome-text">Welcome Admin</span>, <?= htmlspecialchars($admin_name) ?></h1>
@@ -84,7 +78,6 @@ ORDER BY id ASC
 <p class="sidebar-info">Use the sidebar to manage the Online Examination System.</p>
 
 <hr>
-
 
 <!-- DASHBOARD CARDS -->
 <div class="dashboard-cards">
@@ -111,9 +104,7 @@ ORDER BY id ASC
 
 </div>
 
-
 <hr>
-
 
 <!-- RECENT ACTIVITY -->
 <h2>Recent Activity</h2>
@@ -150,9 +141,7 @@ ORDER BY id ASC
 
 </div>
 
-
 <hr>
-
 
 <!-- TOP STUDENTS EXAM WISE -->
 <h2>Top Students (Exam Wise)</h2>
@@ -177,7 +166,6 @@ WHERE exam_id = $exam_id
 
 $total_marks = $q['total_questions'] * $marks_per_question;
 
-
 /* top 3 distinct scores */
 $top_scores = $conn->query("
 SELECT DISTINCT score
@@ -195,9 +183,9 @@ if($top_scores->num_rows > 0):
 <tr>
 <th>Rank</th>
 <th>Student</th>
-<th>Total Marks</th>
-<th>Score</th>
+<th>Marks</th>
 <th>Percentage</th>
+<th>Status</th>
 </tr>
 
 <?php
@@ -219,10 +207,15 @@ AND results.score = $score
 
 while($student = $students->fetch_assoc()):
 
+/* ✅ FINAL FIX LOGIC */
+$obtained = $student['score'] * $marks_per_question;
+
 $percentage =
 $total_marks > 0
-? round(($student['score'] / $total_marks) * 100, 2)
+? round(($obtained / $total_marks) * 100, 2)
 : 0;
+
+$status = $percentage >= 40 ? "PASS" : "FAIL";
 
 ?>
 
@@ -232,11 +225,13 @@ $total_marks > 0
 
 <td><?= htmlspecialchars($student['name']) ?></td>
 
-<td><?= $total_marks ?></td>
-
-<td><?= $student['score'] ?></td>
+<td><?= $obtained ?> / <?= $total_marks ?></td>
 
 <td><?= $percentage ?>%</td>
+
+<td style="color:<?= $status=="PASS"?"green":"red" ?>;font-weight:bold">
+<?= $status ?>
+</td>
 
 </tr>
 
@@ -258,11 +253,9 @@ $total_marks > 0
 
 <?php endwhile; ?>
 
-
 </div>
 
 </div>
 
 </body>
-
 </html>
