@@ -216,15 +216,7 @@ border-collapse:collapse;
 margin-top:20px;
 }
 
-th{
-background:#0d6efd;
-color:white;
-}
 
-th, td{
-padding:12px;
-border:1px solid #ccc;
-}
 .edit-link, .delete-link {
     padding: 5px 10px;
     border-radius: 4px;
