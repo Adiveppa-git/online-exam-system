@@ -22,14 +22,25 @@ function sendMail($to, $subject, $body)
         $mail->Host       = 'smtp.gmail.com';
         $mail->SMTPAuth   = true;
 
-        // ✅ YOUR REAL GMAIL
+        // 🔐 CHANGE THIS AFTER TEST (new app password)
         $mail->Username   = 'mailproject112@gmail.com';
-
-        // ✅ GMAIL APP PASSWORD (NOT NORMAL PASSWORD)
         $mail->Password   = 'sqnznhrsphzjllcf';
 
+        // 🔥 FIX FOR RENDER (IMPORTANT)
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = 587;
+
+        // 🔥 EXTRA FIX (cloud compatibility)
+        $mail->Timeout = 15;
+        $mail->SMTPDebug = 0;
+
+        $mail->SMTPOptions = [
+            'ssl' => [
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'allow_self_signed' => true
+            ]
+        ];
 
         /* ===== SENDER ===== */
         $mail->setFrom(
@@ -46,12 +57,16 @@ function sendMail($to, $subject, $body)
         $mail->Body    = $body;
 
         /* ===== SEND ===== */
-        $mail->send();
-        return true;
+        if ($mail->send()) {
+            return true;
+        } else {
+            return false;
+        }
 
     } catch (Exception $e) {
-        // ❌ Log error silently (no UI break)
-        error_log("Mail Error: " . $mail->ErrorInfo);
+        // 🔥 TEMP DEBUG (REMOVE AFTER SUCCESS)
+        error_log("Mailer Error: " . $mail->ErrorInfo);
+
         return false;
     }
 }
