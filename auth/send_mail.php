@@ -2,7 +2,7 @@
 
 function sendMail($to, $subject, $body)
 {
-    $apiKey = "PASTE_NEW_API_KEY_HERE"; // 🔐 put new key
+    $apiKey = getenv("BREVO_API_KEY"); // 🔐 put new key
 
     $data = [
         "sender" => [
