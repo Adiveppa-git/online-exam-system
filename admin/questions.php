@@ -256,7 +256,17 @@ margin-bottom:15px;
 font-weight:bold;
 border-radius:4px;
 }
+.action-btns {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+}
 
+.action-btns a {
+    display: inline-block;
+    white-space: nowrap;
+}
 </style>
 
 </head>
