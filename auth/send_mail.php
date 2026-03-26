@@ -1,72 +1,46 @@
 <?php
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
 
-/* ===============================
-   LOAD PHPMailer FILES
-   =============================== */
-require_once __DIR__ . '/../vendor/PHPMailer/src/Exception.php';
-require_once __DIR__ . '/../vendor/PHPMailer/src/PHPMailer.php';
-require_once __DIR__ . '/../vendor/PHPMailer/src/SMTP.php';
-
-/* ===============================
-   SEND MAIL FUNCTION
-   =============================== */
 function sendMail($to, $subject, $body)
 {
-    $mail = new PHPMailer(true);
+    $apiKey = "PASTE_NEW_API_KEY_HERE"; // 🔐 put new key
 
-    try {
-        /* ===== SMTP CONFIG ===== */
-        $mail->isSMTP();
-        $mail->Host       = 'smtp.gmail.com';
-        $mail->SMTPAuth   = true;
+    $data = [
+        "sender" => [
+            "name" => "Online Examination System",
+            "email" => "mailproject112@gmail.com"
+        ],
+        "to" => [
+            ["email" => $to]
+        ],
+        "subject" => $subject,
+        "htmlContent" => $body
+    ];
 
-        // 🔐 CHANGE THIS AFTER TEST (new app password)
-        $mail->Username   = 'mailproject112@gmail.com';
-        $mail->Password   = 'sqnznhrsphzjllcf';
+    $ch = curl_init();
 
-        // 🔥 FIX FOR RENDER (IMPORTANT)
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = 587;
+    curl_setopt($ch, CURLOPT_URL, "https://api.brevo.com/v3/smtp/email");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "api-key: $apiKey",
+        "Content-Type: application/json"
+    ]);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
 
-        // 🔥 EXTRA FIX (cloud compatibility)
-        $mail->Timeout = 15;
-        $mail->SMTPDebug = 0;
+    $response = curl_exec($ch);
 
-        $mail->SMTPOptions = [
-            'ssl' => [
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-                'allow_self_signed' => true
-            ]
-        ];
+    if (curl_errno($ch)) {
+        return false;
+    }
 
-        /* ===== SENDER ===== */
-        $mail->setFrom(
-            'mailproject112@gmail.com',
-            'Online Examination System'
-        );
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-        /* ===== RECEIVER ===== */
-        $mail->addAddress($to);
+    curl_close($ch);
 
-        /* ===== EMAIL CONTENT ===== */
-        $mail->isHTML(true);
-        $mail->Subject = $subject;
-        $mail->Body    = $body;
-
-        /* ===== SEND ===== */
-        if ($mail->send()) {
-            return true;
-        } else {
-            return false;
-        }
-
-    } catch (Exception $e) {
-        // 🔥 TEMP DEBUG (REMOVE AFTER SUCCESS)
-        error_log("Mailer Error: " . $mail->ErrorInfo);
-
+    // ✅ success only if API returns 201
+    if ($httpCode == 201) {
+        return true;
+    } else {
         return false;
     }
 }
