@@ -163,7 +163,14 @@ display:block;
 font-weight:600;
 margin-bottom:6px;
 }
+td a {
+    display: inline-block;
+    margin-right: 5px;
+}
 
+td {
+    white-space: nowrap;
+}
 .question-form input,
 .question-form textarea,
 .question-form select{
@@ -218,7 +225,20 @@ th, td{
 padding:12px;
 border:1px solid #ccc;
 }
+.edit-link, .delete-link {
+    padding: 5px 10px;
+    border-radius: 4px;
+    text-decoration: none;
+    color: white;
+}
 
+.edit-link {
+    background: #0d6efd;
+}
+
+.delete-link {
+    background: red;
+}
 .success{
 background:#d4edda;
 color:#155724;
@@ -376,15 +396,12 @@ border-radius:4px;
 
 <td><?= $q['correct_option'] ?></td>
 
-<td>
+<td class="action-btns">
 
 <a href="questions.php?mode=edit&id=<?= $q['id'] ?>" class="edit-link">
 Edit
 </a>
 
-|
-
-<!-- DELETE WITHOUT CONFIRM -->
 <a href="questions.php?delete=<?= $q['id'] ?>" class="delete-link">
 Delete
 </a>
