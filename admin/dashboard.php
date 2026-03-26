@@ -34,10 +34,12 @@ $total_attempts = $conn->query(
 /* ================= RECENT ACTIVITY (LAST 4) ================= */
 $recent_activity = $conn->query("
 SELECT users.name, exams.title, results.score, exams.marks_per_question,
-(SELECT COUNT(*) FROM questions WHERE exam_id = exams.id) AS total_questions
+COUNT(questions.id) AS total_questions
 FROM results
 JOIN users ON users.id = results.user_id
 JOIN exams ON exams.id = results.exam_id
+LEFT JOIN questions ON questions.exam_id = exams.id
+GROUP BY results.id
 ORDER BY results.id DESC
 LIMIT 4
 ");
@@ -130,10 +132,13 @@ ORDER BY id ASC
 <td><?= htmlspecialchars($row['name']) ?></td>
 <td><?= htmlspecialchars($row['title']) ?></td>
 <?php
-$total = $row['total_questions'] * $row['marks_per_question'];
+$total_questions = $row['total_questions'] ?? 0;
+
+$total = $total_questions * $row['marks_per_question'];
 $obtained = $row['score'] * $row['marks_per_question'];
 
-$percent = round(($obtained / $total) * 100, 2);
+$percent = $total > 0 ? round(($obtained / $total) * 100, 2) : 0;
+
 $status = $percent >= 40 ? "PASS" : "FAIL";
 ?>
 
