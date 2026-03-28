@@ -57,6 +57,11 @@ This project demonstrates real-world concepts like **authentication, database in
 
 ---
 
+## 🧾 Exam Interface
+![Exam Interface](screenshots/013.png)
+
+---
+
 ## 📊 Individual Result Section
 ![Screen 10](screenshots/010.png)
 
