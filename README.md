@@ -17,13 +17,8 @@ This project demonstrates real-world concepts like **authentication, database in
 
 ---
 
-## 🔐 Login Page
+## 🔐 Admin Dashboard
 ![Login](screenshots/001.png)
-
----
-
-## 👑 Admin Dashboard
-![Admin Dashboard](screenshots/002.png)
 
 ---
 
@@ -32,48 +27,38 @@ This project demonstrates real-world concepts like **authentication, database in
 
 ---
 
-## ❓ Question Management
+## ❓ Add New Question 
 ![Questions](screenshots/004.png)
 
 ---
 
-## 📊 Results Section
+## 🧠  Manage Questions
 ![Results](screenshots/005.png)
 
 ---
 
-## 👨‍🎓 Student Dashboard
+## 📊 Results Section
 ![Student Dashboard](screenshots/006.png)
 
 ---
 
-## 🧾 Exam Interface
+## 🧾 Exam Violation Report
 ![Exam Interface](screenshots/007.png)
 
 ---
 
-## 📈 Performance View
+## 👨‍🎓 Student Dashboard
 ![Performance](screenshots/008.png)
 
 ---
 
-## 📄 Screen 9
+## 📄 Available Exams
 ![Screen 9](screenshots/009.png)
 
 ---
 
-## 📄 Screen 10
+## 📊 Individual Result Section
 ![Screen 10](screenshots/010.png)
-
----
-
-## 📄 Screen 11
-![Screen 11](screenshots/011.png)
-
----
-
-## 📄 Screen 12
-![Screen 12](screenshots/012.png)
 
 ---
 
