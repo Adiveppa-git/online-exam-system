@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mariadb:10.6
+    container_name: exam_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: online_exam_system
+      MYSQL_USER: exam_user
+      MYSQL_PASSWORD: exampassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: exam_ai_service
+    restart: always
+    ports:
+      - "8001:8001"
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - HOST=0.0.0.0
+      - PORT=8001
+      - INTERNAL_API_KEY=dev_secret_key_change_in_production
+      - LLM_PROVIDER=heuristic
+      - CHROMA_PERSIST_DIR=/app/data/chroma_db
+    volumes:
+      - chroma_data:/app/data/chroma_db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  php-web:
+    image: php:8.1-apache
+    container_name: exam_php_web
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=online_exam_system
+      - DB_USER=exam_user
+      - DB_PASS=exampassword
+      - AI_SERVICE_URL=http://ai-service:8001
+      - AI_SERVICE_KEY=dev_secret_key_change_in_production
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  chroma_data:

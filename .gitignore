@@ -1,4 +1,37 @@
-mysql-8.0.36-winx64/
-mysql.zip
+# Virtual Environments & Packages
+.venv/
+ai-service/.venv/
+venv/
+env/
 vendor/
 node_modules/
+
+# Environment Secret Files
+.env
+.env.local
+.env.*.local
+ai-service/.env
+
+# Byte-compiled / cache files
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Data, Uploads & Vector Indexes
+ai-service/data/chroma_db/
+uploads/course_materials/*
+!uploads/course_materials/.gitkeep
+
+# Operating System & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+
+# Local MySQL Binaries & Archives
+mysql.zip
+mysql-8.0.36-winx64/
+mysql-*/
+*.zip
