@@ -88,7 +88,7 @@ jobs:
           AI_SERVICE_URL: http://127.0.0.1:8001
           ENVIRONMENT: testing
           LLM_PROVIDER: heuristic
-        PYTHONPATH: ai-service
+          PYTHONPATH: ai-service
         run: |
           (cd ai-service && python -m uvicorn app.main:app --host 127.0.0.1 --port 8001) &
           sleep 3
