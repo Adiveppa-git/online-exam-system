@@ -96,7 +96,7 @@ function sendBrevoMail($to, $subject, $body)
     if ($httpCode === 201) {
         return true;
     } else {
-        error_log("[MAIL ERROR] Brevo API delivery failed with HTTP status code: " . $httpCode);
+        error_log("[MAIL ERROR] Brevo API delivery failed with HTTP status code: " . $httpCode . " Response: " . $response);
         return false;
     }
 }

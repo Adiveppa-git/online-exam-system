@@ -42,8 +42,9 @@ function loadEnv($filePath = null)
             $value = substr($value, 1, -1);
         }
 
-        // Only set if not already present in environment
-        if (getenv($key) === false) {
+        // Only set if not already present or if existing value is empty string
+        $current = getenv($key);
+        if ($current === false || trim($current) === '') {
             putenv("{$key}={$value}");
             $_ENV[$key] = $value;
             $_SERVER[$key] = $value;
