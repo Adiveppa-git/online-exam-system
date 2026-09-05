@@ -99,6 +99,7 @@ jobs:
           php tests/test_ai_rag.php
           php tests/test_ai_recommendations.php
           php tests/test_regression.php
+          php tests/test_otp_and_mail.php
           php tests/manual_e2e_verification.php
 
       - name: Build Docker Container

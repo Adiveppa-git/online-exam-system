@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/env_loader.php';
+
 /**
  * AI Service Client
  * Handles HTTP cURL communications between PHP application and Python FastAPI AI Service.

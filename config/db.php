@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/env_loader.php';
+
 /**
  * Database Connection Module
  * Reads database configuration from environment variables with local defaults.

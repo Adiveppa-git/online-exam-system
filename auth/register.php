@@ -291,6 +291,12 @@ Login
 
 <?php else: ?>
 
+<?php if (in_array(strtolower(getenv('APP_ENV') ?: 'development'), ['development', 'local', 'dev'], true)): ?>
+<p style="font-size:12px;color:#666;text-align:center;margin-bottom:12px">
+    <i class="fa-solid fa-bug"></i> <strong>Dev Mode Notice:</strong> OTP has been logged to <code>logs/mail.log</code>
+</p>
+<?php endif; ?>
+
 <form method="post">
 
 <input type="text"
