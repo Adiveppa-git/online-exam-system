@@ -7,7 +7,7 @@ function sendMail($to, $subject, $body)
     $data = [
         "sender" => [
             "name" => "Online Examination System",
-            "email" => "mailproject112@gmail.com"
+            "email" => getenv('SENDER_EMAIL') ?: "noreply@example.com"
         ],
         "to" => [
             ["email" => $to]

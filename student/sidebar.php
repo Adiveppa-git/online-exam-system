@@ -13,48 +13,41 @@ $current_page = basename($_SERVER['PHP_SELF']);
     top: 0;
     left: 0;
     transition: width 0.3s ease;
-    overflow: hidden;
-    z-index: 1000; /* IMPORTANT FIX */
+    overflow-y: auto;
+    z-index: 1000;
 }
 
 .sidebar.closed {
     width: 60px;
     background: transparent;
 }
-/* Header */
 .sidebar-header {
     display: flex;
     align-items: center;
-    justify-content: flex-start; /* keep them together */
-    gap: 15px; /* THIS creates proper gap */
+    justify-content: flex-start;
+    gap: 15px;
     padding: 15px;
 }
 
-
-/* Student Panel text */
 .sidebar-header h2 {
     font-size: 20px;
     margin: 0;
     white-space: nowrap;
 }
 
-/* Hide panel text when closed */
 .sidebar.closed .sidebar-header h2 {
     display: none;
 }
 
-/* Hamburger */
 .hamburger {
     font-size: 22px;
     cursor: pointer;
     padding: 8px 12px;
     background: rgba(255,255,255,0.15);
     border-radius: 6px;
-    margin-left: auto; /* pushes it slightly right cleanly */
+    margin-left: auto;
 }
 
-
-/* Links */
 .sidebar a {
     display: block;
     padding: 12px 20px;
@@ -63,17 +56,14 @@ $current_page = basename($_SERVER['PHP_SELF']);
     white-space: nowrap;
 }
 
-/* Hide links when closed */
 .sidebar.closed a {
     display: none;
 }
 
-/* Center hamburger when closed */
 .sidebar.closed .sidebar-header {
     justify-content: center;
 }
 
-/* Active link */
 .sidebar a.active {
     background: #2176ff;
     border-radius: 6px;
@@ -84,8 +74,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
     <div class="sidebar-header">
         <h2>Student Panel</h2>
-        <div class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</div>
-
+        <div class="hamburger" id="hamburger" onclick="toggleSidebar()">?</div>
     </div>
 
     <a href="../student/dashboard.php" class="<?= $current_page=='dashboard.php'?'active':'' ?>">
@@ -94,6 +83,18 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
     <a href="../student/exams.php" class="<?= $current_page=='exams.php'?'active':'' ?>">
         Available Exams
+    </a>
+
+    <a href="../student/personalized_learning.php" class="<?= ($current_page=='personalized_learning.php'||$current_page=='practice_session.php')?'active':'' ?>">
+        ?? Personalized Learning
+    </a>
+
+    <a href="../student/ai_performance.php" class="<?= $current_page=='ai_performance.php'?'active':'' ?>">
+        ?? Performance Analytics
+    </a>
+
+    <a href="../student/study_assistant.php" class="<?= $current_page=='study_assistant.php'?'active':'' ?>">
+        ?? AI Study Assistant
     </a>
 
     <a href="../student/result.php" class="<?= $current_page=='result.php'?'active':'' ?>">
@@ -109,53 +110,35 @@ $current_page = basename($_SERVER['PHP_SELF']);
     </a>
 
 </div>
-<script>
 
+<script>
 const sidebar = document.getElementById("sidebar");
 const hamburger = document.getElementById("hamburger");
 
-/* RESTORE SIDEBAR STATE WHEN PAGE LOADS */
-
 document.addEventListener("DOMContentLoaded", function(){
-
-const state = localStorage.getItem("sidebar-state");
-
-if(state === "closed"){
-sidebar.classList.add("closed");
-hamburger.style.color="black";
-}
-
+    const state = localStorage.getItem("sidebar-state");
+    if(state === "closed"){
+        sidebar.classList.add("closed");
+        if(hamburger) hamburger.style.color="black";
+    }
 });
-
-/* TOGGLE SIDEBAR */
 
 function toggleSidebar(){
-
-sidebar.classList.toggle("closed");
-
-if(sidebar.classList.contains("closed")){
-hamburger.style.color="black";
-localStorage.setItem("sidebar-state","closed");
-}else{
-hamburger.style.color="white";
-localStorage.setItem("sidebar-state","open");
+    sidebar.classList.toggle("closed");
+    if(sidebar.classList.contains("closed")){
+        if(hamburger) hamburger.style.color="black";
+        localStorage.setItem("sidebar-state","closed");
+    }else{
+        if(hamburger) hamburger.style.color="white";
+        localStorage.setItem("sidebar-state","open");
+    }
 }
-
-}
-
-/* CLOSE SIDEBAR WHEN MENU LINK CLICKED */
 
 document.querySelectorAll("#sidebar a").forEach(function(link){
-
-link.addEventListener("click",function(){
-
-sidebar.classList.add("closed");
-hamburger.style.color="black";
-
-localStorage.setItem("sidebar-state","closed");
-
+    link.addEventListener("click",function(){
+        sidebar.classList.add("closed");
+        if(hamburger) hamburger.style.color="black";
+        localStorage.setItem("sidebar-state","closed");
+    });
 });
-
-});
-
 </script>

@@ -192,7 +192,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` VALUES (1,'Admin User','mailproject112@gmail.com','$2y$10$q8ittVtqZUrQrfeVFkOELOv/rZ2ITFvl7Exx7mbxGajKEPK38qgQi','admin','2026-02-08 06:06:34',NULL,NULL,NULL,NULL),(4,'Adi','admamadapur@gmail.com','$2y$10$aGaG/McZuAhpjRbkFtBNS.bZQQFBtGRZLXjUhl8gClFI8/vjZQoYy','student','2026-02-08 06:58:29',NULL,NULL,NULL,NULL),(5,'Adi M','admtemp67@gmail.com','$2y$10$isfrndOZ4HTCSM7wevYvRupJHIENzHbdNZT/rmCPdGiHjXPkQrA7S','student','2026-02-14 04:08:04',NULL,NULL,NULL,NULL),(6,'Renkigouda','studentquizportal01@gmail.com','$2y$10$p7CSHs0zOqKFdXRzH.Z./.P.631b4aGqykD1.AW2nlA9PZnWsQZhm','student','2026-02-14 17:37:55',NULL,NULL,'500808','2026-02-15 08:49:28');
+INSERT INTO `users` VALUES (1,'System Administrator','admin@example.com','$2y$10$q8ittVtqZUrQrfeVFkOELOv/rZ2ITFvl7Exx7mbxGajKEPK38qgQi','admin','2026-02-08 06:06:34',NULL,NULL,NULL,NULL),(4,'Test Student','student@example.com','$2y$10$aGaG/McZuAhpjRbkFtBNS.bZQQFBtGRZLXjUhl8gClFI8/vjZQoYy','student','2026-02-08 06:58:29',NULL,NULL,NULL,NULL),(5,'Test Student Two','student2@example.com','$2y$10$isfrndOZ4HTCSM7wevYvRupJHIENzHbdNZT/rmCPdGiHjXPkQrA7S','student','2026-02-14 04:08:04',NULL,NULL,NULL,NULL),(6,'Test Student Three','student3@example.com','$2y$10$p7CSHs0zOqKFdXRzH.Z./.P.631b4aGqykD1.AW2nlA9PZnWsQZhm','student','2026-02-14 17:37:55',NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 

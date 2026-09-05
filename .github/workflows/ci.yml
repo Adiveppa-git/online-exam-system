@@ -1,0 +1,106 @@
+name: Continuous Integration & Automated Evaluation
+
+on:
+  push:
+    branches: [ main, feature/* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-evaluate:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mariadb:10.6
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: online_exam_system
+          MYSQL_USER: exam_user
+          MYSQL_PASSWORD: exampassword
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Set up PHP 8.1
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.1"
+          extensions: mysqli, curl, json, mbstring
+
+      - name: Install Python Dependencies
+        run: |
+          cd ai-service
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Pytest Test Suite
+        env:
+          ENVIRONMENT: testing
+          LLM_PROVIDER: heuristic
+        run: |
+          cd ai-service
+          python -m pytest -v
+
+      - name: Run Offline RAG Evaluation Benchmark
+        env:
+          PYTHONPATH: .
+        run: |
+          cd ai-service
+          python tests/evaluate_rag.py
+
+      - name: Run Offline Recommendation Evaluation Benchmark
+        env:
+          PYTHONPATH: .
+        run: |
+          cd ai-service
+          python tests/evaluate_recommendations.py
+
+      - name: Initialize Baseline Database & Run Migrations
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_NAME: online_exam_system
+          DB_USER: exam_user
+          DB_PASS: exampassword
+          MYSQL_PWD: exampassword
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -u exam_user online_exam_system < database/online_exam_system.sql
+          php database/run_migrations.php
+
+      - name: Run PHP Integration & Regression Tests
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_NAME: online_exam_system
+          DB_USER: exam_user
+          DB_PASS: exampassword
+          AI_SERVICE_URL: http://127.0.0.1:8001
+          ENVIRONMENT: testing
+          LLM_PROVIDER: heuristic
+          PYTHONPATH: ai-service
+        run: |
+          (cd ai-service && python -m uvicorn app.main:app --host 127.0.0.1 --port 8001) &
+          sleep 3
+          php tests/test_ai_client.php
+          php tests/test_ai_question_gen.php
+          php tests/test_ai_performance.php
+          php tests/test_ai_difficulty.php
+          php tests/test_ai_rag.php
+          php tests/test_ai_recommendations.php
+          php tests/test_regression.php
+          php tests/manual_e2e_verification.php
+
+      - name: Build Docker Container
+        run: |
+          docker build -t ai-service:latest ./ai-service
