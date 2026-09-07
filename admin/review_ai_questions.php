@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 session_start();
 require_once "../config/db.php";
 
@@ -41,6 +41,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = $_POST['action'] ?? '';
     $qid = (int)($_POST['question_id'] ?? 0);
+
+    if ($action === 'bulk_approve') {
+        $exam_id = (int)($_POST['exam_id'] ?? 0);
+
+        if (!$exam_id) {
+            $_SESSION['error'] = "Please select an exam to assign the pending questions to.";
+        } else {
+            $conn->begin_transaction();
+            try {
+                // Fetch all pending questions with row lock
+                $pendingStmt = $conn->prepare("SELECT * FROM ai_generated_questions WHERE status = 'pending' FOR UPDATE");
+                $pendingStmt->execute();
+                $pendingRes = $pendingStmt->get_result();
+                $pending_questions = $pendingRes->fetch_all(MYSQLI_ASSOC);
+
+                if (empty($pending_questions)) {
+                    throw new Exception("No pending questions found to approve.");
+                }
+
+                $insStmt = $conn->prepare("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option, subject, topic, difficulty, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+                $updStmt = $conn->prepare("UPDATE ai_generated_questions SET status = 'approved', reviewed_by = ?, reviewed_at = NOW() WHERE status = 'pending'");
+                $updStmt->bind_param("i", $admin_id);
+
+                $count = 0;
+                foreach ($pending_questions as $gq) {
+                    $insStmt->bind_param("issssssssss",
+                        $exam_id, $gq['question'], $gq['option_a'], $gq['option_b'], $gq['option_c'], $gq['option_d'],
+                        $gq['correct_option'], $gq['subject'], $gq['topic'], $gq['difficulty'], $gq['explanation']
+                    );
+                    if (!$insStmt->execute()) {
+                        throw new Exception("Failed to insert question: " . $conn->error);
+                    }
+                    $count++;
+                }
+
+                if (!$updStmt->execute() || $updStmt->affected_rows === 0) {
+                    throw new Exception("Failed to update question statuses.");
+                }
+
+                $conn->commit();
+                $_SESSION['success'] = "Successfully approved and published {$count} pending question(s) to the selected exam!";
+            } catch (Exception $ex) {
+                $conn->rollback();
+                $_SESSION['error'] = "Bulk Approval Transaction Failed: " . $ex->getMessage();
+            }
+        }
+        header("Location: review_ai_questions.php?status=" . urlencode($status_filter) . ($request_id_filter ? "&request_id=" . urlencode($request_id_filter) : ""));
+        exit;
+    }
 
     if ($action === 'approve') {
         $exam_id = (int)($_POST['exam_id'] ?? 0);
@@ -317,6 +367,29 @@ $cnt_all = $conn->query("SELECT COUNT(*) AS c FROM ai_generated_questions")->fet
             <div class="alert-success"><?= htmlspecialchars($success) ?></div>
         <?php endif; ?>
 
+        <!-- BULK APPROVAL ACTION BAR (Top of Pending Questions) -->
+        <?php if ($cnt_pending > 0 && ($status_filter === 'pending' || $status_filter === 'all' || empty($status_filter))): ?>
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 15px 20px; margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+                <div style="font-weight: 600; color: #166534; font-size: 15px;">
+                    ⚡ <strong>Bulk Approval:</strong> Publish all <strong><?= $cnt_pending ?></strong> pending question(s) into the active question bank.
+                </div>
+                <form method="POST" onsubmit="return confirmBulkApprove(this)" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
+                    <input type="hidden" name="action" value="bulk_approve">
+
+                    <select name="exam_id" class="select-exam" style="background: white; border-color: #86efac;" required>
+                        <option value="">-- Select Exam to Assign All --</option>
+                        <?php foreach($exams_list as $ex): ?>
+                            <option value="<?= $ex['id'] ?>"><?= htmlspecialchars($ex['title']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button type="submit" class="btn-action btn-approve">
+                        ✓ Approve & Publish All
+                    </button>
+                </form>
+            </div>
+        <?php endif; ?>
+
         <!-- FILTER TABS -->
         <div class="filter-bar">
             <a href="review_ai_questions.php?status=pending" class="filter-btn <?= $status_filter==='pending'?'active':'' ?>">
@@ -480,6 +553,15 @@ $cnt_all = $conn->query("SELECT COUNT(*) AS c FROM ai_generated_questions")->fet
 </div>
 
 <script>
+function confirmBulkApprove(form) {
+    const examSelect = form.querySelector('select[name="exam_id"]');
+    if (!examSelect || !examSelect.value) {
+        alert("Please select an exam to assign the pending questions to.");
+        return false;
+    }
+    return confirm("Are you sure you want to approve and publish all pending questions to the selected exam?");
+}
+
 function toggleEdit(id) {
     const el = document.getElementById("edit_form_" + id);
     if (el.style.display === "block") {

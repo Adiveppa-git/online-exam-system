@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/ai_client.php';
@@ -95,6 +95,50 @@ if ($chkUpd === 'hard') {
 } else {
     echo "FAILED\n";
     $failed++;
+}
+
+// Test 5: Student Answers Persistence & Attempts Aggregation Check
+echo "[Test 5] Verifying Student Answers Persistence & Attempt Counts Aggregation... ";
+$testStudentId = 99988;
+$testExamId = 24;
+
+// Find a valid question ID in the test exam
+$qFetch = $conn->query("SELECT id, correct_option FROM questions WHERE exam_id = $testExamId LIMIT 1");
+if ($qFetch && $qFetch->num_rows > 0) {
+    $qRow = $qFetch->fetch_assoc();
+    $targetQId = (int)$qRow['id'];
+    $correctOpt = $qRow['correct_option'];
+
+    // Clean any previous test answers
+    $conn->query("DELETE FROM student_answers WHERE student_id = $testStudentId");
+
+    // Insert 1 test student answer
+    $stmtSa = $conn->prepare("INSERT INTO student_answers (student_id, exam_id, question_id, answer) VALUES (?, ?, ?, ?)");
+    $stmtSa->bind_param("iiis", $testStudentId, $testExamId, $targetQId, $correctOpt);
+    $stmtSa->execute();
+
+    // Query attempt stats
+    $aggRes = $conn->query("
+        SELECT COUNT(sa.id) AS total_attempts,
+               SUM(CASE WHEN sa.answer = q.correct_option THEN 1 ELSE 0 END) AS correct_attempts
+        FROM questions q
+        LEFT JOIN student_answers sa ON q.id = sa.question_id
+        WHERE q.id = $targetQId
+        GROUP BY q.id
+    ")->fetch_assoc();
+
+    if ($aggRes && (int)$aggRes['total_attempts'] >= 1 && (int)$aggRes['correct_attempts'] >= 1) {
+        echo "PASSED (student_answers persisted & attempt aggregation verified!)\n";
+        $passed++;
+    } else {
+        echo "FAILED (student_answers count aggregation mismatch)\n";
+        $failed++;
+    }
+
+    // Clean up test answer
+    $conn->query("DELETE FROM student_answers WHERE student_id = $testStudentId");
+} else {
+    echo "SKIPPED (No question found for exam #$testExamId)\n";
 }
 
 echo "\n----------------------------------------------------\n";

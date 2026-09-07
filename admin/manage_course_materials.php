@@ -1,8 +1,8 @@
 <?php
 session_start();
-if (!isset($_SESSION['admin_logged_in'])) {
-    header("Location: login.php");
-    exit();
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+    header("Location: ../index.php");
+    exit;
 }
 
 require_once __DIR__ . '/../config/db.php';
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             if (move_uploaded_file($tmp_path, $destination)) {
                 // Insert MySQL pending record
                 $stmt = $conn->prepare("INSERT INTO ai_documents (filename, original_name, file_path, file_size, subject, topic, status, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)");
-                $admin_id = $_SESSION['admin_id'] ?? 1;
+                $admin_id = $_SESSION['user_id'] ?? 1;
                 $stmt->bind_param("sssissi", $safe_filename, $original_name, $destination, $file_size, $subject, $topic, $admin_id);
                 
                 if ($stmt->execute()) {

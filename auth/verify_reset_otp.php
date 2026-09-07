@@ -99,6 +99,16 @@ strong{color:green;}
 <p style="color:red;font-weight:bold"><?= $msg ?></p>
 <?php endif; ?>
 
+<?php if (isset($_SESSION['mail_sent_mode']) && $_SESSION['mail_sent_mode'] === 'real'): ?>
+<p style="font-size:13px;color:green;text-align:center;margin-bottom:12px">
+    <i class="fa-solid fa-paper-plane"></i> OTP sent successfully to your email address.
+</p>
+<?php elseif (isset($_SESSION['mail_sent_mode']) && $_SESSION['mail_sent_mode'] === 'log'): ?>
+<p style="font-size:12px;color:#666;text-align:center;margin-bottom:12px">
+    <i class="fa-solid fa-bug"></i> <strong>Dev Mode Notice:</strong> OTP has been logged to <code>logs/mail.log</code>
+</p>
+<?php endif; ?>
+
 <form method="post">
 
 <input type="text"

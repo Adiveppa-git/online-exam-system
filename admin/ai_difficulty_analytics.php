@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 session_start();
 require_once "../config/db.php";
 require_once "../config/ai_client.php";
@@ -43,6 +43,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 /* ===== FETCH ACTIVE QUESTIONS & ATTEMPT STATS ===== */
+$topic_acc_res = $conn->query("
+    SELECT q.topic,
+           COUNT(sa.id) AS total,
+           SUM(CASE WHEN sa.answer = q.correct_option THEN 1 ELSE 0 END) AS correct
+    FROM questions q
+    JOIN student_answers sa ON q.id = sa.question_id
+    GROUP BY q.topic
+");
+$topic_accuracies = [];
+if ($topic_acc_res) {
+    while ($t_row = $topic_acc_res->fetch_assoc()) {
+        $t_tot = (int)$t_row['total'];
+        $t_cor = (int)$t_row['correct'];
+        if ($t_tot > 0) {
+            $topic_accuracies[$t_row['topic']] = round(($t_cor / $t_tot) * 100, 1);
+        }
+    }
+}
+
+$subj_acc_res = $conn->query("
+    SELECT q.subject,
+           COUNT(sa.id) AS total,
+           SUM(CASE WHEN sa.answer = q.correct_option THEN 1 ELSE 0 END) AS correct
+    FROM questions q
+    JOIN student_answers sa ON q.id = sa.question_id
+    GROUP BY q.subject
+");
+$subject_accuracies = [];
+if ($subj_acc_res) {
+    while ($s_row = $subj_acc_res->fetch_assoc()) {
+        $s_tot = (int)$s_row['total'];
+        $s_cor = (int)$s_row['correct'];
+        if ($s_tot > 0) {
+            $subject_accuracies[$s_row['subject']] = round(($s_cor / $s_tot) * 100, 1);
+        }
+    }
+}
+
 $query = "
     SELECT q.id, q.question, q.subject, q.topic, q.difficulty AS assigned_difficulty, q.correct_option,
            COUNT(sa.id) AS total_attempts,
@@ -66,14 +104,19 @@ while ($row = $res->fetch_assoc()) {
     $students = (int)$row['unique_students'];
     $correct_rate = ($attempts > 0) ? ($correct / $attempts) : 0.0;
 
+    $topic = $row['topic'];
+    $subject = $row['subject'];
+    $topic_avg = isset($topic_accuracies[$topic]) ? $topic_accuracies[$topic] : 50.0;
+    $subject_avg = isset($subject_accuracies[$subject]) ? $subject_accuracies[$subject] : 50.0;
+
     // Call ML Prediction endpoint
     $mlInput = [
         'question_id' => (int)$row['id'],
         'total_attempts' => $attempts,
         'correct_attempts' => $correct,
         'unique_students' => $students,
-        'topic_avg_accuracy' => 50.0,
-        'subject_avg_accuracy' => 50.0,
+        'topic_avg_accuracy' => $topic_avg,
+        'subject_avg_accuracy' => $subject_avg,
         'min_attempts_threshold' => 5
     ];
 

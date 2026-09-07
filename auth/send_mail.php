@@ -94,6 +94,9 @@ function sendBrevoMail($to, $subject, $body)
     curl_close($ch);
 
     if ($httpCode === 201) {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['mail_sent_mode'] = 'real';
+        }
         return true;
     } else {
         error_log("[MAIL ERROR] Brevo API delivery failed with HTTP status code: " . $httpCode . " Response: " . $response);
@@ -266,6 +269,7 @@ function sendDevLogMail($to, $subject, $body)
         $otp = $matches[1];
         if (session_status() === PHP_SESSION_ACTIVE) {
             $_SESSION['dev_last_otp'] = $otp;
+            $_SESSION['mail_sent_mode'] = 'log';
         }
     }
 

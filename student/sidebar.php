@@ -74,7 +74,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
     <div class="sidebar-header">
         <h2>Student Panel</h2>
-        <div class="hamburger" id="hamburger" onclick="toggleSidebar()">?</div>
+        <div class="hamburger" id="hamburger" onclick="toggleSidebar()">&#9776;</div>
     </div>
 
     <a href="../student/dashboard.php" class="<?= $current_page=='dashboard.php'?'active':'' ?>">
@@ -86,15 +86,15 @@ $current_page = basename($_SERVER['PHP_SELF']);
     </a>
 
     <a href="../student/personalized_learning.php" class="<?= ($current_page=='personalized_learning.php'||$current_page=='practice_session.php')?'active':'' ?>">
-        ?? Personalized Learning
+        Personalized Learning
     </a>
 
     <a href="../student/ai_performance.php" class="<?= $current_page=='ai_performance.php'?'active':'' ?>">
-        ?? Performance Analytics
+        Performance Analytics
     </a>
 
     <a href="../student/study_assistant.php" class="<?= $current_page=='study_assistant.php'?'active':'' ?>">
-        ?? AI Study Assistant
+        AI Study Assistant
     </a>
 
     <a href="../student/result.php" class="<?= $current_page=='result.php'?'active':'' ?>">

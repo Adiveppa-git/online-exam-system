@@ -291,7 +291,11 @@ Login
 
 <?php else: ?>
 
-<?php if (in_array(strtolower(getenv('APP_ENV') ?: 'development'), ['development', 'local', 'dev'], true)): ?>
+<?php if (isset($_SESSION['mail_sent_mode']) && $_SESSION['mail_sent_mode'] === 'real'): ?>
+<p style="font-size:13px;color:green;text-align:center;margin-bottom:12px">
+    <i class="fa-solid fa-paper-plane"></i> OTP sent successfully to your email address.
+</p>
+<?php elseif (isset($_SESSION['mail_sent_mode']) && $_SESSION['mail_sent_mode'] === 'log'): ?>
 <p style="font-size:12px;color:#666;text-align:center;margin-bottom:12px">
     <i class="fa-solid fa-bug"></i> <strong>Dev Mode Notice:</strong> OTP has been logged to <code>logs/mail.log</code>
 </p>
