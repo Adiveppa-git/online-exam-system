@@ -1,4 +1,4 @@
-<?php
+ï»¿<?php
 session_start();
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../index.php");
@@ -77,10 +77,31 @@ $plan_items = $plan_data['plan_items'] ?? [];
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
+        .main-content {
+            margin-left: 250px;
+            width: calc(100% - 250px);
+            max-width: none;
+            padding: 28px 36px;
+            transition: margin-left 0.3s ease, width 0.3s ease;
+            box-sizing: border-box;
+            min-width: 0;
+        }
+        .sidebar.closed ~ .main-content {
+            margin-left: 60px;
+            width: calc(100% - 60px);
+        }
+        @media (max-width: 768px) {
+            .main-content {
+                margin-left: 0 !important;
+                width: 100% !important;
+                padding: 16px !important;
+            }
+        }
         .learning-card {
             background: #ffffff;
             border-radius: 12px;
             border: 1px solid #e9ecef;
+            width: 100%;
         }
         .metric-badge {
             font-size: 0.85rem;
@@ -94,26 +115,26 @@ $plan_items = $plan_data['plan_items'] ?? [];
 </head>
 <body class="bg-light">
 
-<div class="d-flex">
+<div class="d-flex min-vh-100">
     <?php include 'sidebar.php'; ?>
 
-    <div class="container-fluid p-4" style="margin-left: 260px;">
+    <div class="main-content flex-grow-1">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>
                 <h2 class="h3 fw-bold text-dark mb-1"><i class="fa-solid fa-brain text-primary me-2"></i>Personalized Adaptive Learning</h2>
-                <p class="text-muted small mb-0">Explainable AI recommendations derived from your actual exam & practice performance</p>
+                <p class="text-muted small mb-0">Explainable AI recommendations derived from your actual exam &amp; practice performance</p>
             </div>
         </div>
 
         <!-- Overall Summary Banner -->
         <div class="learning-card shadow-sm p-4 mb-4">
-            <div class="row align-items-center">
-                <div class="col-md-3 text-center border-end">
+            <div class="row align-items-center g-3">
+                <div class="col-lg-3 col-md-4 text-center border-end">
                     <div class="display-5 fw-bold text-primary"><?= number_format($overall_accuracy, 1) ?>%</div>
                     <div class="text-muted small fw-semibold">Overall Mastery Accuracy</div>
                     <div class="mt-2"><span class="badge bg-light text-dark border">Attempts: <?= count($history) ?> questions</span></div>
                 </div>
-                <div class="col-md-9 ps-md-4">
+                <div class="col-lg-9 col-md-8 ps-md-4">
                     <h5 class="fw-bold text-dark mb-2"><i class="fa-solid fa-wand-magic-sparkles me-2 text-warning"></i>Study Plan Recommendation Summary</h5>
                     <p class="text-secondary mb-0 lh-base"><?= htmlspecialchars($summary) ?></p>
                 </div>
@@ -133,7 +154,7 @@ $plan_items = $plan_data['plan_items'] ?? [];
         <?php else: ?>
             <h5 class="fw-bold text-dark mb-3"><i class="fa-solid fa-list-check text-primary me-2"></i>Recommended Learning Tasks</h5>
 
-            <div class="row g-3 mb-4">
+            <div class="row g-4 mb-4">
                 <?php foreach ($plan_items as $item): ?>
                     <?php
                     $cls = $item['classification'];
@@ -157,7 +178,7 @@ $plan_items = $plan_data['plan_items'] ?? [];
 
                             <p class="text-secondary small mb-3">
                                 <i class="fa-solid fa-circle-exclamation me-1 text-primary"></i>
-                                <strong>Reason Tag:</strong> <code><?= htmlspecialchars($item['reason']) ?></code> — <?= htmlspecialchars($item['suggested_action']) ?>
+                                <strong>Reason Tag:</strong> <code><?= htmlspecialchars($item['reason']) ?></code> &mdash; <?= htmlspecialchars($item['suggested_action']) ?>
                             </p>
 
                             <!-- Course Material RAG Section -->

@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/env_loader.php';
+
 /**
  * AI Service Client
  * Handles HTTP cURL communications between PHP application and Python FastAPI AI Service.
@@ -93,12 +95,28 @@ class AiClient {
         return $this->request('POST', '/api/v1/rag/search', $payload);
     }
 
-    public function askRAG(string $question, ?string $subject = null, ?string $topic = null, ?int $topK = null, ?float $threshold = null): array {
+    public function askRAG(
+        string $question,
+        ?string $subject = null,
+        ?string $topic = null,
+        ?int $topK = null,
+        ?float $threshold = null,
+        ?int $studentId = null,
+        array $history = [],
+        ?array $userContext = null,
+        ?array $systemStats = null,
+        ?array $otherUsersInfo = null
+    ): array {
         $payload = ['question' => $question];
         if ($subject !== null) $payload['subject'] = $subject;
         if ($topic !== null) $payload['topic'] = $topic;
         if ($topK !== null) $payload['top_k'] = $topK;
         if ($threshold !== null) $payload['threshold'] = $threshold;
+        if ($studentId !== null) $payload['student_id'] = $studentId;
+        if (!empty($history)) $payload['history'] = $history;
+        if (!empty($userContext)) $payload['user_context'] = $userContext;
+        if (!empty($systemStats)) $payload['system_stats'] = $systemStats;
+        if (!empty($otherUsersInfo)) $payload['other_users_info'] = $otherUsersInfo;
         return $this->request('POST', '/api/v1/rag/ask', $payload);
     }
 

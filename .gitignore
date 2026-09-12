@@ -29,6 +29,12 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+logs/*
+!logs/.htaccess
+!logs/index.php
+
+# Scratch / Temporary Scripts
+scratch/
 
 # Local MySQL Binaries & Archives
 mysql.zip

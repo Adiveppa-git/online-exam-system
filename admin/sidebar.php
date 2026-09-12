@@ -90,7 +90,7 @@ $mode = $_GET['mode'] ?? '';
 
     <div class="sidebar-header">
         <h2>Admin Panel</h2>
-       <div class="hamburger" id="hamburger" onclick="toggleSidebar()">?</div>
+       <div class="hamburger" id="hamburger" onclick="toggleSidebar()">&#9776;</div>
     </div>
 
     <a href="dashboard.php"
@@ -103,36 +103,26 @@ $mode = $_GET['mode'] ?? '';
         Manage Exams
     </a>
 
-    <a href="questions.php?mode=add"
-       class="<?= ($current_page === 'questions.php' && $mode === 'add') ? 'active' : '' ?>">
-        Add Questions
-    </a>
-
-    <a href="questions.php?mode=manage"
-       class="<?= ($current_page === 'questions.php' && $mode === 'manage') ? 'active' : '' ?>">
+    <a href="manage_questions.php"
+       class="<?= in_array($current_page, ['questions.php', 'manage_questions.php', 'add_question.php']) ? 'active' : '' ?>">
         Manage Questions
     </a>
 
     <div class="sidebar-section-title">AI System</div>
 
-    <a href="ai_question_generator.php"
-       class="<?= $current_page === 'ai_question_generator.php' ? 'active' : '' ?>">
-        ? AI Question Gen
-    </a>
-
     <a href="review_ai_questions.php"
        class="<?= $current_page === 'review_ai_questions.php' ? 'active' : '' ?>">
-        ?? Review AI Questions
+        Review AI Questions
     </a>
 
     <a href="ai_difficulty_analytics.php"
        class="<?= $current_page === 'ai_difficulty_analytics.php' ? 'active' : '' ?>">
-        ?? ML Difficulty Analytics
+        ML Difficulty Analytics
     </a>
 
     <a href="manage_course_materials.php"
        class="<?= $current_page === 'manage_course_materials.php' ? 'active' : '' ?>">
-        ?? Course Materials (RAG)
+        Course Materials (RAG)
     </a>
 
     <div class="sidebar-section-title">Reports</div>

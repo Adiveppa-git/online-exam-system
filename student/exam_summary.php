@@ -41,6 +41,23 @@ while ($row = $res->fetch_assoc()) {
     }
 }
 
+/* SAVE PER-QUESTION STUDENT ANSWERS */
+if (!empty($answers) && is_array($answers)) {
+    $saveAns = $conn->prepare("
+        INSERT INTO student_answers (student_id, exam_id, question_id, answer)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE answer = VALUES(answer)
+    ");
+    foreach ($answers as $qid => $ansVal) {
+        $qidInt = (int)$qid;
+        $cleanAns = trim((string)$ansVal);
+        if ($qidInt > 0 && in_array($cleanAns, ['A', 'B', 'C', 'D'], true)) {
+            $saveAns->bind_param("iiis", $user_id, $exam_id, $qidInt, $cleanAns);
+            $saveAns->execute();
+        }
+    }
+}
+
 /* SAVE RESULT */
 $ins = $conn->prepare("INSERT INTO results (user_id, exam_id, score) VALUES (?,?,?)");
 $ins->bind_param("iii",$user_id,$exam_id,$score);

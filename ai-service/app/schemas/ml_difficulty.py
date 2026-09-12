@@ -8,7 +8,7 @@ class DifficultyPredictRequest(BaseModel):
     unique_students: int = Field(0, ge=0)
     topic_avg_accuracy: float = Field(50.0, ge=0.0, le=100.0)
     subject_avg_accuracy: float = Field(50.0, ge=0.0, le=100.0)
-    min_attempts_threshold: int = Field(5, ge=1, le=100)
+    min_attempts_threshold: int = Field(3, ge=1, le=100)
 
 class DifficultyPredictResponse(BaseModel):
     question_id: int

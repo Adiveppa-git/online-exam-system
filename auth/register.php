@@ -56,19 +56,16 @@ if (isset($_POST['send_otp']))
                 'expiry'=>$expiry
             ];
 
-            $body = "
-            <h2>Email Verification</h2>
-            <p>Your OTP is:</p>
-            <h1>$otp</h1>
-            <p>Valid for 10 minutes</p>";
+            $body = buildOtpEmailHtml("Email Verification", $otp, 10);
 
-            if (sendMail($email,"Verify Your Email",$body))
+            if (sendMail($email, "Verify Your Email - Online Examination System", $body))
             {
                 $step = 2;
             }
             else
             {
-                $msg = "Failed to send OTP";
+                $err = getLastMailError() ?: "Failed to send OTP";
+                $msg = "❌ " . $err;
             }
         }
     }
@@ -290,6 +287,16 @@ Login
 
 
 <?php else: ?>
+
+<?php if (isset($_SESSION['mail_sent_mode']) && $_SESSION['mail_sent_mode'] === 'real'): ?>
+<p style="font-size:13px;color:green;text-align:center;margin-bottom:12px">
+    <i class="fa-solid fa-paper-plane"></i> OTP sent successfully to your email address.
+</p>
+<?php elseif (isset($_SESSION['mail_sent_mode']) && $_SESSION['mail_sent_mode'] === 'log'): ?>
+<p style="font-size:12px;color:#666;text-align:center;margin-bottom:12px">
+    <i class="fa-solid fa-bug"></i> <strong>Dev Mode Notice:</strong> OTP has been logged to <code>logs/mail.log</code>
+</p>
+<?php endif; ?>
 
 <form method="post">
 

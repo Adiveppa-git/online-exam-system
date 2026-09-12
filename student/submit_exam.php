@@ -81,14 +81,6 @@ $insert = $conn->prepare("
 $insert->bind_param("iii", $student_id, $exam_id, $score);
 $insert->execute();
 
-/* ================= CLEAN STUDENT ANSWERS (VERY IMPORTANT) ================= */
-$clean = $conn->prepare("
-    DELETE FROM student_answers
-    WHERE student_id=? AND exam_id=?
-");
-$clean->bind_param("ii", $student_id, $exam_id);
-$clean->execute();
-
 /* ================= CLEAR SESSION ================= */
 unset($_SESSION['exam_id']);
 

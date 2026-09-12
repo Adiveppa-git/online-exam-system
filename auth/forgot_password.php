@@ -39,14 +39,9 @@ if (isset($_POST['send_otp'])) {
             $stmt->execute();
 
             /* SEND MAIL */
-            $body = "
-                <h2>Password Reset</h2>
-                <p>Your OTP is:</p>
-                <h1>$otp</h1>
-                <p>This OTP is valid for 10 minutes.</p>
-            ";
+            $body = buildOtpEmailHtml("Password Reset", $otp, 10);
 
-            if (sendMail($email, "Password Reset OTP", $body)) {
+            if (sendMail($email, "Password Reset OTP - Online Examination System", $body)) {
 
                 $_SESSION['reset_email'] = $email;
 
@@ -55,7 +50,8 @@ if (isset($_POST['send_otp'])) {
 
             } else {
 
-                $msg = "❌ Failed to send OTP. Try again.";
+                $err = getLastMailError() ?: "Failed to send OTP. Try again.";
+                $msg = "❌ " . $err;
 
             }
 

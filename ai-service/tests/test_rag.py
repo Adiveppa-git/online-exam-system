@@ -104,7 +104,7 @@ def test_rag_no_context_behavior():
         threshold=0.85
     )
     assert ask_res["has_sufficient_context"] is False
-    assert "couldn't find enough information" in ask_res["answer"]
+    assert "don't have enough information about Quantum Physics" in ask_res["answer"]
     assert len(ask_res["sources"]) == 0
 
 def test_fastapi_rag_endpoints(sample_text_file):
@@ -142,3 +142,53 @@ def test_fastapi_rag_endpoints(sample_text_file):
     # Delete via API
     del_res = client.delete("/api/v1/rag/document/902")
     assert del_res.status_code == 200
+
+def test_intent_classification_chatbot_responses():
+    # Casual Greeting
+    res_hello = RAGService.answer_question("hello")
+    assert res_hello["is_conversational"] is True
+    assert res_hello["intent"] == "greeting"
+    assert "Hello! 👋" in res_hello["answer"]
+    assert len(res_hello["sources"]) == 0
+
+    # Identity
+    res_id = RAGService.answer_question("what is your name")
+    assert res_id["is_conversational"] is True
+    assert res_id["intent"] == "assistant_identity"
+    assert "AI Assistant" in res_id["answer"]
+    assert len(res_id["sources"]) == 0
+
+    # Thanks
+    res_thanks = RAGService.answer_question("thank you")
+    assert res_thanks["is_conversational"] is True
+    assert res_thanks["intent"] == "thanks"
+    assert "You're welcome!" in res_thanks["answer"]
+
+    # Capability
+    res_cap = RAGService.answer_question("what can you do")
+    assert res_cap["is_conversational"] is True
+    assert "AI Assistant" in res_cap["answer"]
+
+def test_personalized_performance_queries():
+    # Insufficient Data Test
+    res_no_data = RAGService.answer_question(
+        question="I am not getting more marks in English. Suggest me how can I improve.",
+        student_id=1,
+        history=[]
+    )
+    assert res_no_data["intent"] in ["recommendation", "performance"]
+
+    # Populated Performance History Test
+    history_data = [
+        {"subject": "English", "topic": "Grammar", "is_correct": False},
+        {"subject": "English", "topic": "Grammar", "is_correct": False},
+        {"subject": "English", "topic": "Vocabulary", "is_correct": True}
+    ]
+    res_with_data = RAGService.answer_question(
+        question="I am not getting more marks in English. Suggest me how can I improve.",
+        student_id=1,
+        history=history_data
+    )
+    assert res_with_data["intent"] in ["recommendation", "performance"]
+    assert "Grammar" in res_with_data["answer"]
+    assert "English" in res_with_data["answer"]

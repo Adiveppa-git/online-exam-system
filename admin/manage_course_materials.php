@@ -1,142 +1,113 @@
-<?php
+﻿<?php
 session_start();
-if (!isset($_SESSION['admin_logged_in'])) {
-    header("Location: login.php");
-    exit();
-}
-
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/ai_client.php';
 
-// Generate CSRF token
+// Auth Guard - Admin Only
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+    header("Location: ../auth/login.php");
+    exit();
+}
+
+$message = "";
+$message_type = "info";
+
+// CSRF Token Generation
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-$message = "";
-$message_type = "";
-
-// Ensure upload directory exists
-$upload_dir = __DIR__ . '/../uploads/course_materials/';
-if (!file_exists($upload_dir)) {
-    mkdir($upload_dir, 0755, true);
-}
-
-// Handle Document Upload
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'upload_material') {
+// Handle Form Submissions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        $message = "Invalid CSRF token request.";
-        $message_type = "danger";
-    } elseif (!isset($_FILES['material_file']) || $_FILES['material_file']['error'] !== UPLOAD_ERR_OK) {
-        $message = "File upload failed or no file selected.";
+        $message = "Invalid CSRF token.";
         $message_type = "danger";
     } else {
-        $subject = trim($_POST['subject'] ?? 'General');
-        $topic = trim($_POST['topic'] ?? 'General');
-        $original_name = basename($_FILES['material_file']['name']);
-        $tmp_path = $_FILES['material_file']['tmp_name'];
-        $file_size = $_FILES['material_file']['size'];
+        $action = $_POST['action'] ?? '';
 
-        $allowed_exts = ['pdf', 'txt', 'md'];
-        $ext = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
+        if ($action === 'upload_material') {
+            $subject = trim($_POST['subject'] ?? '');
+            $topic = trim($_POST['topic'] ?? '');
 
-        if (!in_array($ext, $allowed_exts)) {
-            $message = "Invalid file type. Only .pdf, .txt, and .md files are allowed.";
-            $message_type = "danger";
-        } elseif ($file_size > 15 * 1024 * 1024) {
-            $message = "File exceeds maximum size limit of 15MB.";
-            $message_type = "danger";
-        } else {
-            // Generate safe filename to prevent path traversal
-            $safe_filename = uniqid('doc_', true) . '.' . $ext;
-            $destination = $upload_dir . $safe_filename;
-
-            if (move_uploaded_file($tmp_path, $destination)) {
-                // Insert MySQL pending record
-                $stmt = $conn->prepare("INSERT INTO ai_documents (filename, original_name, file_path, file_size, subject, topic, status, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)");
-                $admin_id = $_SESSION['admin_id'] ?? 1;
-                $stmt->bind_param("sssissi", $safe_filename, $original_name, $destination, $file_size, $subject, $topic, $admin_id);
-                
-                if ($stmt->execute()) {
-                    $doc_id = $stmt->insert_id;
-
-                    // Trigger Python FastAPI AI Service Ingestion
-                    $aiClient = new AiClient();
-                    $ingest_res = $aiClient->ingestDocument($destination, $doc_id, $original_name, $subject, $topic);
-
-                    if ($ingest_res['status'] === 'success') {
-                        $data = $ingest_res['data'];
-                        $total_pages = $data['total_pages'] ?? 1;
-                        $total_chunks = $data['total_chunks'] ?? 0;
-
-                        // Update status to ingested
-                        $up = $conn->prepare("UPDATE ai_documents SET status = 'ingested', total_pages = ?, total_chunks = ? WHERE id = ?");
-                        $up->bind_param("iii", $total_pages, $total_chunks, $doc_id);
-                        $up->execute();
-
-                        // Populate MySQL chunk tracking table
-                        if (!empty($data['chunks'])) {
-                            $c_stmt = $conn->prepare("INSERT INTO ai_document_chunks (document_id, chunk_index, page_number, chunk_text, chunk_hash) VALUES (?, ?, ?, ?, ?)");
-                            foreach ($data['chunks'] as $chk) {
-                                $c_stmt->bind_param("iiiss", $doc_id, $chk['chunk_index'], $chk['page_number'], $chk['chunk_text'], $chk['chunk_hash']);
-                                $c_stmt->execute();
-                            }
-                        }
-
-                        $message = "Document '{$original_name}' uploaded and indexed successfully into ChromaDB ({$total_pages} pages, {$total_chunks} chunks).";
-                        $message_type = "success";
-                    } else {
-                        $err_msg = $ingest_res['message'] ?? 'Unknown AI ingestion error';
-                        $up = $conn->prepare("UPDATE ai_documents SET status = 'failed', error_message = ? WHERE id = ?");
-                        $up->bind_param("si", $err_msg, $doc_id);
-                        $up->execute();
-
-                        $message = "Document uploaded to server, but AI ingestion failed: " . htmlspecialchars($err_msg);
-                        $message_type = "warning";
-                    }
-                } else {
-                    $message = "Failed to record document metadata in database.";
-                    $message_type = "danger";
-                }
-            } else {
-                $message = "Failed to save uploaded file to destination server directory.";
+            if (empty($subject) || empty($topic)) {
+                $message = "Subject and Topic are required fields.";
                 $message_type = "danger";
+            } elseif (!isset($_FILES['material_file']) || $_FILES['material_file']['error'] !== UPLOAD_ERR_OK) {
+                $message = "Please select a valid course material file to upload.";
+                $message_type = "danger";
+            } else {
+                $file = $_FILES['material_file'];
+                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                $allowed = ['pdf', 'txt', 'md'];
+
+                if (!in_array($ext, $allowed)) {
+                    $message = "Invalid file type. Only PDF, TXT, and MD files are supported.";
+                    $message_type = "danger";
+                } else {
+                    $uploadDir = __DIR__ . '/../uploads/course_materials/';
+                    if (!is_dir($uploadDir)) {
+                        mkdir($uploadDir, 0755, true);
+                    }
+
+                    $uniqueName = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file['name']);
+                    $targetPath = $uploadDir . $uniqueName;
+
+                    if (move_uploaded_file($file['tmp_name'], $targetPath)) {
+                        // Call AI Client RAG Ingestion API
+                        $aiClient = new AiClient();
+                        $ingestRes = $aiClient->ingestDocument($targetPath, $file['name'], $subject, $topic);
+
+                        if ($ingestRes['status'] === 'success') {
+                            $docData = $ingestRes['data'];
+                            $docId = (int)($docData['document_id'] ?? 0);
+                            $pages = (int)($docData['total_pages'] ?? 0);
+                            $chunks = (int)($docData['total_chunks'] ?? 0);
+
+                            // Sync DB status to ingested
+                            $stmt = $conn->prepare("UPDATE ai_documents SET status = 'ingested' WHERE id = ?");
+                            $stmt->bind_param("i", $docId);
+                            $stmt->execute();
+
+                            $message = "Course material '{$file['name']}' uploaded and ingested successfully into RAG Vector Store! ({$chunks} text chunks generated across {$pages} pages)";
+                            $message_type = "success";
+                        } else {
+                            $errMsg = $ingestRes['message'] ?? 'RAG Ingestion Service failed.';
+                            $message = "File uploaded, but RAG Ingestion failed: " . htmlspecialchars($errMsg);
+                            $message_type = "warning";
+                        }
+                    } else {
+                        $message = "Failed to save uploaded file on server.";
+                        $message_type = "danger";
+                    }
+                }
             }
-        }
-    }
-}
+        } elseif ($action === 'delete_material') {
+            $docId = (int)($_POST['doc_id'] ?? 0);
+            if ($docId > 0) {
+                // Fetch document details
+                $stmt = $conn->prepare("SELECT file_path, subject, topic FROM ai_documents WHERE id = ?");
+                $stmt->bind_param("i", $docId);
+                $stmt->execute();
+                $res = $stmt->get_result()->fetch_assoc();
 
-// Handle Document Deletion
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_material') {
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        $message = "Invalid CSRF token request.";
-        $message_type = "danger";
-    } else {
-        $doc_id = (int)$_POST['doc_id'];
-        
-        // Fetch file info
-        $stmt = $conn->prepare("SELECT file_path, original_name FROM ai_documents WHERE id = ?");
-        $stmt->bind_param("i", $doc_id);
-        $stmt->execute();
-        $res = $stmt->get_result()->fetch_assoc();
+                if ($res) {
+                    $aiClient = new AiClient();
+                    $delRes = $aiClient->deleteDocument($docId);
 
-        if ($res) {
-            // 1. Delete ChromaDB vectors via AI Client
-            $aiClient = new AiClient();
-            $aiClient->deleteRAGDocument($doc_id);
+                    // Delete file from disk if exists
+                    if (file_exists($res['file_path'])) {
+                        @unlink($res['file_path']);
+                    }
 
-            // 2. Delete server physical file
-            if (file_exists($res['file_path'])) {
-                @unlink($res['file_path']);
+                    // Delete metadata from database
+                    $delStmt = $conn->prepare("DELETE FROM ai_documents WHERE id = ?");
+                    $delStmt->bind_param("i", $docId);
+                    $delStmt->execute();
+
+                    $message = "Course material #{$docId} and its associated vector embeddings deleted successfully.";
+                    $message_type = "success";
+                }
             }
-
-            // 3. Delete MySQL record (ON DELETE CASCADE handles ai_document_chunks)
-            $del = $conn->prepare("DELETE FROM ai_documents WHERE id = ?");
-            $del->bind_param("i", $doc_id);
-            $del->execute();
-
-            $message = "Course material '{$res['original_name']}' deleted from database and vector index.";
-            $message_type = "success";
         }
     }
 }
@@ -158,13 +129,38 @@ if ($res) {
     <title>Course Material Management (RAG) - Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .main-admin-content {
+            margin-left: 250px;
+            width: calc(100% - 250px);
+            max-width: none;
+            padding: 28px 36px;
+            transition: margin-left 0.3s ease, width 0.3s ease;
+            box-sizing: border-box;
+            min-width: 0;
+        }
+        .sidebar.closed ~ .main-admin-content {
+            margin-left: 60px;
+            width: calc(100% - 60px);
+        }
+        @media (max-width: 768px) {
+            .main-admin-content {
+                margin-left: 0 !important;
+                width: 100% !important;
+                padding: 16px !important;
+            }
+        }
+        .card {
+            width: 100%;
+        }
+    </style>
 </head>
 <body class="bg-light">
 
-<div class="d-flex">
+<div class="d-flex min-vh-100">
     <?php include 'sidebar.php'; ?>
 
-    <div class="container-fluid p-4" style="margin-left: 260px;">
+    <div class="main-admin-content flex-grow-1">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>
                 <h2 class="h3 fw-bold text-dark mb-1"><i class="fa-solid fa-book-open text-primary me-2"></i>Course Material Management (RAG)</h2>
@@ -180,7 +176,7 @@ if ($res) {
         <?php endif; ?>
 
         <!-- Upload Form Card -->
-        <div class="card border-0 shadow-sm mb-4 rounded-3">
+        <div class="card border-0 shadow-sm mb-4 rounded-3 w-100">
             <div class="card-header bg-white py-3">
                 <h5 class="card-title fw-bold text-dark mb-0"><i class="fa-solid fa-cloud-arrow-up text-primary me-2"></i>Upload New Study Material</h5>
             </div>
@@ -206,7 +202,7 @@ if ($res) {
 
                     <div class="col-12 mt-3">
                         <button type="submit" class="btn btn-primary fw-semibold px-4">
-                            <i class="fa-solid fa-upload me-2"></i>Upload & Index Material
+                            <i class="fa-solid fa-upload me-2"></i>Upload &amp; Index Material
                         </button>
                     </div>
                 </form>
@@ -214,24 +210,24 @@ if ($res) {
         </div>
 
         <!-- Document List Table -->
-        <div class="card border-0 shadow-sm rounded-3">
+        <div class="card border-0 shadow-sm rounded-3 w-100">
             <div class="card-header bg-white py-3">
                 <h5 class="card-title fw-bold text-dark mb-0"><i class="fa-solid fa-list text-primary me-2"></i>Uploaded Course Materials</h5>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                <div class="table-responsive w-100">
+                    <table class="table table-hover align-middle mb-0 w-100">
                         <thead class="table-light">
                             <tr>
-                                <th>ID</th>
-                                <th>Document Name</th>
-                                <th>Subject</th>
-                                <th>Topic</th>
-                                <th>Pages</th>
-                                <th>Chunks</th>
-                                <th>Status</th>
-                                <th>Uploaded At</th>
-                                <th>Actions</th>
+                                <th style="width: 70px;">ID</th>
+                                <th style="min-width: 200px;">Document Name</th>
+                                <th style="min-width: 140px;">Subject</th>
+                                <th style="min-width: 140px;">Topic</th>
+                                <th style="width: 80px;">Pages</th>
+                                <th style="width: 80px;">Chunks</th>
+                                <th style="width: 110px;">Status</th>
+                                <th style="width: 150px;">Uploaded At</th>
+                                <th style="width: 100px;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>

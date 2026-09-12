@@ -20,10 +20,10 @@ def test_feature_extraction():
 def test_ml_predict_insufficient_real_data():
     payload = {
         "question_id": 61,
-        "total_attempts": 2,  # Below threshold 5
+        "total_attempts": 2,  # Below threshold 3
         "correct_attempts": 1,
         "unique_students": 2,
-        "min_attempts_threshold": 5
+        "min_attempts_threshold": 3
     }
     response = client.post("/api/v1/ml/question-difficulty", json=payload)
     assert response.status_code == 200
@@ -39,7 +39,7 @@ def test_ml_predict_synthetic_benchmark_easy():
         "total_attempts": 30,
         "correct_attempts": 27,
         "unique_students": 25,
-        "min_attempts_threshold": 5
+        "min_attempts_threshold": 3
     }
     response = client.post("/api/v1/ml/question-difficulty", json=payload)
     assert response.status_code == 200
@@ -56,7 +56,7 @@ def test_ml_predict_synthetic_benchmark_hard():
         "total_attempts": 40,
         "correct_attempts": 8,
         "unique_students": 35,
-        "min_attempts_threshold": 5
+        "min_attempts_threshold": 3
     }
     response = client.post("/api/v1/ml/question-difficulty", json=payload)
     assert response.status_code == 200
@@ -66,3 +66,17 @@ def test_ml_predict_synthetic_benchmark_hard():
     assert data["predicted_difficulty"] == "hard"
     assert data["confidence"] > 0.5
     assert "Synthetic Benchmark" in data["disclaimer"]
+
+def test_ml_predict_boundary_3_attempts():
+    payload = {
+        "question_id": 64,
+        "total_attempts": 3,  # Meets threshold 3
+        "correct_attempts": 3,
+        "unique_students": 3,
+        "min_attempts_threshold": 3
+    }
+    response = client.post("/api/v1/ml/question-difficulty", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] in ["synthetic_benchmark", "predicted"]
+    assert data["predicted_difficulty"] in ["easy", "medium", "hard"]

@@ -68,13 +68,24 @@ $current_page = basename($_SERVER['PHP_SELF']);
     background: #2176ff;
     border-radius: 6px;
 }
+
+.sidebar-section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #95a5a6;
+    padding: 10px 20px 5px 20px;
+    letter-spacing: 1px;
+}
+.sidebar.closed .sidebar-section-title {
+    display: none;
+}
 </style>
 
 <div class="sidebar" id="sidebar">
 
     <div class="sidebar-header">
         <h2>Student Panel</h2>
-        <div class="hamburger" id="hamburger" onclick="toggleSidebar()">?</div>
+        <div class="hamburger" id="hamburger" onclick="toggleSidebar()">&#9776;</div>
     </div>
 
     <a href="../student/dashboard.php" class="<?= $current_page=='dashboard.php'?'active':'' ?>">
@@ -85,21 +96,27 @@ $current_page = basename($_SERVER['PHP_SELF']);
         Available Exams
     </a>
 
+    <div class="sidebar-section-title">LEARNING</div>
+
     <a href="../student/personalized_learning.php" class="<?= ($current_page=='personalized_learning.php'||$current_page=='practice_session.php')?'active':'' ?>">
-        ?? Personalized Learning
+        Personalized Learning
     </a>
 
     <a href="../student/ai_performance.php" class="<?= $current_page=='ai_performance.php'?'active':'' ?>">
-        ?? Performance Analytics
+        Performance Analytics
     </a>
 
     <a href="../student/study_assistant.php" class="<?= $current_page=='study_assistant.php'?'active':'' ?>">
-        ?? AI Study Assistant
+        AI Study Assistant
     </a>
+
+    <div class="sidebar-section-title">RESULTS</div>
 
     <a href="../student/result.php" class="<?= $current_page=='result.php'?'active':'' ?>">
         My Results
     </a>
+
+    <div class="sidebar-section-title">ACCOUNT</div>
 
     <a href="../auth/change_password.php" class="<?= $current_page=='change_password.php'?'active':'' ?>">
         Change Password
