@@ -1,4 +1,4 @@
-# AI Question Generator — Evaluation & Fallback Audit
+# AI Question Generator â€” Evaluation & Fallback Audit
 
 > [!NOTE]
 > **Evaluation Scope**: Phase D AI Question Generation service schema validation, LLM prompt engineering, and offline heuristic fallback engine.
@@ -9,7 +9,7 @@
 
 ```
 Incoming Question Generation Request (Subject, Topic, Difficulty, Count)
-                                  ¦
+                                  Â¦
                                   ?
                     [Is LLM_API_KEY Configured?]
                        +-- Yes --? Query OpenAI Chat Completions API

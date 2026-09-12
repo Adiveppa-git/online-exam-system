@@ -1,15 +1,18 @@
 version: '3.8'
 
+# LOCAL DEVELOPMENT ONLY DOCKER COMPOSE CONFIGURATION
+# Production deployments MUST use managed MySQL and environment variables via cloud platform / secret store.
+
 services:
   mysql:
     image: mariadb:10.6
     container_name: exam_mysql
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: online_exam_system
-      MYSQL_USER: exam_user
-      MYSQL_PASSWORD: exampassword
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-dev_root_password_local_only}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-online_exam_system}
+      MYSQL_USER: ${MYSQL_USER:-exam_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-dev_exam_password_local_only}
     ports:
       - "3306:3306"
     volumes:
@@ -30,12 +33,12 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - ENVIRONMENT=production
-      - DEBUG=false
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DEBUG=${DEBUG:-false}
       - HOST=0.0.0.0
       - PORT=8001
-      - INTERNAL_API_KEY=dev_secret_key_change_in_production
-      - LLM_PROVIDER=heuristic
+      - INTERNAL_API_KEY=${AI_SERVICE_KEY:-dev_secret_key_change_in_production}
+      - LLM_PROVIDER=${LLM_PROVIDER:-heuristic}
       - CHROMA_PERSIST_DIR=/app/data/chroma_db
     volumes:
       - chroma_data:/app/data/chroma_db
@@ -52,13 +55,13 @@ services:
     ports:
       - "8080:80"
     environment:
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_NAME=online_exam_system
-      - DB_USER=exam_user
-      - DB_PASS=exampassword
-      - AI_SERVICE_URL=http://ai-service:8001
-      - AI_SERVICE_KEY=dev_secret_key_change_in_production
+      - DB_HOST=${DB_HOST:-mysql}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_NAME=${DB_NAME:-online_exam_system}
+      - DB_USER=${DB_USER:-exam_user}
+      - DB_PASS=${MYSQL_PASSWORD:-dev_exam_password_local_only}
+      - AI_SERVICE_URL=${AI_SERVICE_URL:-http://ai-service:8001}
+      - AI_SERVICE_KEY=${AI_SERVICE_KEY:-dev_secret_key_change_in_production}
     volumes:
       - .:/var/www/html
     depends_on:

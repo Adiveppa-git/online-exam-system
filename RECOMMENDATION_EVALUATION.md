@@ -1,4 +1,4 @@
-# Adaptive Recommendation Engine — Evaluation & Rule Benchmark
+# Adaptive Recommendation Engine â€” Evaluation & Rule Benchmark
 
 > [!NOTE]
 > **Evaluation Framing**: **Development Benchmark / Rule Validation**

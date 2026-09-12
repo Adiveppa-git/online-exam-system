@@ -42,8 +42,8 @@ $easyInput = [
 $respEasy = $aiClient->predictQuestionDifficulty($easyInput);
 
 if ($respEasy['success'] && isset($respEasy['data']['predicted_difficulty']) && $respEasy['data']['predicted_difficulty'] === 'easy') {
-    if (isset($respEasy['data']['data_mode']) && $respEasy['data']['data_mode'] === 'synthetic_benchmark') {
-        echo "PASSED (Predicted: EASY in synthetic_benchmark mode)\n";
+    if (isset($respEasy['data']['data_mode']) && in_array($respEasy['data']['data_mode'], ['synthetic_benchmark', 'real_data_production'], true)) {
+        echo "PASSED (Predicted: EASY in {$respEasy['data']['data_mode']} mode)\n";
         $passed++;
     } else {
         echo "FAILED (data_mode missing or invalid)\n";

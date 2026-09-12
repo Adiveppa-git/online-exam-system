@@ -1,4 +1,4 @@
-# ML Difficulty Prediction � Evaluation & Target Leakage Audit
+# ML Difficulty Prediction â€” Evaluation & Target Leakage Audit
 
 > [!WARNING]
 > **Scientific Guard & Evaluation Framing**:
@@ -30,8 +30,9 @@ $$\hat{Y} = \arg\max P(Y \mid X) \approx \text{Rule}(X_{\text{correct\_rate}})$$
 
 ## 3. Cold Start & Production Safeguards
 
-- **Cold-Start Guard**: When a question has $< 5$ real student attempts in the database, the system returns `status: "insufficient_real_data"` and falls back to the existing assigned difficulty.
-- **Data Mode Labeling**: API responses explicitly include `data_mode: "synthetic_benchmark"` or `"real_student_data"`.
+- **Cold-Start Guard**: When a question has $< 3$ real student attempts in the database, the system returns `status: "insufficient_real_data"` and falls back to the existing assigned difficulty.
+- **Early Real-Data Inference & Low-Data Disclaimer**: Questions with $3 \le \text{attempts} < 30$ provide early real-data predictions (`data_mode: "real_data_production"`), tagged with a low-data warning indicating that sample size is low and statistical confidence is limited.
+- **Data Mode Labeling**: API responses explicitly include `data_mode: "synthetic_benchmark"` or `"real_data_production"`.
 - **Human Oversight**: Machine learning difficulty predictions **never** automatically overwrite `questions.difficulty` in the MySQL database. An administrator must manually confirm updates in the admin portal (`admin/ai_difficulty_analytics.php`).
 
 ---

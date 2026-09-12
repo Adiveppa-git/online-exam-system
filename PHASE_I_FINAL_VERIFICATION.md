@@ -118,7 +118,7 @@
   - **Logistic Regression**: 98.33% Accuracy (F1: 0.9847)
   - **Random Forest Classifier**: **99.17% Accuracy** (F1: 0.9924)
 - **Target Leakage Rationale**: Synthetic labels were generated directly using threshold rules on `correct_rate` ($>= 0.75 \rightarrow \text{easy}$, $< 0.45 \rightarrow \text{hard}$). Tree models memorized these exact cutoffs.
-- **Production Safeguards**: Cold-start guard (< 5 attempts returns `status: insufficient_real_data`), data mode tag in API responses, and mandatory human administrator review before MySQL database updates prevent synthetic leakage in production.
+- **Production Safeguards**: Cold-start guard (< 3 attempts returns `status: insufficient_real_data`), data mode tag in API responses, and mandatory human administrator review before MySQL database updates prevent synthetic leakage in production.
 
 ---
 
@@ -223,7 +223,7 @@
 ## Issues Found
 
 1. **Docker CLI / Engine Unavailable on Host System**:
-   - `docker --version` and `docker compose version` returned command not found. Docker E2E stack deployment checks (Steps 7–12, 14–16) remain **NOT VERIFIED — Docker CLI unavailable on host**.
+   - `docker --version` and `docker compose version` returned command not found. Docker E2E stack deployment checks (Steps 7â€“12, 14â€“16) remain **NOT VERIFIED â€” Docker CLI unavailable on host**.
 2. **Local Software Binaries & Archives (Resolved)**:
    - Added entries `mysql.zip` and `mysql-8.0.36-winx64/` to `.gitignore` to safely prevent local MySQL binaries from being tracked in Git.
 3. **Container Environment URL Resolution (Fixed)**:
@@ -233,7 +233,7 @@
 
 ## Final Verdict
 
-**SAFE FOR COMMIT** *(Native Code, Tests, Benchmarks, Security & XAMPP Verified | Docker E2E: NOT VERIFIED — Docker CLI unavailable on host)*
+**SAFE FOR COMMIT** *(Native Code, Tests, Benchmarks, Security & XAMPP Verified | Docker E2E: NOT VERIFIED â€” Docker CLI unavailable on host)*
 
 ### Rationale:
-Following pre-commit cleanup, all local software archives (`mysql.zip`, `mysql-8.0.36-winx64/`) are safely excluded via `.gitignore`. All native application code, Python tests (23/23), PHP integration tests (30/30), offline RAG benchmarks (100%), recommendation benchmarks (100%), security protections, and XAMPP compatibility are 100% verified. Docker stack verification remains honestly labeled as **NOT VERIFIED — Docker CLI unavailable on host**.
+Following pre-commit cleanup, all local software archives (`mysql.zip`, `mysql-8.0.36-winx64/`) are safely excluded via `.gitignore`. All native application code, Python tests (23/23), PHP integration tests (30/30), offline RAG benchmarks (100%), recommendation benchmarks (100%), security protections, and XAMPP compatibility are 100% verified. Docker stack verification remains honestly labeled as **NOT VERIFIED â€” Docker CLI unavailable on host**.

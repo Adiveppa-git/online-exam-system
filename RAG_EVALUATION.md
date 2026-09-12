@@ -1,7 +1,7 @@
-# RAG Evaluation Framework — Development Benchmark Report
+# RAG Evaluation Framework â€” Development Benchmark Report
 
 > [!NOTE]
-> **Evaluation Mode**: **Development Benchmark — Offline Quality Verification**
+> **Evaluation Mode**: **Development Benchmark â€” Offline Quality Verification**
 > This document details the quantitative evaluation metrics, retrieval quality, citation accuracy, and out-of-domain rejection behavior of the Phase G RAG Study Assistant.
 
 ---

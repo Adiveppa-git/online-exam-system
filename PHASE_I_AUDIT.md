@@ -1,7 +1,7 @@
-# Phase I Audit — System Architecture & Productionization Audit Report
+# Phase I Audit â€” System Architecture & Productionization Audit Report
 
 > [!NOTE]
-> **Audit Purpose**: Comprehensive baseline evaluation of the Full-Stack Online Examination & AI Platform (Phases B–H) to identify hardcoded credentials, service boundaries, security controls, test coverage, and production deployment gaps prior to containerization and CI/CD integration.
+> **Audit Purpose**: Comprehensive baseline evaluation of the Full-Stack Online Examination & AI Platform (Phases Bâ€“H) to identify hardcoded credentials, service boundaries, security controls, test coverage, and production deployment gaps prior to containerization and CI/CD integration.
 
 ---
 
@@ -59,7 +59,7 @@ The platform follows a decoupled dual-service architecture:
 
 - **AI Question Generator (Phase D)**: OpenAI-compatible chat completion provider with structured JSON schema validation and a structured 5-template heuristic fallback engine.
 - **Student Performance Analytics (Phase E)**: Deterministic topic classification, accuracy calculation, trend calculation, and student session isolation queries.
-- **ML Question Difficulty Prediction (Phase F)**: Random Forest and Logistic Regression trained on 8 item-level features. Cold-start guard returns `insufficient_real_data` if attempts $< 5$. Synthetic benchmark accuracy (~99.17%) is explicitly labeled as pipeline validation only due to feature-target leakage.
+- **ML Question Difficulty Prediction (Phase F)**: Random Forest and Logistic Regression trained on 8 item-level features. Cold-start guard returns `insufficient_real_data` if attempts $< 3$. Synthetic benchmark accuracy (~99.17%) is explicitly labeled as pipeline validation only due to feature-target leakage.
 - **RAG Study Assistant (Phase G)**: Document loader (`pypdf`, TXT, MD), paragraph/section-aware chunker (`chunk_size=500`, `overlap=50`), L2-normalized cosine similarity search ($\ge 0.35$ threshold), prompt injection security barrier, and exact page citations.
 - **Adaptive Recommendation Engine (Phase H)**: Deterministic priority scoring ($0.5 \times \text{weakness} + 0.3 \times \text{trend} + 0.2 \times \text{recency}$), difficulty progression (`easy` / `medium` / `hard`), study plan framing, targeted practice generation, and isolated session tracking.
 

@@ -1,7 +1,7 @@
 # Platform Architecture Documentation
 
 > [!NOTE]
-> **System Architecture**: High-level and component-level technical specification of the Full-Stack Online Examination & AI Engineering Platform (Phases B–H).
+> **System Architecture**: High-level and component-level technical specification of the Full-Stack Online Examination & AI Engineering Platform (Phases Bâ€“H).
 
 ---
 

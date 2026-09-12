@@ -20,18 +20,18 @@ The platform distinguishes strictly between four core AI/ML techniques:
 
 ```
 +------------------------------------------------------------------------+
-¦                        AI ENGINEERING SUBSYSTEMS                       ¦
-+------------------------------------------------------------------------¦
-¦ 1. Question Generator (Phase D)                                        ¦
-¦    - LLM JSON schema validation + 5-template heuristic fallback        ¦
-¦ 2. Performance Analytics (Phase E)                                     ¦
-¦    - Deterministic topic accuracy & trend analysis                     ¦
-¦ 3. ML Difficulty Prediction (Phase F)                                  ¦
-¦    - Synthetic benchmark re-labeled; cold start guards (< 5 attempts)  ¦
-¦ 4. RAG Study Assistant (Phase G)                                       ¦
-¦    - pypdf, TextChunker (500ch/50ov), ChromaDB, page citations         ¦
-¦ 5. Adaptive Recommendation Engine (Phase H)                            ¦
-¦    - Bounded priority score [0.0 - 1.0], isolated practice sessions   ¦
+Â¦                        AI ENGINEERING SUBSYSTEMS                       Â¦
++------------------------------------------------------------------------+
+Â¦ 1. Question Generator (Phase D)                                        Â¦
+Â¦    - LLM JSON schema validation + 5-template heuristic fallback        Â¦
+Â¦ 2. Performance Analytics (Phase E)                                     Â¦
+Â¦    - Deterministic topic accuracy & trend analysis                     Â¦
+Â¦ 3. ML Difficulty Prediction (Phase F)                                  Â¦
+Â¦    - Synthetic benchmark re-labeled; cold start guards (< 3 attempts)  Â¦
+Â¦ 4. RAG Study Assistant (Phase G)                                       Â¦
+Â¦    - pypdf, TextChunker (500ch/50ov), ChromaDB, page citations         Â¦
+Â¦ 5. Adaptive Recommendation Engine (Phase H)                            Â¦
+Â¦    - Bounded priority score [0.0 - 1.0], isolated practice sessions   Â¦
 +------------------------------------------------------------------------+
 ```
 
@@ -41,12 +41,12 @@ The platform distinguishes strictly between four core AI/ML techniques:
 
 - **Synthetic Benchmark (ML Difficulty)**: Random Forest model evaluated on 600 synthetic samples. Accuracies (~99.17%) are explicitly documented as synthetic pipeline validation only due to feature-target leakage.
 - **Development Benchmark (RAG)**: Evaluated on test queries measuring Recall@K (100%), citation accuracy (100%), and out-of-domain rejection (100%).
-- **Development Benchmark (Recommendations)**: Evaluated against fictional student profiles A–H measuring deterministic recommendation correctness (100%).
+- **Development Benchmark (Recommendations)**: Evaluated against fictional student profiles Aâ€“H measuring deterministic recommendation correctness (100%).
 
 ---
 
 ## 4. Production Readiness & Known Limitations
 
 - **XAMPP & Docker Deployment**: Dual setup allowing local development via XAMPP or containerized orchestration via `docker-compose`.
-- **Cold Start Guards**: Systems gracefully return `insufficient_data` when student attempts $< 5$, preventing false assertions.
+- **Cold Start Guards**: Systems gracefully return `insufficient_data` when student attempts $< 3$, preventing false assertions.
 - **Zero API Key Requirement**: All automated test suites operate via deterministic fallback paths, eliminating external API costs during CI/CD.

@@ -1,4 +1,4 @@
-# Phase I Completion Report — Productionization, Dockerization, Evaluation Framework & Portfolio Architecture
+# Phase I Completion Report â€” Productionization, Dockerization, Evaluation Framework & Portfolio Architecture
 
 > [!IMPORTANT]
 > **Phase I Completed & Verified**. The system has been fully audited, productionized, environment-configured, Dockerized, secured, benchmarked, and documented. No changes have been committed or pushed to Git (`feature/ai-platform` branch remains clean and uncommitted).
@@ -26,7 +26,7 @@ During the initial Phase I audit:
 - [SECURITY.md](file:///C:/xampp/htdocs/exam-online/online-exam-system/SECURITY.md): Threat model, CSRF, XSS, prepared statement, and prompt injection defense documentation.
 - [RAG_EVALUATION.md](file:///C:/xampp/htdocs/exam-online/online-exam-system/RAG_EVALUATION.md): Quantitative evaluation report for semantic retrieval, Recall@K, citation accuracy, and thresholding.
 - [ML_EVALUATION.md](file:///C:/xampp/htdocs/exam-online/online-exam-system/ML_EVALUATION.md): Target leakage audit, synthetic benchmark framing (~99.17%), and real-data cold-start safeguards.
-- [RECOMMENDATION_EVALUATION.md](file:///C:/xampp/htdocs/exam-online/online-exam-system/RECOMMENDATION_EVALUATION.md): Bounded priority score evaluation and rule validation across student benchmark profiles A–H.
+- [RECOMMENDATION_EVALUATION.md](file:///C:/xampp/htdocs/exam-online/online-exam-system/RECOMMENDATION_EVALUATION.md): Bounded priority score evaluation and rule validation across student benchmark profiles Aâ€“H.
 - [QUESTION_GENERATION_EVALUATION.md](file:///C:/xampp/htdocs/exam-online/online-exam-system/QUESTION_GENERATION_EVALUATION.md): Schema validation and heuristic fallback evaluation report.
 - [.github/workflows/ci.yml](file:///C:/xampp/htdocs/exam-online/online-exam-system/.github/workflows/ci.yml): GitHub Actions CI workflow running Pytest, PHP test scripts, evaluation benchmarks, and Docker builds without external API keys.
 - [docs/architecture.md](file:///C:/xampp/htdocs/exam-online/online-exam-system/docs/architecture.md): System architecture document with Mermaid diagrams.

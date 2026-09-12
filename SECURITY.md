@@ -1,4 +1,4 @@
-# Security & Threat Model Overview — AI-Powered Online Examination Platform
+# Security & Threat Model Overview â€” AI-Powered Online Examination Platform
 
 > [!IMPORTANT]
 > **Security Baseline**:

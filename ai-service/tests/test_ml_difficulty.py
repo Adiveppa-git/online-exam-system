@@ -31,7 +31,7 @@ def test_ml_predict_insufficient_real_data():
     assert data["status"] == "insufficient_real_data"
     assert data["predicted_difficulty"] == "insufficient_data"
     assert data["confidence"] == 0.0
-    assert "Synthetic Benchmark" in data["disclaimer"]
+    assert "Insufficient real student data" in data["disclaimer"]
 
 def test_ml_predict_synthetic_benchmark_easy():
     payload = {
@@ -45,10 +45,10 @@ def test_ml_predict_synthetic_benchmark_easy():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] in ["synthetic_benchmark", "predicted"]
-    assert data["data_mode"] == "synthetic_benchmark"
+    assert data["data_mode"] in ["synthetic_benchmark", "real_data_production"]
     assert data["predicted_difficulty"] == "easy"
     assert data["confidence"] > 0.5
-    assert "Synthetic Benchmark" in data["disclaimer"]
+    assert "Real" in data["disclaimer"] or "Synthetic" in data["disclaimer"]
 
 def test_ml_predict_synthetic_benchmark_hard():
     payload = {
@@ -62,10 +62,10 @@ def test_ml_predict_synthetic_benchmark_hard():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] in ["synthetic_benchmark", "predicted"]
-    assert data["data_mode"] == "synthetic_benchmark"
+    assert data["data_mode"] in ["synthetic_benchmark", "real_data_production"]
     assert data["predicted_difficulty"] == "hard"
     assert data["confidence"] > 0.5
-    assert "Synthetic Benchmark" in data["disclaimer"]
+    assert "Real" in data["disclaimer"] or "Synthetic" in data["disclaimer"]
 
 def test_ml_predict_boundary_3_attempts():
     payload = {

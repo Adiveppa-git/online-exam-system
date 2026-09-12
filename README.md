@@ -4,7 +4,7 @@
 
 ---
 
-## 🌟 Executive Overview & Live Demo
+## ðŸŒŸ Executive Overview & Live Demo
 
 The **Online Examination & AI Learning Platform** combines a robust PHP 8.1 / MySQL exam management core with an asynchronous Python FastAPI AI microservice architecture. It provides an end-to-end environment for educators to manage exams and AI-generated question banks, while empowering students with automated performance diagnostics, RAG-powered course material study assistance, and personalized adaptive practice sessions.
 
@@ -12,7 +12,7 @@ The **Online Examination & AI Learning Platform** combines a robust PHP 8.1 / My
 
 ---
 
-## 🖼️ Application Interface & Screenshots
+## ðŸ–¼ï¸ Application Interface & Screenshots
 
 ### Admin Portal
 - **Admin Dashboard**: Comprehensive overview of system stats, active exams, and user registrations.
@@ -40,7 +40,7 @@ The **Online Examination & AI Learning Platform** combines a robust PHP 8.1 / My
 
 ---
 
-## ✨ Key Features & System Modules
+## âœ¨ Key Features & System Modules
 
 ### 1. Core Examination Engine (PHP 8.1 & MySQL)
 - **Authentication & Role-Based Access Control (RBAC)**: Secure admin and student session isolation.
@@ -59,8 +59,9 @@ The **Online Examination & AI Learning Platform** combines a robust PHP 8.1 / My
 
 ### 4. Machine Learning Question Difficulty Prediction (Phase F)
 - **Scikit-Learn Predictive Model**: Uses Random Forest and Logistic Regression classifiers trained on question attempt metrics (`correct_rate`, `attempt_count`, `option_distribution_entropy`).
-- **Cold-Start Guard**: Questions with $< 5$ real student attempts return `status: "insufficient_real_data"` and fall back to assigned difficulty.
-- **Human Oversight**: Predictions require manual admin confirmation in `admin/ai_difficulty_analytics.php` before database update.
+- **Cold-Start Guard**: Questions with $< 3$ real student attempts return `status: "insufficient_real_data"` and fall back to assigned difficulty.
+- **Early Real-Data Inference**: Questions with $3 \le \text{attempts} < 30$ provide early real-data predictions (`data_mode: "real_data_production"`) labeled with a low-data disclaimer.
+- **Human Oversight**: Predictions require manual admin confirmation in `admin/ai_difficulty_analytics.php` before database update. Automatic database overwrites are disabled.
 
 ### 5. Course Material RAG Study Assistant (Phase G)
 - **Document Ingestion & Text Chunking**: Extracts text from PDF and TXT course materials using `pypdf` into deterministic 500-character chunks with 50-character overlap.
@@ -75,25 +76,25 @@ The **Online Examination & AI Learning Platform** combines a robust PHP 8.1 / My
 
 ---
 
-## 🏗️ System Architecture
+## ðŸ —ï¸  System Architecture
 
 ```
 Student / Admin Browser
-       │
-       ▼
-PHP Application (Apache / XAMPP) ──► MySQL Database (MariaDB 10.6)
-       │
-       ▼ (cURL REST API / Port 8001)
+       â”‚
+       â–¼
+PHP Application (Apache / XAMPP) â”€â”€â–º MySQL Database (MariaDB 10.6)
+       â”‚
+       â–¼ (cURL REST API / Port 8001)
 Python FastAPI Microservice (ai-service)
-       ├─► Question Generator (LLM / Heuristic Engine)
-       ├─► ML Difficulty Predictor (Random Forest / Joblib)
-       ├─► RAG Service (pypdf, sentence-transformers [384d], ChromaDB)
-       └─► Adaptive Recommendation Engine (Priority Scoring)
+       â”œâ”€â–º Question Generator (LLM / Heuristic Engine)
+       â”œâ”€â–º ML Difficulty Predictor (Random Forest / Joblib)
+       â”œâ”€â–º RAG Service (pypdf, sentence-transformers [384d], ChromaDB)
+       â””â”€â–º Adaptive Recommendation Engine (Priority Scoring)
 ```
 
 ---
 
-## 💻 Tech Stack
+## ðŸ’» Tech Stack
 
 - **Frontend**: HTML5, CSS3 (Vanilla Responsive Styling), JavaScript (AJAX & Event Listeners)
 - **Backend Core**: PHP 8.1 / 8.2 (Apache / XAMPP)
@@ -105,7 +106,7 @@ Python FastAPI Microservice (ai-service)
 
 ---
 
-## 🚀 Environment Setup & Installation
+## ðŸš€ Environment Setup & Installation
 
 ### Option A: Standard Local Setup (XAMPP + Python Virtual Environment)
 
@@ -144,7 +145,7 @@ docker compose up -d
 
 ---
 
-## 🧪 Testing & Evaluation
+## ðŸ§ª Testing & Evaluation
 
 ### Automated Test Suites
 Run unit, integration, and regression test suites across Python and PHP:
@@ -171,7 +172,7 @@ C:\xampp\php\php.exe tests/manual_e2e_verification.php
 
 ---
 
-## 📊 Evaluation Results & Benchmark Summary
+## ðŸ“Š Evaluation Results & Benchmark Summary
 
 | Benchmark Suite | Test Type / Scope | Benchmark Score | Status / Label |
 | :--- | :--- | :---: | :---: |
@@ -183,7 +184,7 @@ C:\xampp\php\php.exe tests/manual_e2e_verification.php
 
 ---
 
-## 🔬 Scientific Caveats & Known Limitations
+## ðŸ”¬ Scientific Caveats & Known Limitations
 
 1. **ML Difficulty Synthetic Benchmark Disclaimer**:
    - The **99.17% Random Forest accuracy** was measured on synthetic dataset validation.
@@ -197,7 +198,7 @@ C:\xampp\php\php.exe tests/manual_e2e_verification.php
 
 ---
 
-## 🛡️ Security, Privacy & CI/CD
+## ðŸ›¡ï¸ Security, Privacy & CI/CD
 
 - **Database Security**: Prepared SQL statements (`$conn->prepare()`, `$stmt->bind_param()`) used exclusively throughout PHP and Python components.
 - **XSS & Output Sanitization**: HTML output escaped using `htmlspecialchars()`.
@@ -207,7 +208,7 @@ C:\xampp\php\php.exe tests/manual_e2e_verification.php
 
 ---
 
-## 📑 Detailed Documentation Links
+## ðŸ“‘ Detailed Documentation Links
 
 - [Phase I Final Verification Report](PHASE_I_FINAL_VERIFICATION.md)
 - [Architecture Specification](docs/architecture.md)

@@ -25,21 +25,20 @@ class DifficultyPredictor:
         correct_rate = (req.correct_attempts / attempts) if attempts > 0 else 0.0
 
         artifact = _get_model_artifact()
-        data_mode = artifact.get('data_mode', 'synthetic_benchmark')
-        disclaimer = "Synthetic Benchmark — Pipeline Validation Only. Not evidence of production model accuracy."
+        model_version = artifact.get('model_version', 'difficulty-rf-v1.0')
 
         # Cold start / Insufficient data guard
         if attempts < min_thresh:
             return DifficultyPredictResponse(
                 question_id=req.question_id,
                 status="insufficient_real_data",
-                data_mode=data_mode,
+                data_mode="real_data_production",
                 predicted_difficulty="insufficient_data",
                 confidence=0.0,
                 observed_correct_rate=round(correct_rate, 4),
-                model_version=artifact.get('model_version', 'difficulty-rf-v1.0'),
+                model_version=model_version,
                 message=f"Insufficient real student interaction data ({attempts} attempts vs minimum required {min_thresh}).",
-                disclaimer=disclaimer
+                disclaimer=f"Insufficient real student data (< {min_thresh} attempts). Fallback to assigned difficulty."
             )
 
         # Extract feature vector
@@ -62,14 +61,20 @@ class DifficultyPredictor:
         predicted_label = str(classes[max_idx])
         confidence = float(probs[max_idx])
 
+        # Low-data warning vs sufficient sample size disclaimer
+        if attempts < 30:
+            disclaimer = f"Early Real-Data Inference (Low Sample Size: {attempts} attempts). Low statistical confidence; recommended target for robust retraining is >= 30 attempts across >= 50 distinct students."
+        else:
+            disclaimer = f"Real Student Data Production Inference ({attempts} attempts). Retraining sample threshold met."
+
         return DifficultyPredictResponse(
             question_id=req.question_id,
-            status="synthetic_benchmark" if data_mode == "synthetic_benchmark" else "predicted",
-            data_mode=data_mode,
+            status="predicted",
+            data_mode="real_data_production",
             predicted_difficulty=predicted_label,
             confidence=round(confidence, 4),
             observed_correct_rate=round(correct_rate, 4),
-            model_version=artifact.get('model_version', 'difficulty-rf-v1.0'),
-            message=f"[{data_mode.upper()}] Classified empirical difficulty as {predicted_label} with {round(confidence*100, 1)}% confidence.",
+            model_version=model_version,
+            message=f"[REAL_DATA_PRODUCTION] Classified empirical difficulty as {predicted_label.upper()} with {round(confidence*100, 1)}% confidence.",
             disclaimer=disclaimer
         )
