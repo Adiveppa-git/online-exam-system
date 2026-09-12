@@ -20,18 +20,18 @@ The platform distinguishes strictly between four core AI/ML techniques:
 
 ```
 +------------------------------------------------------------------------+
-¦                        AI ENGINEERING SUBSYSTEMS                       ¦
-+------------------------------------------------------------------------¦
-¦ 1. Question Generator (Phase D)                                        ¦
-¦    - LLM JSON schema validation + 5-template heuristic fallback        ¦
-¦ 2. Performance Analytics (Phase E)                                     ¦
-¦    - Deterministic topic accuracy & trend analysis                     ¦
-¦ 3. ML Difficulty Prediction (Phase F)                                  ¦
-¦    - Synthetic benchmark re-labeled; cold start guards (< 3 attempts)  ¦
-¦ 4. RAG Study Assistant (Phase G)                                       ¦
-¦    - pypdf, TextChunker (500ch/50ov), ChromaDB, page citations         ¦
-¦ 5. Adaptive Recommendation Engine (Phase H)                            ¦
-¦    - Bounded priority score [0.0 - 1.0], isolated practice sessions   ¦
+|                        AI ENGINEERING SUBSYSTEMS                       |
++------------------------------------------------------------------------|
+| 1. Question Generator (Phase D)                                        |
+|    - LLM JSON schema validation + 5-template heuristic fallback        |
+| 2. Performance Analytics (Phase E)                                     |
+|    - Deterministic topic accuracy & trend analysis                     |
+| 3. ML Difficulty Prediction (Phase F)                                  |
+|    - Synthetic benchmark re-labeled; cold start guards (< 3 attempts)  |
+| 4. RAG Study Assistant (Phase G)                                       |
+|    - pypdf, TextChunker (500ch/50ov), ChromaDB, page citations         |
+| 5. Adaptive Recommendation Engine (Phase H)                            |
+|    - Bounded priority score [0.0 - 1.0], isolated practice sessions   |
 +------------------------------------------------------------------------+
 ```
 

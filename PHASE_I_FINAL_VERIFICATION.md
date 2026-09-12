@@ -1,15 +1,26 @@
-# PHASE I FINAL VERIFICATION REPORT
+# Historical Phase I Verification Snapshot
 
-## Git Status
+> [!NOTE]
+> **Historical Verification Snapshot**: The Git status and test outputs shown below represent the original Phase I baseline verification snapshot and are preserved for historical audit purposes.
 
-- **Current Branch**: `feature/ai-platform`
+## Current Repository State
+
+- **Branch**: `main`
+- **Status**: Platform improvements, AI assistant features, privacy defenses, and production deployment configurations have been completed on `main`.
+- **Live Deployment Status**: Deployment has **NOT** yet been performed.
+
+---
+
+## Historical Phase I Git Status (Audit Snapshot)
+
+- **Original Branch**: `feature/ai-platform`
 - **Git Working Directory Status**:
   - **Modified Tracked Files (5)**:
-    - [`.gitignore`](file:///c:/xampp/htdocs/exam-online/online-exam-system/.gitignore)
-    - [`admin/sidebar.php`](file:///c:/xampp/htdocs/exam-online/online-exam-system/admin/sidebar.php)
-    - [`config/db.php`](file:///c:/xampp/htdocs/exam-online/online-exam-system/config/db.php)
-    - [`config/ai_client.php`](file:///c:/xampp/htdocs/exam-online/online-exam-system/config/ai_client.php)
-    - [`student/sidebar.php`](file:///c:/xampp/htdocs/exam-online/online-exam-system/student/sidebar.php)
+    - [`.gitignore`](.gitignore)
+    - [`admin/sidebar.php`](admin/sidebar.php)
+    - [`config/db.php`](config/db.php)
+    - [`config/ai_client.php`](config/ai_client.php)
+    - [`student/sidebar.php`](student/sidebar.php)
   - **Untracked Files**:
     - Configuration & CI: `.env.example`, `.github/`
     - Documentation: `README.md`, `PHASE_I_AUDIT.md`, `PHASE_I_COMPLETION_REPORT.md`, `SECURITY.md`, `QUESTION_GENERATION_EVALUATION.md`, `ML_EVALUATION.md`, `RAG_EVALUATION.md`, `RECOMMENDATION_EVALUATION.md`, `PHASE_I_FINAL_VERIFICATION.md`, `docs/`
@@ -139,13 +150,13 @@
 
 ## Docker Configuration
 
-- **Configuration File**: [`docker-compose.yml`](file:///c:/xampp/htdocs/exam-online/online-exam-system/docker-compose.yml)
+- **Configuration File**: [`docker-compose.yml`](docker-compose.yml)
 - **Declared Services**:
   - `mysql`: Mariadb 10.6 image with `mysql_data` volume and healthcheck `mysqladmin ping`.
   - `ai-service`: Custom Python FastAPI service with `chroma_data` volume and healthcheck `curl http://localhost:8001/health`.
   - `php-web`: PHP 8.1 Apache web server image mounting root project directory.
 - **Environment Variable Resolution Fix**:
-  - Updated [`config/ai_client.php`](file:///c:/xampp/htdocs/exam-online/online-exam-system/config/ai_client.php) to read `getenv('AI_SERVICE_URL')` (`http://ai-service:8001`) and `getenv('AI_SERVICE_KEY')` inside Docker containers while preserving `http://127.0.0.1:8001` fallback for XAMPP.
+  - Updated [`config/ai_client.php`](config/ai_client.php) to read `getenv('AI_SERVICE_URL')` (`http://ai-service:8001`) and `getenv('AI_SERVICE_KEY')` inside Docker containers while preserving `http://127.0.0.1:8001` fallback for XAMPP.
 
 ---
 
@@ -202,7 +213,7 @@
 
 ## CI/CD Verification
 
-- **Workflow File**: [`.github/workflows/ci.yml`](file:///c:/xampp/htdocs/exam-online/online-exam-system/.github/workflows/ci.yml)
+- **Workflow File**: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 - **Verification Result**: **VERIFIED**
 - **Details**:
   - Uses `LLM_PROVIDER: heuristic` to run unit tests and benchmarks without external paid LLM API keys (Gemini / OpenAI).

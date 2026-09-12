@@ -9,11 +9,11 @@
 
 ```
 Incoming Question Generation Request (Subject, Topic, Difficulty, Count)
-                                  ¦
-                                  ?
+                                  |
+                                  v
                     [Is LLM_API_KEY Configured?]
-                       +-- Yes --? Query OpenAI Chat Completions API
-                       +-- No  --? Structured 5-Template Heuristic Generator
+                       +-- Yes --> Query OpenAI Chat Completions API
+                       +-- No  --> Structured 5-Template Heuristic Generator
 ```
 
 ---

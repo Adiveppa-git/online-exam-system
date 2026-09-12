@@ -8,7 +8,7 @@
 
 ## 1. Evaluation Methodology & Dataset
 
-The offline RAG evaluation suite ([ai-service/tests/evaluate_rag.py](file:///C:/xampp/htdocs/exam-online/online-exam-system/ai-service/tests/evaluate_rag.py)) benchmarks the semantic retriever and grounded generation pipeline against structured test queries representing three distinct query categories:
+The offline RAG evaluation suite ([ai-service/tests/evaluate_rag.py](ai-service/tests/evaluate_rag.py)) benchmarks the semantic retriever and grounded generation pipeline against structured test queries representing three distinct query categories:
 
 1. **Direct Fact Retrieval**: Queries asking for specific definitions explicitly present in course material (e.g. *"What is First Normal Form (1NF)?"*).
 2. **Conceptual Explanation**: Queries requiring multi-sentence contextual synthesis (e.g. *"Explain Second Normal Form (2NF) and functional dependency."*).
