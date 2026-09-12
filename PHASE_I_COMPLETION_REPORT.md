@@ -84,37 +84,35 @@ Every evaluation category is strictly distinguished:
 
 ```powershell
 # 1. Apply Database Migrations
-C:\xampp\php\php.exe database\run_migrations.php
+php database\run_migrations.php
 
 # 2. Start Python FastAPI Service
-cd C:\xampp\htdocs\exam-online\online-exam-system\ai-service
+cd ai-service
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 
 # 3. Run Pytest Suite
-cd C:\xampp\htdocs\exam-online\online-exam-system\ai-service
 .\.venv\Scripts\pytest.exe -v
 
 # 4. Run Offline RAG & Recommendation Benchmarks
-cd C:\xampp\htdocs\exam-online\online-exam-system\ai-service
 $env:PYTHONPATH="."
 .\.venv\Scripts\python.exe tests/evaluate_rag.py
 .\.venv\Scripts\python.exe tests/evaluate_recommendations.py
 
 # 5. Run PHP Integration & Regression Test Suite
-cd C:\xampp\htdocs\exam-online\online-exam-system
-C:\xampp\php\php.exe tests\test_ai_client.php
-C:\xampp\php\php.exe tests\test_ai_question_gen.php
-C:\xampp\php\php.exe tests\test_ai_performance.php
-C:\xampp\php\php.exe tests\test_ai_difficulty.php
-C:\xampp\php\php.exe tests\test_ai_rag.php
-C:\xampp\php\php.exe tests\test_ai_recommendations.php
-C:\xampp\php\php.exe tests\test_regression.php
-C:\xampp\php\php.exe tests\manual_e2e_verification.php
+cd ..
+php tests\test_ai_client.php
+php tests\test_ai_question_gen.php
+php tests\test_ai_performance.php
+php tests\test_ai_difficulty.php
+php tests\test_ai_rag.php
+php tests\test_ai_recommendations.php
+php tests\test_regression.php
+php tests\manual_e2e_verification.php
 ```
 
 ---
 
-## 8. Git Branch & Status
+## 8. Historical Git Branch & Status
 
 - **Branch**: `feature/ai-platform`
 - **Git Status**: Working tree clean of uncommitted secret files; **no automatic commits or pushes executed**.
