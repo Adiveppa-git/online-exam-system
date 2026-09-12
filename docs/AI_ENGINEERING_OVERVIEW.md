@@ -41,7 +41,7 @@ The platform distinguishes strictly between four core AI/ML techniques:
 
 - **Synthetic Benchmark (ML Difficulty)**: Random Forest model evaluated on 600 synthetic samples. Accuracies (~99.17%) are explicitly documented as synthetic pipeline validation only due to feature-target leakage.
 - **Development Benchmark (RAG)**: Evaluated on test queries measuring Recall@K (100%), citation accuracy (100%), and out-of-domain rejection (100%).
-- **Development Benchmark (Recommendations)**: Evaluated against fictional student profiles AH measuring deterministic recommendation correctness (100%).
+- **Development Benchmark (Recommendations)**: Evaluated against fictional student profiles A–H measuring deterministic recommendation correctness (100%).
 
 ---
 

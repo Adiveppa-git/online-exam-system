@@ -1,1 +1,41 @@
-‣摁灡楴敶删捥浯敭摮瑡潩⁮湅楧敮霠䔠慶畬瑡潩⁮…畒敬䈠湥档慭歲਍਍‾⅛低䕔൝㸊⨠䔪慶畬瑡潩⁮牆浡湩⩧㨪⨠䐪癥汥灯敭瑮䈠湥档慭歲⼠删汵⁥慖楬慤楴湯⨪਍‾癅污慵整⁳桴⁥敤整浲湩獩楴⁣敲潣浭湥慤楴湯瀠楲牯瑩⁹捳牯湩Ⱨ搠瑡⁡畳晦捩敩据⁹畧牡獤‬潴楰⁣汣獡楳楦慣楴湯ⱳ愠摮搠晩楦畣瑬⁹敳敬瑣潩⁮畲敬⁳条楡獮⁴楦瑣潩慮⁬瑳摵湥⁴牰景汩獥爠灥敲敳瑮湩⁧敫⁹摥敧挠獡獥മഊⴊⴭ਍਍⌣ㄠ‮潂湵敤⁤牐潩楲祴匠潣楲杮☠䌠浯潰敮瑮圠楥桧獴਍਍牐潩楲祴猠潣敲⁳牡⁥潮浲污穩摥愠摮戠畯摮摥猠牴捩汴⁹敢睴敥⁮〤〮․湡⁤ㄤ〮㨤਍਍␤瑜硥筴敷歡敮獳彜捳牯絥㴠ㄠ〮ⴠ尠整瑸瑻灯捩彜捳牯絥␤਍਍␤瑜硥筴牴湥層獟潣敲⁽‽扜来湩捻獡獥⁽⸱‰…瑜硥筴晩搠捥楬楮杮⁽屜〠㔮☠尠整瑸楻⁦瑳扡敬⼠椠獮晵楦楣湥絴尠⁜⸰‰…瑜硥筴晩椠灭潲楶杮⁽敜摮捻獡獥⑽തഊ␊尤整瑸牻捥湥祣彜捳牯絥㴠〠㔮尠畱摡⠠瑜硥筴潮浲污穩摥戠獡汥湩絥␩തഊ␊尤整瑸灻楲牯瑩屹獟潣敲⁽‽⸰‵瑜浩獥尠整瑸睻慥湫獥屳獟潣敲⁽‫⸰″瑜浩獥尠整瑸瑻敲摮彜捳牯絥⬠〠㈮尠楴敭⁳瑜硥筴敲散据屹獟潣敲⑽തഊⴊⴭ਍਍⌣㈠‮敂据浨牡⁫瑓摵湥⁴癅污慵楴湯删獥汵獴਍਍⁼敂据浨牡⁫牐景汩⁥⁼敄捳楲瑰潩⁮ 敂慨楶牯簠䔠灸捥整⁤敒潣浭湥慤楴湯簠䈠湥档慭歲删獥汵⁴⁼瑓瑡獵簠਍⁼ⴺⴭ簠㨠ⴭ‭⁼ⴺⴭ簠㨠ⴭ㨭簠㨠ⴭ㨭簠਍⁼⨪瑓摵湥⁴⩁‪⁼敗歡匠档摥汵湩⁧㌨┵Ⱙ匠牴湯⁧敍潭祲⠠㔸⤥簠倠楲牯瑩穩⁥捓敨畤楬杮映物瑳簠⨠倪十䕓⩄‪⁼⨪䕖䥒䥆䑅⨪簠਍⁼⨪瑓摵湥⁴⩂‪⁼湉畳晦捩敩瑮愠瑴浥瑰⁳␨‼␵ ⁼瑓瑡獵›楠獮晵楦楣湥彴慤慴⁠⁼⨪䅐卓䑅⨪簠⨠嘪剅䙉䕉⩄‪ർ簊⨠匪畴敤瑮䌠⨪簠䤠灭潲楶杮愠捣牵捡⁹牴湥⁤⁼牔湥㩤怠浩牰癯湩恧‬潬敷⁲牰潩楲祴簠⨠倪十䕓⩄‪⁼⨪䕖䥒䥆䑅⨪簠਍⁼⨪瑓摵湥⁴⩄‪⁼楈桧愠捣牵捡⁹␨杜⁥〸╜⤤簠䌠慬獳晩捩瑡潩㩮怠呓佒䝎Ⱡ䐠晩㩦怠慨摲⁠⁼⨪䅐卓䑅⨪簠⨠嘪剅䙉䕉⩄‪ർ簊⨠匪畴敤瑮䔠⨪簠䈠畯摮牡⁹整瑳›硅捡汴⁹‵瑡整灭獴簠匠慴畴㩳怠敲楬扡敬⁠ 汃獡楳楦摥簠⨠倪十䕓⩄‪⁼⨪䕖䥒䥆䑅⨪簠਍⁼⨪瑓摵湥⁴⩆‪⁼潂湵慤祲琠獥㩴䄠捣牵捡⁹‽〵‥⁼汃獡楳楦慣楴湯›䑠噅䱅偏义恇簠⨠倪十䕓⩄‪⁼⨪䕖䥒䥆䑅⨪簠਍⁼⨪瑓摵湥⁴⩇‪⁼潂湵慤祲琠獥㩴䄠捣牵捡⁹‽〸‥⁼汃獡楳楦慣楴湯›占剔乏恇簠⨠倪十䕓⩄‪⁼⨪䕖䥒䥆䑅⨪簠਍⁼⨪瑓摵湥⁴⩈‪⁼敄汣湩湩⁧牴湥⁤楷桴氠睯猠潣敲簠吠敲摮›摠捥楬楮杮Ⱡ䠠杩⁨牐潩楲祴⠠尤敧〠㔮⤤簠⨠倪十䕓⩄‪⁼⨪䕖䥒䥆䑅⨪簠਍਍ⴭഭഊ⌊‣⸳䔠灸慬湩扡汩瑩⁹…䱌⁍慓敦祴匠晡来慵摲൳ഊⴊ⨠䴪捡楨敮刭慥慤汢⁥敒獡湯吠条⩳㨪䔠敶祲爠捥浯敭摮瑡潩⁮湩汣摵獥爠慥潳⁮慴獧⠠慠捣牵捡役敢潬彷桴敲桳汯恤‬牠捥湥彴数晲牯慭据彥敤汣湩湩恧‬摠癥汥灯湩彧潴楰恣‬獠牴湯彧潴楰彣档污敬杮恥‬楠獮晵楦楣湥彴瑡整灭獴⥠മⴊ⨠䰪䵌丠湯伭敶牲摩湩⁧畇牡⩤㨪吠敨䰠䵌猠牥敶⁳潳敬祬愠⁳⁡慮畴慲⵬慬杮慵敧攠灸慬慮楴湯氠祡牥‮瑉⨠挪湡潮⩴‪污整⁲敤整浲湩獩楴⁣潴楰⁣汣獡楳楦慣楴湯ⱳ瀠楲牯瑩⁹捳牯獥‬牯搠晩楦畣瑬⁹牰杯敲獳潩⹮਍
+# Adaptive Recommendation Engine — Evaluation & Rule Benchmark
+
+> [!NOTE]
+> **Evaluation Framing**: **Development Benchmark / Rule Validation**
+> Evaluates the deterministic recommendation priority scoring, data sufficiency guards, topic classifications, and difficulty selection rules against fictional student profiles representing key edge cases.
+
+---
+
+## 1. Bounded Priority Scoring & Component Weights
+
+Priority scores are normalized and bounded strictly between $0.0$ and $1.0$:
+
+$$\text{weakness\_score} = 1.0 - \text{topic\_score}$$
+
+$$\text{trend\_score} = \begin{cases} 1.0 & \text{if declining} \\ 0.5 & \text{if stable / insufficient} \\ 0.0 & \text{if improving} \end{cases}$$
+
+$$\text{recency\_score} = 0.5 \quad (\text{normalized baseline})$$
+
+$$\text{priority\_score} = 0.5 \times \text{weakness\_score} + 0.3 \times \text{trend\_score} + 0.2 \times \text{recency\_score}$$
+
+---
+
+## 2. Benchmark Student Evaluation Results
+
+| Benchmark Profile | Description / Behavior | Expected Recommendation | Benchmark Result | Status |
+| :--- | :--- | :--- | :---: | :---: |
+| **Student A** | Weak Scheduling (35%), Strong Memory (85%) | Prioritize Scheduling first | **PASSED** | **VERIFIED** |
+| **Student B** | Insufficient attempts ($< 5$) | Status: `insufficient_data` | **PASSED** | **VERIFIED** |
+| **Student C** | Improving accuracy trend | Trend: `improving`, lower priority | **PASSED** | **VERIFIED** |
+| **Student D** | High accuracy ($\ge 80\%$) | Classification: `STRONG`, Diff: `hard` | **PASSED** | **VERIFIED** |
+| **Student E** | Boundary test: Exactly 5 attempts | Status: `reliable` / Classified | **PASSED** | **VERIFIED** |
+| **Student F** | Boundary test: Accuracy = 50% | Classification: `DEVELOPING` | **PASSED** | **VERIFIED** |
+| **Student G** | Boundary test: Accuracy = 80% | Classification: `STRONG` | **PASSED** | **VERIFIED** |
+| **Student H** | Declining trend with low score | Trend: `declining`, High Priority ($\ge 0.5$) | **PASSED** | **VERIFIED** |
+
+---
+
+## 3. Explainability & LLM Safety Safeguards
+
+- **Machine-Readable Reason Tags**: Every recommendation includes reason tags (`accuracy_below_threshold`, `recent_performance_declining`, `developing_topic`, `strong_topic_challenge`, `insufficient_attempts`).
+- **LLM Non-Overriding Guard**: The LLM serves solely as a natural-language explanation layer. It **cannot** alter deterministic topic classifications, priority scores, or difficulty progression.
