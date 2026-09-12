@@ -4,7 +4,7 @@
 
 ---
 
-## ðŸŒŸ Executive Overview & Live Demo
+## 🌟 Executive Overview & Live Demo
 
 The **Online Examination & AI Learning Platform** combines a robust PHP 8.1 / MySQL exam management core with an asynchronous Python FastAPI AI microservice architecture. It provides an end-to-end environment for educators to manage exams and AI-generated question banks, while empowering students with automated performance diagnostics, RAG-powered course material study assistance, and personalized adaptive practice sessions.
 
@@ -12,7 +12,7 @@ The **Online Examination & AI Learning Platform** combines a robust PHP 8.1 / My
 
 ---
 
-## ðŸ–¼ï¸ Application Interface & Screenshots
+## 🖼️ Application Interface & Screenshots
 
 ### Admin Portal
 - **Admin Dashboard**: Comprehensive overview of system stats, active exams, and user registrations.
@@ -40,7 +40,7 @@ The **Online Examination & AI Learning Platform** combines a robust PHP 8.1 / My
 
 ---
 
-## âœ¨ Key Features & System Modules
+## ✨ Key Features & System Modules
 
 ### 1. Core Examination Engine (PHP 8.1 & MySQL)
 - **Authentication & Role-Based Access Control (RBAC)**: Secure admin and student session isolation.
@@ -61,7 +61,7 @@ The **Online Examination & AI Learning Platform** combines a robust PHP 8.1 / My
 - **Scikit-Learn Predictive Model**: Uses Random Forest and Logistic Regression classifiers trained on question attempt metrics (`correct_rate`, `attempt_count`, `option_distribution_entropy`).
 - **Cold-Start Guard**: Questions with $< 3$ real student attempts return `status: "insufficient_real_data"` and fall back to assigned difficulty.
 - **Early Real-Data Inference**: Questions with $3 \le \text{attempts} < 30$ provide early real-data predictions (`data_mode: "real_data_production"`) labeled with a low-data disclaimer.
-- **Human Oversight**: Predictions require manual admin confirmation in `admin/ai_difficulty_analytics.php` before database update. Automatic database overwrites are disabled.
+- **Human Oversight**: Predictions require manual admin confirmation in `admin/ai_difficulty_analytics.php` before database update.
 
 ### 5. Course Material RAG Study Assistant (Phase G)
 - **Document Ingestion & Text Chunking**: Extracts text from PDF and TXT course materials using `pypdf` into deterministic 500-character chunks with 50-character overlap.
@@ -76,25 +76,25 @@ The **Online Examination & AI Learning Platform** combines a robust PHP 8.1 / My
 
 ---
 
-## ðŸ —ï¸  System Architecture
+## 🏗️ System Architecture
 
 ```
 Student / Admin Browser
-       â”‚
-       â–¼
-PHP Application (Apache / XAMPP) â”€â”€â–º MySQL Database (MariaDB 10.6)
-       â”‚
-       â–¼ (cURL REST API / Port 8001)
+       │
+       ▼
+PHP Application (Apache / XAMPP) ──► MySQL Database (MariaDB 10.6)
+       │
+       ▼ (cURL REST API / Port 8001)
 Python FastAPI Microservice (ai-service)
-       â”œâ”€â–º Question Generator (LLM / Heuristic Engine)
-       â”œâ”€â–º ML Difficulty Predictor (Random Forest / Joblib)
-       â”œâ”€â–º RAG Service (pypdf, sentence-transformers [384d], ChromaDB)
-       â””â”€â–º Adaptive Recommendation Engine (Priority Scoring)
+       ├─► Question Generator (LLM / Heuristic Engine)
+       ├─► ML Difficulty Predictor (Random Forest / Joblib)
+       ├─► RAG Service (pypdf, sentence-transformers [384d], ChromaDB)
+       └─► Adaptive Recommendation Engine (Priority Scoring)
 ```
 
 ---
 
-## ðŸ’» Tech Stack
+## 💻 Tech Stack
 
 - **Frontend**: HTML5, CSS3 (Vanilla Responsive Styling), JavaScript (AJAX & Event Listeners)
 - **Backend Core**: PHP 8.1 / 8.2 (Apache / XAMPP)
@@ -106,7 +106,7 @@ Python FastAPI Microservice (ai-service)
 
 ---
 
-## ðŸš€ Environment Setup & Installation
+## 🚀 Environment Setup & Installation
 
 ### Option A: Standard Local Setup (XAMPP + Python Virtual Environment)
 
@@ -145,7 +145,7 @@ docker compose up -d
 
 ---
 
-## ðŸ§ª Testing & Evaluation
+## 🧪 Testing & Evaluation
 
 ### Automated Test Suites
 Run unit, integration, and regression test suites across Python and PHP:
@@ -172,7 +172,7 @@ C:\xampp\php\php.exe tests/manual_e2e_verification.php
 
 ---
 
-## ðŸ“Š Evaluation Results & Benchmark Summary
+## 📊 Evaluation Results & Benchmark Summary
 
 | Benchmark Suite | Test Type / Scope | Benchmark Score | Status / Label |
 | :--- | :--- | :---: | :---: |
@@ -184,13 +184,13 @@ C:\xampp\php\php.exe tests/manual_e2e_verification.php
 
 ---
 
-## ðŸ”¬ Scientific Caveats & Known Limitations
+## 🔬 Scientific Caveats & Known Limitations
 
 1. **ML Difficulty Synthetic Benchmark Disclaimer**:
    - The **99.17% Random Forest accuracy** was measured on synthetic dataset validation.
    - **Target-Feature Leakage**: Labels $Y \in \{\text{easy}, \text{medium}, \text{hard}\}$ were constructed directly from student `correct_rate` thresholds ($>= 0.75 \rightarrow \text{easy}$, $< 0.45 \rightarrow \text{hard}$). Tree-based classifiers memorized these splits. This score **must not** be represented as real-world production model accuracy.
 2. **Cold Start Limitation**:
-   - Questions with $< 5$ real student attempts trigger the cold-start guard (`status: "insufficient_real_data"`) and fall back to teacher-assigned difficulty. Real-world retraining requires $\ge 30$ attempts across $\ge 50$ distinct students.
+   - Questions with $< 3$ real student attempts trigger the cold-start guard (`status: "insufficient_real_data"`) and fall back to teacher-assigned difficulty. Questions with $3 \le \text{attempts} < 30$ yield early real-data predictions (`data_mode: "real_data_production"`) marked with a low-data warning. Real-world retraining requires $\ge 30$ attempts across $\ge 50$ distinct students.
 3. **RAG & Recommendation Evaluation Framing**:
    - RAG and Recommendation evaluation metrics represent **offline development quality benchmarks**, validating pipeline rules and out-of-domain refusal, not production-wide human user satisfaction.
 4. **Vector Embedding Model**:
@@ -198,7 +198,7 @@ C:\xampp\php\php.exe tests/manual_e2e_verification.php
 
 ---
 
-## ðŸ›¡ï¸ Security, Privacy & CI/CD
+## 🛡️ Security, Privacy & CI/CD
 
 - **Database Security**: Prepared SQL statements (`$conn->prepare()`, `$stmt->bind_param()`) used exclusively throughout PHP and Python components.
 - **XSS & Output Sanitization**: HTML output escaped using `htmlspecialchars()`.
@@ -208,7 +208,7 @@ C:\xampp\php\php.exe tests/manual_e2e_verification.php
 
 ---
 
-## ðŸ“‘ Detailed Documentation Links
+## 📑 Detailed Documentation Links
 
 - [Phase I Final Verification Report](PHASE_I_FINAL_VERIFICATION.md)
 - [Architecture Specification](docs/architecture.md)

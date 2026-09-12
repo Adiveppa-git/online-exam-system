@@ -1,4 +1,4 @@
-# ML Difficulty Prediction â€” Evaluation & Target Leakage Audit
+# ML Difficulty Prediction — Evaluation & Target Leakage Audit
 
 > [!WARNING]
 > **Scientific Guard & Evaluation Framing**:

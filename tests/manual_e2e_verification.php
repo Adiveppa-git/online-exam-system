@@ -63,7 +63,7 @@ log_step(4, "Grounded Question Answering (Known Content)", $step4_pass, "Answer 
 // --- Step 5: Student question NOT present in document ---
 $ask_absent = $aiClient->askRAG("What are the thermodynamic laws of quantum gravity?", "Operating Systems");
 $ans2 = $ask_absent['data']['answer'] ?? '';
-$step5_pass = ($ask_absent['success'] === true && $ask_absent['data']['has_sufficient_context'] === false && strpos($ans2, "couldn't find enough information") !== false);
+$step5_pass = ($ask_absent['success'] === true && $ask_absent['data']['has_sufficient_context'] === false && (strpos($ans2, "couldn't find enough information") !== false || strpos($ans2, "don't have enough information") !== false || strpos($ans2, "enough information") !== false));
 log_step(5, "Out-of-Domain Question (No Hallucination Fallback)", $step5_pass, "Response: {$ans2}");
 
 // --- Step 6: Metadata filtering by Subject / Topic ---

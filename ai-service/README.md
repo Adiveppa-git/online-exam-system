@@ -1,2 +1,2 @@
-# AI Service Documentation
+﻿# AI Service Documentation
 FastAPI microservice for the Online Examination Platform.

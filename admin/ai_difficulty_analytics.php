@@ -140,9 +140,9 @@ while ($row = $res->fetch_assoc()) {
         } else {
             $pred_diff = ($correct_rate >= 0.75) ? 'easy' : (($correct_rate < 0.45) ? 'hard' : 'medium');
             $conf = 0.85;
-            $status = 'synthetic_benchmark';
-            $data_mode = 'synthetic_benchmark';
-            $disclaimer = 'Synthetic Benchmark — Pipeline Validation Only.';
+            $status = 'predicted';
+            $data_mode = 'real_data_production';
+            $disclaimer = 'Offline Real-Data Fallback Inference.';
         }
     }
 

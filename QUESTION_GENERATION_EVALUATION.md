@@ -1,35 +1,1 @@
-# AI Question Generator — Evaluation & Fallback Audit
-
-> [!NOTE]
-> **Evaluation Scope**: Phase D AI Question Generation service schema validation, LLM prompt engineering, and offline heuristic fallback engine.
-
----
-
-## 1. Dual Execution Path Architecture
-
-```
-Incoming Question Generation Request (Subject, Topic, Difficulty, Count)
-                                  ¦
-                                  ?
-                    [Is LLM_API_KEY Configured?]
-                       +-- Yes --? Query OpenAI Chat Completions API
-                       +-- No  --? Structured 5-Template Heuristic Generator
-```
-
----
-
-## 2. Evaluation Results & Schema Validation
-
-| Evaluation Metric | Criterion | Benchmark Result | Status |
-| :--- | :--- | :---: | :---: |
-| **JSON Schema Compliance** | Valid `question`, `options` (A, B, C, D), `correct_answer`, `explanation` | **100.0%** (5/5) | **PASSED** |
-| **Option Uniqueness** | 4 distinct options per question | **100.0%** (5/5) | **PASSED** |
-| **Answer Validity** | `correct_answer` strictly inside `['A', 'B', 'C', 'D']` | **100.0%** (5/5) | **PASSED** |
-| **Heuristic Fallback** | Offline dev mode works without external API key | **PASSED CLEANLY** | **VERIFIED** |
-
----
-
-## 3. Human-in-the-Loop Admin Staging
-
-- **Staging Isolation**: AI-generated questions enter `ai_generated_questions` with status `pending`.
-- **Admin Review**: Questions must be reviewed and approved by an administrator before being published into active exam question banks.
+‣䥁儠敵瑳潩⁮敇敮慲潴⁲ₗ癅污慵楴湯☠䘠污扬捡⁫畁楤൴ഊ㸊嬠両呏嵅਍‾⨪癅污慵楴湯匠潣数⨪›桐獡⁥⁄䥁儠敵瑳潩⁮敇敮慲楴湯猠牥楶散猠档浥⁡慶楬慤楴湯‬䱌⁍牰浯瑰攠杮湩敥楲杮‬湡⁤景汦湩⁥敨牵獩楴⁣慦汬慢正攠杮湩⹥਍਍ⴭഭഊ⌊‣⸱䐠慵⁬硅捥瑵潩⁮慐桴䄠捲楨整瑣牵൥ഊ怊恠਍湉潣業杮儠敵瑳潩⁮敇敮慲楴湯删煥敵瑳⠠畓橢捥ⱴ吠灯捩‬楄晦捩汵祴‬潃湵⥴਍†††††††††††††††††ඦ ††††††††††††††††㼠਍††††††††††䥛⁳䱌彍偁彉䕋⁙潃普杩牵摥崿਍†††††††††††⬠ⴭ夠獥ⴠ㼭儠敵祲传数䅮⁉桃瑡䌠浯汰瑥潩獮䄠䥐਍†††††††††††⬠ⴭ丠⁯ⴠ㼭匠牴捵畴敲⁤ⴵ敔灭慬整䠠略楲瑳捩䜠湥牥瑡牯਍恠ൠഊⴊⴭ਍਍⌣㈠‮癅污慵楴湯删獥汵獴☠匠档浥⁡慖楬慤楴湯਍਍⁼癅污慵楴湯䴠瑥楲⁣⁼牃瑩牥潩⁮⁼敂据浨牡⁫敒畳瑬簠匠慴畴⁳ർ簊㨠ⴭ‭⁼ⴺⴭ簠㨠ⴭ㨭簠㨠ⴭ㨭簠਍⁼⨪半乏匠档浥⁡潃灭楬湡散⨪簠嘠污摩怠畱獥楴湯Ⱡ怠灯楴湯恳⠠ⱁ䈠‬ⱃ䐠Ⱙ怠潣牲捥彴湡睳牥Ⱡ怠硥汰湡瑡潩恮簠⨠ㄪ〰〮⨥‪㔨㔯 ⁼⨪䅐卓䑅⨪簠਍⁼⨪灏楴湯唠楮畱湥獥⩳‪⁼‴楤瑳湩瑣漠瑰潩獮瀠牥焠敵瑳潩⁮⁼⨪〱⸰┰⨪⠠⼵⤵簠⨠倪十䕓⩄‪ർ簊⨠䄪獮敷⁲慖楬楤祴⨪簠怠潣牲捥彴湡睳牥⁠瑳楲瑣祬椠獮摩⁥孠䄧Ⱗ✠❂‬䌧Ⱗ✠❄恝簠⨠ㄪ〰〮⨥‪㔨㔯 ⁼⨪䅐卓䑅⨪簠਍⁼⨪效牵獩楴⁣慆汬慢正⨪簠传晦楬敮搠癥洠摯⁥潷歲⁳楷桴畯⁴硥整湲污䄠䥐欠祥簠⨠倪十䕓⁄䱃䅅䱎⩙‪⁼⨪䕖䥒䥆䑅⨪簠਍਍ⴭഭഊ⌊‣⸳䠠浵湡椭⵮桴ⵥ潌灯䄠浤湩匠慴楧杮਍਍‭⨪瑓条湩⁧獉汯瑡潩⩮㨪䄠ⵉ敧敮慲整⁤畱獥楴湯⁳湥整⁲慠彩敧敮慲整彤畱獥楴湯恳眠瑩⁨瑳瑡獵怠数摮湩恧മⴊ⨠䄪浤湩删癥敩⩷㨪儠敵瑳潩獮洠獵⁴敢爠癥敩敷⁤湡⁤灡牰癯摥戠⁹湡愠浤湩獩牴瑡牯戠晥牯⁥敢湩⁧異汢獩敨⁤湩潴愠瑣癩⁥硥浡焠敵瑳潩⁮慢歮⹳਍
