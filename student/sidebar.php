@@ -68,6 +68,17 @@ $current_page = basename($_SERVER['PHP_SELF']);
     background: #2176ff;
     border-radius: 6px;
 }
+
+.sidebar-section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #95a5a6;
+    padding: 10px 20px 5px 20px;
+    letter-spacing: 1px;
+}
+.sidebar.closed .sidebar-section-title {
+    display: none;
+}
 </style>
 
 <div class="sidebar" id="sidebar">
@@ -85,6 +96,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
         Available Exams
     </a>
 
+    <div class="sidebar-section-title">LEARNING</div>
+
     <a href="../student/personalized_learning.php" class="<?= ($current_page=='personalized_learning.php'||$current_page=='practice_session.php')?'active':'' ?>">
         Personalized Learning
     </a>
@@ -97,9 +110,13 @@ $current_page = basename($_SERVER['PHP_SELF']);
         AI Study Assistant
     </a>
 
+    <div class="sidebar-section-title">RESULTS</div>
+
     <a href="../student/result.php" class="<?= $current_page=='result.php'?'active':'' ?>">
         My Results
     </a>
+
+    <div class="sidebar-section-title">ACCOUNT</div>
 
     <a href="../auth/change_password.php" class="<?= $current_page=='change_password.php'?'active':'' ?>">
         Change Password

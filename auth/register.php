@@ -56,19 +56,16 @@ if (isset($_POST['send_otp']))
                 'expiry'=>$expiry
             ];
 
-            $body = "
-            <h2>Email Verification</h2>
-            <p>Your OTP is:</p>
-            <h1>$otp</h1>
-            <p>Valid for 10 minutes</p>";
+            $body = buildOtpEmailHtml("Email Verification", $otp, 10);
 
-            if (sendMail($email,"Verify Your Email",$body))
+            if (sendMail($email, "Verify Your Email - Online Examination System", $body))
             {
                 $step = 2;
             }
             else
             {
-                $msg = "Failed to send OTP";
+                $err = getLastMailError() ?: "Failed to send OTP";
+                $msg = "❌ " . $err;
             }
         }
     }

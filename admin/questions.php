@@ -217,19 +217,34 @@ margin-top:20px;
 }
 
 
+.content h1 {
+    color: #0f172a !important;
+}
+
+.manage-q-th {
+    background: #1976D2 !important;
+    color: #FFFFFF !important;
+    font-weight: 700 !important;
+}
+
 .edit-link, .delete-link {
-    padding: 5px 10px;
-    border-radius: 4px;
+    padding: 6px 12px;
+    border-radius: 6px;
     text-decoration: none;
-    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    display: inline-block;
+    cursor: pointer;
 }
 
 .edit-link {
-    background: #0de9fd;
+    background: #22d3ee !important;
+    color: #0f172a !important;
 }
 
 .delete-link {
-    background: red;
+    background: #dc3545 !important;
+    color: white !important;
 }
 .success{
 background:#d4edda;
@@ -271,9 +286,22 @@ border-radius:4px;
 
 <div class="content">
 
-<h1>
-<?= $mode==='add' ? 'Add Question' : ($mode==='edit' ? 'Edit Question' : 'Manage Questions') ?>
-</h1>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+    <h1 style="margin: 0; color: #0f172a !important;">
+        <?= $mode==='add' ? 'Add Question' : ($mode==='edit' ? 'Edit Question' : 'Manage Questions') ?>
+    </h1>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <?php if ($mode === 'manage'): ?>
+            <a href="ai_question_generator.php" style="background: #0d6efd; color: white; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">✨ Generate AI Questions</a>
+            <a href="add_question.php" style="background: #0d6efd; color: white; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">➕ Add Question</a>
+        <?php elseif ($mode === 'add'): ?>
+            <a href="manage_questions.php" style="background: #0d6efd; color: white; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">&larr; Manage Questions</a>
+            <a href="ai_question_generator.php" style="background: #0d6efd; color: white; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">✨ Generate AI Questions</a>
+        <?php else: ?>
+            <a href="manage_questions.php" style="background: #0d6efd; color: white; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">&larr; Manage Questions</a>
+        <?php endif; ?>
+    </div>
+</div>
 
 <?php if($success): ?>
 <div class="success"><?= $success ?></div>
@@ -374,48 +402,33 @@ border-radius:4px;
 
 <!-- TABLE -->
 <?php if($mode==='manage'): ?>
-<div class="card">
-<table>
-</div>
-
-<tr>
-<th>SL No</th>
-<th>Exam</th>
-<th>Question</th>
-<th>Correct</th>
-<th>Action</th>
+<div class="card" style="background:#ffffff; padding:20px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.06); width:100%; box-sizing:border-box; overflow-x:auto;">
+<table style="width:100%; border-collapse:collapse;">
+<thead>
+<tr style="background:#1976D2;">
+<th class="manage-q-th" style="padding:12px; text-align:left; background:#1976D2; color:#FFFFFF; font-weight:700;">SL No</th>
+<th class="manage-q-th" style="padding:12px; text-align:left; background:#1976D2; color:#FFFFFF; font-weight:700;">Exam</th>
+<th class="manage-q-th" style="padding:12px; text-align:left; background:#1976D2; color:#FFFFFF; font-weight:700;">Question</th>
+<th class="manage-q-th" style="padding:12px; text-align:center; background:#1976D2; color:#FFFFFF; font-weight:700;">Correct</th>
+<th class="manage-q-th" style="padding:12px; text-align:center; background:#1976D2; color:#FFFFFF; font-weight:700;">Action</th>
 </tr>
-
+</thead>
+<tbody>
 <?php $i=1; while($q=$questions->fetch_assoc()): ?>
-
 <tr>
-
-<td><?= $i++ ?></td>
-
-<td><?= htmlspecialchars($q['exam_title']) ?></td>
-
-<td><?= htmlspecialchars($q['question']) ?></td>
-
-<td><?= $q['correct_option'] ?></td>
-
-<td class="action-btns">
-
-<a href="questions.php?mode=edit&id=<?= $q['id'] ?>" class="edit-link">
-Edit
-</a>
-
-<a href="questions.php?delete=<?= $q['id'] ?>" class="delete-link">
-Delete
-</a>
-
+<td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle;"><?= $i++ ?></td>
+<td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; font-weight:600;"><?= htmlspecialchars($q['exam_title']) ?></td>
+<td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle;"><?= htmlspecialchars($q['question']) ?></td>
+<td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; text-align:center;"><span style="background:#e0e7ff; color:#3730a3; padding:4px 10px; border-radius:12px; font-weight:bold;"><?= htmlspecialchars($q['correct_option']) ?></span></td>
+<td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; text-align:center;" class="action-btns">
+<a href="questions.php?mode=edit&id=<?= $q['id'] ?>" class="edit-link" style="background:#22d3ee; color:#0f172a; padding:6px 12px; border-radius:6px; border:none; text-decoration:none; font-weight:600; font-size:13px; display:inline-block;">Edit</a>
+<a href="questions.php?delete=<?= $q['id'] ?>" class="delete-link" onclick="return confirm('Are you sure you want to delete this question?')" style="background:#dc3545; color:white; padding:6px 12px; border-radius:6px; border:none; text-decoration:none; font-weight:600; font-size:13px; display:inline-block;">Delete</a>
 </td>
-
 </tr>
-
 <?php endwhile; ?>
-
+</tbody>
 </table>
-
+</div>
 <?php endif; ?>
 
 

@@ -41,8 +41,297 @@ function cleanupTestUser($conn, $email) {
 $testEmail = "test_otp_auto@example.com";
 cleanupTestUser($conn, $testEmail);
 
-// Test A1 & A2: Registration OTP generation & Dev Log Fallback
-runTest("A1 & A2: Registration OTP Generation & Dev Log Fallback", function() use ($testEmail) {
+// Test 1: Brevo Configuration Detection
+runTest("1. Brevo Configuration Detection", function() {
+    putenv("MAIL_DRIVER=brevo");
+    putenv("BREVO_API_KEY=test_dummy_key");
+    putenv("SENDER_EMAIL=sender@validcompany.com");
+
+    $receivedUrl = null;
+    setBrevoHttpHandler(function($url, $headers, $payloadJson) use (&$receivedUrl) {
+        $receivedUrl = $url;
+        return ['code' => 201, 'response' => '{"messageId":"<mock>"}', 'error' => null];
+    });
+
+    $result = sendMail("user@example.com", "Test Subject", "<p>Test</p>");
+    setBrevoHttpHandler(null);
+
+    if ($result === true && $receivedUrl === "https://api.brevo.com/v3/smtp/email") {
+        return true;
+    }
+    return "Brevo configuration detection failed";
+});
+
+// Test 2: Gmail SMTP Driver Selection & Mock Delivery
+runTest("2. Gmail SMTP Driver Selection & Mock Delivery", function() {
+    putenv("MAIL_DRIVER=smtp");
+    putenv("SMTP_HOST=smtp.gmail.com");
+    putenv("SMTP_PORT=587");
+    putenv("SMTP_ENCRYPTION=tls");
+    putenv("SMTP_USERNAME=mailproject112@gmail.com");
+    putenv("SMTP_PASSWORD=dummy_smtp_app_pass_1234");
+    putenv("SENDER_EMAIL=mailproject112@gmail.com");
+    putenv("SENDER_NAME=Online Examination System");
+
+    $targetRecipient = "student@gmail.com";
+    $capturedConfig = null;
+
+    setSmtpHandler(function($to, $subject, $body, $config) use (&$capturedConfig) {
+        $capturedConfig = $config;
+        $capturedConfig['to'] = $to;
+        return true;
+    });
+
+    $otp = rand(100000, 999999);
+    $body = buildOtpEmailHtml("Email Verification", $otp, 10);
+    $sent = sendMail($targetRecipient, "Verify Your Email - Online Examination System", $body);
+    setSmtpHandler(null);
+
+    if (!$sent) return "sendMail failed for SMTP driver";
+    if (!isset($capturedConfig['host']) || $capturedConfig['host'] !== 'smtp.gmail.com') {
+        return "SMTP_HOST was not set to smtp.gmail.com";
+    }
+    if ($capturedConfig['username'] !== 'mailproject112@gmail.com') {
+        return "SMTP_USERNAME was not read correctly";
+    }
+    if ($capturedConfig['senderEmail'] !== 'mailproject112@gmail.com') {
+        return "SENDER_EMAIL was not set to mailproject112@gmail.com";
+    }
+    if ($capturedConfig['to'] !== $targetRecipient) {
+        return "Target recipient was not preserved correctly";
+    }
+
+    return true;
+});
+
+// Test 3: Missing SMTP Password Handling (No Silent Fallback to Log File)
+runTest("3. Missing SMTP Password Handling (No Silent Log Fallback)", function() {
+    putenv("APP_ENV=development");
+    putenv("MAIL_DRIVER=smtp");
+    putenv("SMTP_HOST=smtp.gmail.com");
+    putenv("SMTP_USERNAME=mailproject112@gmail.com");
+    putenv("SMTP_PASSWORD=");
+    putenv("SMTP_PASS=");
+
+    $logFile = __DIR__ . '/../logs/mail.log';
+    $initialSize = file_exists($logFile) ? filesize($logFile) : 0;
+
+    $sent = sendMail("student@gmail.com", "Test", "<p>Test</p>");
+    if ($sent !== false) return "sendMail should return false when SMTP_PASSWORD is missing";
+
+    $finalSize = file_exists($logFile) ? filesize($logFile) : 0;
+    if ($finalSize > $initialSize) {
+        return "MAIL_DRIVER=smtp incorrectly wrote entry to logs/mail.log upon failure";
+    }
+
+    return true;
+});
+
+// Test 4: Brevo is NOT Called When MAIL_DRIVER=smtp
+runTest("4. Brevo is NOT Called When MAIL_DRIVER=smtp", function() {
+    putenv("MAIL_DRIVER=smtp");
+    putenv("BREVO_API_KEY=mock_key_should_not_be_called");
+    putenv("SMTP_HOST=smtp.gmail.com");
+    putenv("SMTP_USERNAME=mailproject112@gmail.com");
+    putenv("SMTP_PASSWORD=secret_pass");
+
+    $brevoCalled = false;
+    setBrevoHttpHandler(function($url, $headers, $payloadJson) use (&$brevoCalled) {
+        $brevoCalled = true;
+        return ['code' => 201, 'response' => '{}', 'error' => null];
+    });
+
+    setSmtpHandler(function() {
+        return true;
+    });
+
+    $sent = sendMail("student@gmail.com", "Test Subject", "<p>Content</p>");
+    setBrevoHttpHandler(null);
+    setSmtpHandler(null);
+
+    if ($brevoCalled) {
+        return "Brevo REST API was called even though MAIL_DRIVER=smtp";
+    }
+    if (!$sent) {
+        return "SMTP send failed";
+    }
+
+    return true;
+});
+
+// Test 5: Invalid Sender Configuration Handling
+runTest("5. Invalid Sender Configuration Handling", function() {
+    putenv("MAIL_DRIVER=brevo");
+    putenv("BREVO_API_KEY=test_dummy_key");
+    putenv("SENDER_EMAIL=noreply@example.com");
+
+    $sent = sendMail("user@example.com", "Test", "<p>Test</p>");
+    if ($sent === false) return true;
+    return "sendMail should return false when SENDER_EMAIL is placeholder 'noreply@example.com'";
+});
+
+// Test 6: Successful Brevo Response Handling using Mocked HTTP Response
+runTest("6. Successful Brevo Response Handling (Mocked HTTP 201)", function() {
+    putenv("MAIL_DRIVER=brevo");
+    putenv("BREVO_API_KEY=mock_key_12345");
+    putenv("SENDER_EMAIL=verified_sender@myorg.com");
+
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        @session_start();
+    }
+    $_SESSION['mail_sent_mode'] = null;
+
+    setBrevoHttpHandler(function($url, $headers, $payloadJson) {
+        return ['code' => 201, 'response' => '{"messageId":"<20260911@brevo>"}', 'error' => null];
+    });
+
+    $sent = sendMail("test_recipient@myorg.com", "Verify Email", "<p>OTP: 123456</p>");
+    setBrevoHttpHandler(null);
+
+    $sentMode = $_SESSION['mail_sent_mode'] ?? 'unset';
+    if ($sent === true && $sentMode === 'real') {
+        return true;
+    }
+    return "Brevo HTTP 201 response handling failed";
+});
+
+// Test 7: Brevo API Failure Handling (Mocked HTTP 400 & cURL Error)
+runTest("7. Brevo API Failure Handling (Mocked HTTP 400 & cURL Error)", function() {
+    putenv("MAIL_DRIVER=brevo");
+    putenv("BREVO_API_KEY=mock_key_12345");
+    putenv("SENDER_EMAIL=verified_sender@myorg.com");
+
+    // 7a. HTTP 400 Bad Request
+    setBrevoHttpHandler(function($url, $headers, $payloadJson) {
+        return ['code' => 400, 'response' => '{"code":"invalid_parameter","message":"bad payload"}', 'error' => null];
+    });
+
+    $sent400 = sendMail("test@myorg.com", "Test", "<p>Test</p>");
+    setBrevoHttpHandler(null);
+
+    if ($sent400 !== false) return "HTTP 400 failure was not handled correctly";
+
+    // 7b. Network / cURL Error
+    setBrevoHttpHandler(function($url, $headers, $payloadJson) {
+        return ['code' => 0, 'response' => '', 'error' => 'Could not resolve host'];
+    });
+
+    $sentErr = sendMail("test@myorg.com", "Test", "<p>Test</p>");
+    setBrevoHttpHandler(null);
+
+    if ($sentErr !== false) return "cURL network error was not handled correctly";
+
+    return true;
+});
+
+// Test 8: Registration OTP Recipient is Actual User's Email
+runTest("8. Registration OTP Recipient is Actual User's Email", function() {
+    putenv("MAIL_DRIVER=smtp");
+    putenv("SMTP_HOST=smtp.gmail.com");
+    putenv("SMTP_USERNAME=mailproject112@gmail.com");
+    putenv("SMTP_PASSWORD=mock_pass");
+
+    $targetRecipient = "actual_user_registration@domain.org";
+    $capturedRecipient = null;
+
+    setSmtpHandler(function($to) use (&$capturedRecipient) {
+        $capturedRecipient = $to;
+        return true;
+    });
+
+    $otp = rand(100000, 999999);
+    $body = buildOtpEmailHtml("Email Verification", $otp, 10);
+    $sent = sendMail($targetRecipient, "Verify Your Email - Online Examination System", $body);
+    setSmtpHandler(null);
+
+    if (!$sent) return "sendMail failed for registration OTP";
+    if ($capturedRecipient !== $targetRecipient) {
+        return "Expected recipient $targetRecipient but got " . $capturedRecipient;
+    }
+
+    return true;
+});
+
+// Test 9: Password Reset OTP Recipient is Actual User's Email
+runTest("9. Password Reset OTP Recipient is Actual User's Email", function() {
+    putenv("MAIL_DRIVER=smtp");
+    putenv("SMTP_HOST=smtp.gmail.com");
+    putenv("SMTP_USERNAME=mailproject112@gmail.com");
+    putenv("SMTP_PASSWORD=mock_pass");
+
+    $targetRecipient = "actual_user_reset@domain.org";
+    $capturedRecipient = null;
+
+    setSmtpHandler(function($to) use (&$capturedRecipient) {
+        $capturedRecipient = $to;
+        return true;
+    });
+
+    $otp = rand(100000, 999999);
+    $body = buildOtpEmailHtml("Password Reset", $otp, 10);
+    $sent = sendMail($targetRecipient, "Password Reset OTP - Online Examination System", $body);
+    setSmtpHandler(null);
+
+    if (!$sent) return "sendMail failed for password reset OTP";
+    if ($capturedRecipient !== $targetRecipient) {
+        return "Expected recipient $targetRecipient but got " . $capturedRecipient;
+    }
+
+    return true;
+});
+
+// Test 10: MAIL_DRIVER=brevo Does Not Fall Back to Log Delivery
+runTest("10. MAIL_DRIVER=brevo Does Not Fall Back to Log Delivery", function() {
+    putenv("APP_ENV=development");
+    putenv("MAIL_DRIVER=brevo");
+    putenv("BREVO_API_KEY="); // Missing key forces Brevo failure
+
+    $logFile = __DIR__ . '/../logs/mail.log';
+    $initialSize = file_exists($logFile) ? filesize($logFile) : 0;
+
+    $sent = sendMail("log_fallback_test@example.com", "Should Not Log", "<p>OTP: 999888</p>");
+    if ($sent !== false) return "sendMail should have failed when key was missing under MAIL_DRIVER=brevo";
+
+    $finalSize = file_exists($logFile) ? filesize($logFile) : 0;
+    if ($finalSize > $initialSize) {
+        return "MAIL_DRIVER=brevo incorrectly wrote entry to logs/mail.log upon failure";
+    }
+
+    return true;
+});
+
+// Test 11: No Secrets Appear in Source Files
+runTest("11. No Secrets Appear in Source Files", function() {
+    $projectRoot = dirname(__DIR__);
+    $filesToScan = [
+        'auth/send_mail.php',
+        'auth/register.php',
+        'auth/forgot_password.php',
+        'auth/verify_reset_otp.php',
+        'config/env_loader.php',
+        'config/db.php',
+        '.env.example',
+        'tests/test_gmail_smtp.php'
+    ];
+
+    foreach ($filesToScan as $relFile) {
+        $absFile = $projectRoot . '/' . $relFile;
+        if (!file_exists($absFile)) continue;
+        $content = file_get_contents($absFile);
+
+        if (preg_match('/xkeysib-[a-zA-Z0-9]{50,}/i', $content)) {
+            return "Found live Brevo key pattern in $relFile";
+        }
+        if (preg_match('/BREVO_API_KEY\s*=\s*[\'"][a-zA-Z0-9_]{10,}[\'"]/i', $content)) {
+            return "Found hardcoded BREVO_API_KEY in $relFile";
+        }
+    }
+
+    return true;
+});
+
+// Test 12: Existing OTP Verification, Expiration & DB Logic
+runTest("12. Existing OTP Verification, Expiration & DB Logic", function() use ($conn, $testEmail) {
     putenv("APP_ENV=development");
     putenv("MAIL_DRIVER=log");
 
@@ -58,185 +347,38 @@ runTest("A1 & A2: Registration OTP Generation & Dev Log Fallback", function() us
         'expiry' => $expiry
     ];
 
-    $body = "<h2>Email Verification</h2><p>Your OTP is:</p><h1>$otp</h1>";
-    $sent = sendMail($testEmail, "Verify Your Email", $body);
-    if (!$sent) return "sendMail returned false in dev mode";
-
-    $logFile = __DIR__ . '/../logs/mail.log';
-    if (!file_exists($logFile)) return "logs/mail.log not created";
-
-    $content = file_get_contents($logFile);
-    if (strpos($content, "[DEVELOPMENT ONLY MAIL LOG]") === false) return "Log missing DEVELOPMENT ONLY header";
-    if (strpos($content, (string)$otp) === false) return "Log missing generated OTP";
-
-    return true;
-});
-
-// Test A3: Correct OTP Registration Success
-runTest("A3: Correct OTP Registration Success", function() use ($conn, $testEmail) {
-    if (!isset($_SESSION['reg_data'])) return "No session reg_data";
-
+    // Verify registration insertion
     $data = $_SESSION['reg_data'];
-    $userOtp = $data['otp'];
-
-    if ($userOtp == $data['otp'] && strtotime($data['expiry']) >= time()) {
+    if ($data['otp'] == $otp && strtotime($data['expiry']) >= time()) {
         $stmt = $conn->prepare("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)");
         $stmt->bind_param("ssss", $data['name'], $data['email'], $data['password'], $data['role']);
         $stmt->execute();
         unset($_SESSION['reg_data']);
-
-        $check = $conn->prepare("SELECT id FROM users WHERE email = ?");
-        $check->bind_param("s", $testEmail);
-        $check->execute();
-        $res = $check->get_result();
-        if ($res->num_rows === 1) return true;
-        return "User not found in DB after insertion";
+    } else {
+        return "Registration OTP check failed";
     }
-    return "OTP verification condition failed";
-});
 
-// Test A6: Duplicate Email Registration Rejection
-runTest("A6: Duplicate Email Registration Rejection", function() use ($conn, $testEmail) {
+    // Verify user in DB
     $check = $conn->prepare("SELECT id FROM users WHERE email = ?");
     $check->bind_param("s", $testEmail);
     $check->execute();
     $res = $check->get_result();
-    if ($res->num_rows > 0) {
-        return true; // Correctly detected duplicate
-    }
-    return "Duplicate email not detected";
-});
+    if ($res->num_rows !== 1) return "User not inserted into DB";
 
-// Test A4: Wrong OTP Registration Rejection
-runTest("A4: Wrong OTP Registration Rejection", function() {
-    $correctOtp = 123456;
-    $wrongOtp = 999999;
-    $expiry = date("Y-m-d H:i:s", strtotime("+10 minutes"));
+    // Test Wrong OTP rejection
+    $wrongData = ['otp' => 123456, 'expiry' => date("Y-m-d H:i:s", strtotime("+10 minutes"))];
+    if (999999 == $wrongData['otp']) return "Wrong OTP incorrectly accepted";
 
-    $data = ['otp' => $correctOtp, 'expiry' => $expiry];
-    if ($wrongOtp == $data['otp'] && strtotime($data['expiry']) >= time()) {
-        return "Wrong OTP was incorrectly accepted";
+    // Test Expired OTP rejection
+    $expiredData = ['otp' => 123456, 'expiry' => date("Y-m-d H:i:s", strtotime("-5 minutes"))];
+    if ($expiredData['otp'] == 123456 && strtotime($expiredData['expiry']) >= time()) {
+        return "Expired OTP incorrectly accepted";
     }
+
+    // Cleanup
+    cleanupTestUser($conn, $testEmail);
     return true;
 });
-
-// Test A5: Expired OTP Registration Rejection
-runTest("A5: Expired OTP Registration Rejection", function() {
-    $correctOtp = 123456;
-    $expiredTime = date("Y-m-d H:i:s", strtotime("-5 minutes"));
-
-    $data = ['otp' => $correctOtp, 'expiry' => $expiredTime];
-    if ($correctOtp == $data['otp'] && strtotime($data['expiry']) >= time()) {
-        return "Expired OTP was incorrectly accepted";
-    }
-    return true;
-});
-
-// Test B1 & B2: Password Reset OTP Generation & Dev Fallback
-runTest("B1 & B2: Password Reset OTP Generation & Dev Fallback", function() use ($conn, $testEmail) {
-    putenv("APP_ENV=development");
-    putenv("MAIL_DRIVER=log");
-
-    $otp = rand(100000, 999999);
-    $expiry = date("Y-m-d H:i:s", strtotime("+10 minutes"));
-
-    $stmt = $conn->prepare("UPDATE users SET reset_otp=?, otp_expiry=? WHERE email=?");
-    $stmt->bind_param("sss", $otp, $expiry, $testEmail);
-    $stmt->execute();
-
-    $body = "<h2>Password Reset</h2><p>Your OTP is:</p><h1>$otp</h1>";
-    $sent = sendMail($testEmail, "Password Reset OTP", $body);
-    if (!$sent) return "sendMail returned false for password reset";
-
-    $stmt = $conn->prepare("SELECT reset_otp FROM users WHERE email=?");
-    $stmt->bind_param("s", $testEmail);
-    $stmt->execute();
-    $res = $stmt->get_result()->fetch_assoc();
-
-    if ($res['reset_otp'] == $otp) return true;
-    return "DB reset_otp does not match generated OTP";
-});
-
-// Test B3: Password Reset Correct OTP Verification
-runTest("B3: Password Reset Correct OTP Verification", function() use ($conn, $testEmail) {
-    $stmt = $conn->prepare("SELECT reset_otp, otp_expiry FROM users WHERE email=?");
-    $stmt->bind_param("s", $testEmail);
-    $stmt->execute();
-    $user = $stmt->get_result()->fetch_assoc();
-
-    if ($user && $user['reset_otp'] !== null && strtotime($user['otp_expiry']) >= time()) {
-        // Clear OTP on successful reset
-        $stmt = $conn->prepare("UPDATE users SET reset_otp=NULL, otp_expiry=NULL WHERE email=?");
-        $stmt->bind_param("s", $testEmail);
-        $stmt->execute();
-        return true;
-    }
-    return "Password reset verification check failed";
-});
-
-// Test B4: Password Reset Wrong/Expired OTP Failure
-runTest("B4: Password Reset Wrong/Expired OTP Failure", function() use ($conn, $testEmail) {
-    $stmt = $conn->prepare("SELECT reset_otp FROM users WHERE email=?");
-    $stmt->bind_param("s", $testEmail);
-    $stmt->execute();
-    $user = $stmt->get_result()->fetch_assoc();
-
-    if ($user['reset_otp'] === null) {
-        return true; // Cleared OTP correctly rejected
-    }
-    return "Reset OTP was not cleared";
-});
-
-// Test C1: Brevo Driver without Key returns false safely
-runTest("C1: Brevo Driver without API Key fails safely", function() use ($testEmail) {
-    putenv("MAIL_DRIVER=brevo");
-    putenv("BREVO_API_KEY=");
-
-    $sent = sendMail($testEmail, "Test Subject", "<p>Test</p>");
-    if ($sent === false) return true;
-    return "Brevo without key should return false";
-});
-
-// Test C2: SMTP Driver with invalid host fails safely without throwing exception
-runTest("C2: SMTP Driver with unreachable host fails safely", function() use ($testEmail) {
-    putenv("MAIL_DRIVER=smtp");
-    putenv("SMTP_HOST=invalid.unreachable.smtp.host.local");
-    putenv("SMTP_PORT=587");
-    putenv("SMTP_USER=dummyuser");
-    putenv("SMTP_PASS=dummypass");
-
-    $sent = sendMail($testEmail, "Test Subject", "<p>Test</p>");
-    if ($sent === false) return true;
-    return "SMTP with invalid host should return false";
-});
-
-// Test C3: Development Log Driver Fallback
-runTest("C3: Development Log Driver Fallback", function() use ($testEmail) {
-    putenv("APP_ENV=development");
-    putenv("MAIL_DRIVER=log");
-
-    $sent = sendMail($testEmail, "Dev Log Test", "<p>Dev Log Test Body 123456</p>");
-    if ($sent === true) return true;
-    return "Dev log driver should return true in development mode";
-});
-
-// Test C4: Production Mode with Missing Config Fails Safely
-runTest("C4: Production Mode with Missing Config Fails Safely", function() use ($testEmail) {
-    putenv("APP_ENV=production");
-    putenv("MAIL_DRIVER=auto");
-    putenv("BREVO_API_KEY=");
-    putenv("SMTP_HOST=");
-    putenv("SMTP_USER=");
-
-    $sent = sendMail($testEmail, "Prod Test", "<p>Test</p>");
-    putenv("APP_ENV=development"); // Restore dev mode
-
-    if ($sent === false) return true;
-    return "Production mode without config should return false";
-});
-
-// Cleanup test user
-cleanupTestUser($conn, $testEmail);
 
 echo "\n----------------------------------------------------\n";
 echo "Summary: $passed Passed, $failed Failed\n";

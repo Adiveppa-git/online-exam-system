@@ -108,11 +108,7 @@ class VectorStoreManager:
                 where=filter_arg
             )
         except Exception as e:
-            # Fallback query without where filter if filter fails or empty
-            results = self.collection.query(
-                query_texts=[query],
-                n_results=top_k
-            )
+            results = None
 
         output_chunks: List[Dict[str, Any]] = []
 

@@ -35,6 +35,11 @@ class AskRequest(BaseModel):
     topic: Optional[str] = Field(default=None)
     top_k: Optional[int] = Field(default=None, ge=1, le=10)
     threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    student_id: Optional[int] = Field(default=None)
+    history: Optional[List[Dict[str, Any]]] = Field(default=None)
+    user_context: Optional[Dict[str, Any]] = Field(default=None)
+    system_stats: Optional[Dict[str, Any]] = Field(default=None)
+    other_users_info: Optional[List[Dict[str, Any]]] = Field(default=None)
 
 class SourceCitation(BaseModel):
     filename: str
@@ -46,6 +51,8 @@ class AskResponse(BaseModel):
     has_sufficient_context: bool
     sources: List[SourceCitation]
     retrieved_chunks: List[Dict[str, Any]]
+    intent: Optional[str] = Field(default="academic_question")
+    is_conversational: Optional[bool] = Field(default=False)
 
 @router.post("/rag/ingest", response_model=IngestResponse)
 def ingest_document(request: IngestRequest):
@@ -92,7 +99,12 @@ def ask_rag(request: AskRequest):
             subject=request.subject,
             topic=request.topic,
             top_k=request.top_k,
-            threshold=request.threshold
+            threshold=request.threshold,
+            student_id=request.student_id,
+            history=request.history,
+            user_context=request.user_context,
+            system_stats=request.system_stats,
+            other_users_info=request.other_users_info
         )
         return AskResponse(**res)
     except Exception as e:

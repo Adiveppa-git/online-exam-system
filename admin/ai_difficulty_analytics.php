@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 $topic_acc_res = $conn->query("
     SELECT q.topic,
            COUNT(sa.id) AS total,
-           SUM(CASE WHEN sa.answer = q.correct_option THEN 1 ELSE 0 END) AS correct
+           SUM(CASE WHEN TRIM(sa.answer) = TRIM(q.correct_option) THEN 1 ELSE 0 END) AS correct
     FROM questions q
     JOIN student_answers sa ON q.id = sa.question_id
     GROUP BY q.topic
@@ -65,7 +65,7 @@ if ($topic_acc_res) {
 $subj_acc_res = $conn->query("
     SELECT q.subject,
            COUNT(sa.id) AS total,
-           SUM(CASE WHEN sa.answer = q.correct_option THEN 1 ELSE 0 END) AS correct
+           SUM(CASE WHEN TRIM(sa.answer) = TRIM(q.correct_option) THEN 1 ELSE 0 END) AS correct
     FROM questions q
     JOIN student_answers sa ON q.id = sa.question_id
     GROUP BY q.subject
@@ -84,7 +84,7 @@ if ($subj_acc_res) {
 $query = "
     SELECT q.id, q.question, q.subject, q.topic, q.difficulty AS assigned_difficulty, q.correct_option,
            COUNT(sa.id) AS total_attempts,
-           SUM(CASE WHEN sa.answer = q.correct_option THEN 1 ELSE 0 END) AS correct_attempts,
+           SUM(CASE WHEN TRIM(sa.answer) = TRIM(q.correct_option) THEN 1 ELSE 0 END) AS correct_attempts,
            COUNT(DISTINCT sa.student_id) AS unique_students,
            e.title AS exam_title
     FROM questions q
@@ -117,7 +117,7 @@ while ($row = $res->fetch_assoc()) {
         'unique_students' => $students,
         'topic_avg_accuracy' => $topic_avg,
         'subject_avg_accuracy' => $subject_avg,
-        'min_attempts_threshold' => 5
+        'min_attempts_threshold' => 3
     ];
 
     $mlResp = $aiClient->predictQuestionDifficulty($mlInput);
@@ -131,7 +131,7 @@ while ($row = $res->fetch_assoc()) {
         $disclaimer = $mlData['disclaimer'] ?? 'Synthetic Benchmark — Pipeline Validation Only.';
     } else {
         // Offline Fallback
-        if ($attempts < 5) {
+        if ($attempts < 3) {
             $pred_diff = 'insufficient_data';
             $conf = 0.0;
             $status = 'insufficient_real_data';
@@ -268,29 +268,27 @@ while ($row = $res->fetch_assoc()) {
 
         <!-- SCIENTIFIC CORRECTION NOTICE BANNER -->
         <div class="notice-box">
-            🧪 <strong>Mode: SYNTHETIC BENCHMARK (Pipeline Validation Only)</strong><br>
-            The ML model pipeline is currently validated using synthetic interaction benchmarks because current active questions have insufficient real student attempts (&lt; 5). Synthetic benchmark predictions validate system integration and do <strong>not</strong> represent real-world student accuracy.
+            🧪 <strong>Cold-Start Protection Rule:</strong> Real student attempts must be &ge; 3 before an empirical ML prediction is made.
         </div>
 
         <div class="analytics-card">
             <table>
                 <thead>
                     <tr>
-                        <th>ID</th>
+                        <th>SL No</th>
                         <th>Question</th>
                         <th>Exam / Topic</th>
                         <th>Assigned</th>
                         <th>Attempts / Accuracy</th>
                         <th>ML Prediction</th>
-                        <th>Data Mode / Status</th>
-                        <th>Action</th>
+                        <th>Recommendation</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($analyzed_questions as $q): ?>
+                    <?php $sl_no = 1; foreach ($analyzed_questions as $q): ?>
                         <tr>
-                            <td>#<?= $q['id'] ?></td>
-                            <td style="max-width: 220px;">
+                            <td><?= $sl_no++ ?></td>
+                            <td style="max-width: 280px; word-break: break-word;">
                                 <strong><?= htmlspecialchars($q['question']) ?></strong>
                             </td>
                             <td>
@@ -303,26 +301,22 @@ while ($row = $res->fetch_assoc()) {
                                 </span>
                             </td>
                             <td>
-                                <div><strong><?= $q['total_attempts'] ?></strong> attempts</div>
-                                <div style="font-size:12px; color:#64748b;"><?= $q['correct_rate_pct'] ?>% correct</div>
+                                <?php if ($q['total_attempts'] < 3): ?>
+                                    <div><strong>Real attempts: <?= $q['total_attempts'] ?> / 3</strong></div>
+                                    <div style="font-size:12px; color:#d97706;">Awaiting <?= (3 - $q['total_attempts']) ?> more real attempt(s)</div>
+                                <?php else: ?>
+                                    <div><strong><?= $q['total_attempts'] ?></strong> attempts</div>
+                                    <div style="font-size:12px; color:#64748b;"><?= $q['correct_rate_pct'] ?>% correct</div>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <?php if ($q['ml_status'] === 'insufficient_real_data' || $q['predicted_difficulty'] === 'insufficient_data'): ?>
-                                    <span class="badge-diff diff-insufficient_data">Insufficient Data</span>
+                                    <span class="badge-diff diff-insufficient_data">INSUFFICIENT DATA</span>
                                 <?php else: ?>
                                     <span class="badge-diff diff-<?= $q['predicted_difficulty'] ?>">
                                         <?= strtoupper($q['predicted_difficulty']) ?>
                                     </span>
                                     <div style="font-size: 11px; color: #64748b;"><?= $q['confidence'] ?>% conf</div>
-                                <?php endif; ?>
-                            </td>
-                            <td>
-                                <?php if ($q['ml_status'] === 'insufficient_real_data' || $q['predicted_difficulty'] === 'insufficient_data'): ?>
-                                    <span class="mode-tag mode-insufficient">INSUFFICIENT REAL DATA</span>
-                                <?php elseif ($q['data_mode'] === 'synthetic_benchmark'): ?>
-                                    <span class="mode-tag mode-synthetic">SYNTHETIC BENCHMARK</span>
-                                <?php else: ?>
-                                    <span class="mode-tag mode-real">REAL-DATA PREDICTION</span>
                                 <?php endif; ?>
                             </td>
                             <td>
@@ -341,7 +335,7 @@ while ($row = $res->fetch_assoc()) {
                                     </form>
                                     <div style="font-size:11px; color:#d97706; margin-top:4px;">⚠️ Suggested update</div>
                                 <?php else: ?>
-                                    <span style="font-size:12px; color:#9ca3af;">Awaiting data</span>
+                                    <span style="font-size:12px; color:#6b7280; font-weight: 500;">Awaiting 3 real attempts</span>
                                 <?php endif; ?>
                             </td>
                         </tr>
