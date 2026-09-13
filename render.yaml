@@ -7,6 +7,7 @@ services:
     name: exam-online-php
     runtime: docker
     dockerfilePath: ./Dockerfile
+    dockerContext: .
     plan: free
     healthCheckPath: /index.php
     envVars:
@@ -42,6 +43,7 @@ services:
     name: exam-online-ai
     runtime: docker
     dockerfilePath: ./ai-service/Dockerfile
+    dockerContext: ./ai-service
     plan: free
     healthCheckPath: /health
     envVars:
