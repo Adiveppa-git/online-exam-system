@@ -1,0 +1,65 @@
+# Render Infrastructure-as-Code Blueprint
+# Completely Free Tier Cloud Deployment for Online Examination & AI System
+
+services:
+  # 1. PHP Web Application Service
+  - type: web
+    name: exam-online-php
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /index.php
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: DB_DRIVER
+        value: pgsql
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        value: postgres
+      - key: DB_USER
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PASS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: course-materials
+      - key: AI_SERVICE_URL
+        sync: false
+      - key: AI_SERVICE_KEY
+        sync: false
+
+  # 2. FastAPI AI Service
+  - type: web
+    name: exam-online-ai
+    runtime: docker
+    dockerfilePath: ./ai-service/Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: VECTOR_STORE_TYPE
+        value: pgvector
+      - key: EMBEDDING_MODEL_NAME
+        value: BAAI/bge-small-en-v1.5
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: course-materials
+      - key: INTERNAL_API_KEY
+        sync: false

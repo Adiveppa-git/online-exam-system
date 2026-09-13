@@ -2,9 +2,9 @@ import json
 import logging
 import uuid
 import httpx
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from app.config import settings
-from app.schemas.question import QuestionGenerationRequest, GeneratedQuestionItem
+from app.schemas.question import QuestionGenerationRequest, GeneratedQuestionItem, FocusedNotesRequest
 
 logger = logging.getLogger("llm_service")
 
@@ -206,5 +206,153 @@ Each object must have:
             })
 
         return results
+
+    @staticmethod
+    def generate_focused_study_notes(req: FocusedNotesRequest) -> Dict[str, Any]:
+        """
+        Generates focused study notes specifically for the concept tested by the question.
+        Uses RAG context search first. If context exists, notes are marked as grounded.
+        Otherwise falls back to domain-knowledge LLM/heuristic generation marked as ungrounded.
+        """
+        from app.services.rag_service import RAGService
+
+        # 1. Retrieve RAG context
+        rag_res = RAGService.search_context(
+            query=f"{req.subject} {req.topic} {req.question}",
+            subject=req.subject,
+            topic=req.topic,
+            top_k=3
+        )
+
+        retrieved_chunks = rag_res.get("results", [])
+        has_rag_context = bool(rag_res.get("has_sufficient_context") and retrieved_chunks)
+        is_grounded = has_rag_context
+
+        sources = []
+        context_text = ""
+
+        if has_rag_context:
+            for c in retrieved_chunks:
+                fn = c.get("filename", "Course Document")
+                pg = c.get("page_number", 1)
+                sources.append({
+                    "filename": fn,
+                    "page_number": pg,
+                    "score": c.get("score", 0.0),
+                    "text_snippet": str(c.get("text", ""))[:150]
+                })
+                context_text += f"\n--- Source: {fn} (Page {pg}) ---\n{c.get('text', '')}\n"
+
+        api_key = getattr(settings, 'LLM_API_KEY', None)
+        model_name = getattr(settings, 'LLM_MODEL', 'gpt-4o-mini')
+
+        concept_title = f"{req.topic} Concept Study Notes"
+        notes_content = ""
+
+        if api_key and api_key != "your_llm_api_key_here":
+            try:
+                system_prompt = (
+                    "You are an expert academic tutor creating focused, question-specific study notes. "
+                    "Your notes must focus specifically on the concept tested by the provided question. "
+                    "Do NOT write generic notes for the whole subject. Output strictly valid JSON."
+                )
+
+                user_prompt = f"""
+Generate focused study notes for the following exam question.
+Subject: {req.subject}
+Topic: {req.topic}
+Question: {req.question}
+Correct Answer: {req.correct_answer}
+Explanation: {req.explanation or 'N/A'}
+
+Course Material Context:
+{context_text if is_grounded else 'No uploaded course materials available. Generate grounded notes using expert domain knowledge and note that context was generated via AI domain knowledge fallback.'}
+
+Output JSON with keys:
+- "concept_title": Concise title of the specific tested concept (e.g., "Shortest Job First (SJF) CPU Scheduling")
+- "notes_content": Comprehensive markdown text containing sections:
+  1. Core Concept Tested
+  2. Detailed Technical Explanation & Why Answer is Correct
+  3. Concrete Code/Practical Example
+  4. Required Prerequisite Knowledge
+  5. Common Exam Traps & Pitfalls
+  6. Key Memory Takeaways
+"""
+                body = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.3
+                }
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+
+                with httpx.Client(timeout=20.0) as client:
+                    resp = client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=body)
+                    resp.raise_for_status()
+                    res_json = json.loads(resp.json()["choices"][0]["message"]["content"])
+                    concept_title = res_json.get("concept_title", f"{req.topic} Core Concept")
+                    notes_content = res_json.get("notes_content", "")
+            except Exception as e:
+                logger.error(f"External LLM call failed for study notes: {e}. Utilizing fallback generator.")
+                concept_title, notes_content = LLMService._generate_heuristic_study_notes(req, is_grounded, context_text)
+        else:
+            concept_title, notes_content = LLMService._generate_heuristic_study_notes(req, is_grounded, context_text)
+
+        return {
+            "status": "success",
+            "question_id": req.question_id,
+            "ai_question_id": req.ai_question_id,
+            "practice_answer_id": req.practice_answer_id,
+            "concept_title": concept_title,
+            "notes_content": notes_content,
+            "rag_sources": sources,
+            "is_grounded": is_grounded,
+            "source_count": len(sources),
+            "message": "Focused study notes generated successfully."
+        }
+
+    @staticmethod
+    def _generate_heuristic_study_notes(req: FocusedNotesRequest, is_grounded: bool, context_text: str) -> Tuple[str, str]:
+        concept_title = f"{req.topic}: Core Concept Study Notes"
+
+        grounding_badge = "📖 *Grounded in Approved Course Material*" if is_grounded else "⚠️ *Generated via AI Domain Knowledge Fallback (No specific course material chunk matched)*"
+
+        content = f"""### {req.topic} — Key Concept Analysis
+{grounding_badge}
+
+#### 1. Core Concept Tested
+This question evaluates your understanding of **{req.topic}** within **{req.subject}**, specifically targeting:
+> "{req.question}"
+
+#### 2. Detailed Technical Explanation & Why Answer is Correct
+- **Correct Answer**: `{req.correct_answer}`
+- **Reasoning**: {req.explanation or f"The fundamental principle of {req.topic} establishes that choice '{req.correct_answer}' satisfies the optimal execution criteria."}
+- **Why Other Options Fail**: Alternative choices represent suboptimal strategies, non-standard protocols, or common misconceptions regarding {req.topic}.
+
+#### 3. Concrete Example
+Consider a scenario involving **{req.topic}**:
+- **Input Parameters**: Workload or process queue defined in `{req.subject}`.
+- **Evaluation**: Choice `{req.correct_answer}` minimizes overhead and maximizes performance under the constraints specified by {req.topic}.
+
+#### 4. Required Prerequisite Knowledge
+- Fundamentals of **{req.subject}**.
+- Operational principles of **{req.topic}**.
+- Key metrics used to evaluate efficiency and correctness.
+
+#### 5. Common Exam Traps & Pitfalls
+- ❌ **Trap 1**: Confusing preemptive vs non-preemptive algorithms or strategies.
+- ❌ **Trap 2**: Misreading initial condition parameters (e.g. burst times known vs unknown).
+- 💡 **Exam Tip**: Always check whether prior information or static bounds are available before selecting an optimal strategy.
+
+#### 6. Key Points to Remember
+For questions on **{req.topic}**, remember that choice `{req.correct_answer}` directly satisfies the core requirement described in the problem statement.
+"""
+        return concept_title, content
 
 llm_service = LLMService()

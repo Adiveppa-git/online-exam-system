@@ -11,7 +11,7 @@
 The platform distinguishes strictly between four core AI/ML techniques:
 1. **Deterministic Analytics Engine**: Computes exact mathematical metrics (accuracy, performance trend, bounded priority scores). LLMs are **never** permitted to decide numerical metrics or classifications.
 2. **Machine Learning Models**: Random Forest and Logistic Regression estimating empirical item difficulty from interaction features.
-3. **Retrieval-Augmented Generation (RAG)**: `sentence-transformers` embedding search in `ChromaDB` providing course material context with exact page citations.
+3. **Retrieval-Augmented Generation (RAG)**: `FastEmbed` / `sentence-transformers` vector search in `ChromaDB` (local) or Supabase `pgvector` (cloud) providing course material context with exact page citations.
 4. **Large Language Models (LLM)**: Serves exclusively as a structured generator (MCQ generation) and natural-language explanation layer.
 
 ---

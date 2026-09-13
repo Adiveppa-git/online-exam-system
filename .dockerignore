@@ -1,0 +1,14 @@
+.git/
+.gitignore
+.env
+.venv/
+ai-service/.venv/
+ai-service/data/chroma_db/
+uploads/course_materials/*
+!uploads/course_materials/.gitkeep
+logs/
+scratch/
+mysql-8.0.36-winx64/
+mysql.zip
+node_modules/
+.pytest_cache/

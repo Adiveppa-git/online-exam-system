@@ -162,6 +162,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    if ($action === 'generate_notes') {
+        require_once "../config/ai_client.php";
+
+        // Deduplication & DB Caching Check
+        $cachedNotes = null;
+        try {
+            $stmtChk = $conn->prepare("SELECT * FROM question_study_notes WHERE ai_question_id = ? ORDER BY id DESC LIMIT 1");
+            if ($stmtChk) {
+                $stmtChk->bind_param("i", $qid);
+                $stmtChk->execute();
+                $cachedNotes = $stmtChk->get_result()->fetch_assoc();
+            }
+        } catch (Exception $ex) {
+            // Table may not be migrated yet
+        }
+
+        if ($cachedNotes) {
+            $_SESSION['success'] = "Loaded cached focused study notes for question #" . $qid . ".";
+            $_SESSION['generated_notes_' . $qid] = [
+                'title' => $cachedNotes['concept_title'],
+                'content' => $cachedNotes['notes_content'],
+                'grounded' => (bool)$cachedNotes['is_grounded']
+            ];
+        } else {
+            $aiClient = new AiClient();
+            $stmtQ = $conn->prepare("SELECT * FROM ai_generated_questions WHERE id = ?");
+            $stmtQ->bind_param("i", $qid);
+            $stmtQ->execute();
+            $gq = $stmtQ->get_result()->fetch_assoc();
+
+            if ($gq) {
+                $notesRes = $aiClient->generateFocusedStudyNotes(
+                    $gq['question'],
+                    $gq['subject'],
+                    $gq['topic'],
+                    $gq['correct_option'],
+                    $gq['explanation'] ?? '',
+                    null,
+                    $gq['id'],
+                    null
+                );
+
+                if (!empty($notesRes['success']) || ($notesRes['data']['status'] ?? '') === 'success') {
+                    $notesData = $notesRes['data'] ?? $notesRes;
+                    $conceptTitle = $notesData['concept_title'] ?? ($gq['topic'] . ' Concept');
+                    $notesContent = $notesData['notes_content'] ?? '';
+                    $ragSources = json_encode($notesData['rag_sources'] ?? []);
+                    $isGrounded = !empty($notesData['is_grounded']) ? 1 : 0;
+                    $sourceCount = (int)($notesData['source_count'] ?? 0);
+
+                    try {
+                        $insNotes = $conn->prepare("INSERT INTO question_study_notes (ai_question_id, subject, topic, concept_title, notes_content, rag_sources, is_grounded, source_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                        if ($insNotes) {
+                            $insNotes->bind_param("isssssii", $qid, $gq['subject'], $gq['topic'], $conceptTitle, $notesContent, $ragSources, $isGrounded, $sourceCount);
+                            $insNotes->execute();
+                        }
+                    } catch (Exception $ex) {
+                        // Migration fallback
+                    }
+
+                    $_SESSION['success'] = "Generated focused study notes for question #" . $qid . "! (" . ($isGrounded ? "Grounded in RAG Course Material" : "AI Domain Knowledge Fallback") . ")";
+                    $_SESSION['generated_notes_' . $qid] = [
+                        'title' => $conceptTitle,
+                        'content' => $notesContent,
+                        'grounded' => $isGrounded
+                    ];
+                } else {
+                    $_SESSION['error'] = "Failed to generate study notes: " . ($notesRes['message'] ?? 'AI Service Error');
+                }
+            }
+        }
+        header("Location: review_ai_questions.php?status=" . urlencode($status_filter) . ($request_id_filter ? "&request_id=" . urlencode($request_id_filter) : ""));
+        exit;
+    }
+
     if ($action === 'edit') {
         $question = trim($_POST['question'] ?? '');
         $a = trim($_POST['option_a'] ?? '');
@@ -494,7 +569,22 @@ $cnt_active = $conn->query("SELECT COUNT(*) AS c FROM questions")->fetch_assoc()
                                 <input type="hidden" name="rejection_reason" id="rej_reason_<?= $q['id'] ?>">
                                 <button type="submit" class="btn-action btn-reject">✖ Reject</button>
                             </form>
+
+                            <!-- GENERATE NOTES FORM -->
+                            <form method="POST">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
+                                <input type="hidden" name="action" value="generate_notes">
+                                <input type="hidden" name="question_id" value="<?= $q['id'] ?>">
+                                <button type="submit" class="btn-action" style="background: #0284c7; color: white; border: none;">📘 Generate Study Notes</button>
+                            </form>
                         <?php else: ?>
+                            <!-- GENERATE NOTES FORM FOR APPROVED/REJECTED AS WELL -->
+                            <form method="POST" style="display: inline-block; margin-right: 10px;">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
+                                <input type="hidden" name="action" value="generate_notes">
+                                <input type="hidden" name="question_id" value="<?= $q['id'] ?>">
+                                <button type="submit" class="btn-action" style="background: #0284c7; color: white; border: none;">📘 Generate Study Notes</button>
+                            </form>
                             <span style="font-size: 13px; color: #6b7280;">
                                 Reviewed at: <?= htmlspecialchars($q['reviewed_at'] ?? 'N/A') ?>
                             </span>
@@ -573,7 +663,7 @@ function confirmBulkApprove(form) {
         alert("Please select an exam to assign the pending questions to.");
         return false;
     }
-    return confirm("Are you sure you want to approve and publish all pending questions to the selected exam?");
+    return true;
 }
 
 function toggleEdit(id) {
@@ -586,9 +676,6 @@ function toggleEdit(id) {
 }
 
 function confirmReject(form) {
-    const reason = prompt("Optional: Enter reason for rejecting this question:");
-    if (reason === null) return false;
-    form.querySelector('input[name="rejection_reason"]').value = reason;
     return true;
 }
 </script>

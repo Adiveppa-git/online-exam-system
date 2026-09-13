@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 session_start();
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/ai_client.php';
@@ -44,47 +44,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $message = "Invalid file type. Only PDF, TXT, and MD files are supported.";
                     $message_type = "danger";
                 } else {
-                    $uploadDir = __DIR__ . '/../uploads/course_materials/';
-                    if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0755, true);
+                    $supabaseUrl    = getenv('SUPABASE_URL');
+                    $supabaseKey    = getenv('SUPABASE_KEY');
+                    $supabaseBucket = getenv('SUPABASE_BUCKET') ?: 'course-materials';
+                    $targetPath     = '';
+                    $uploadedSuccessfully = false;
+
+                    if (!empty($supabaseUrl) && !empty($supabaseKey)) {
+                        // Cloud Mode: Upload to Supabase Storage Bucket
+                        $safeName = time() . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
+                        $objectPath = "materials/" . $safeName;
+                        $uploadUrl = rtrim($supabaseUrl, '/') . "/storage/v1/object/" . $supabaseBucket . "/" . $objectPath;
+                        $fileContent = file_get_contents($file['tmp_name']);
+
+                        $ch = curl_init($uploadUrl);
+                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+                        curl_setopt($ch, CURLOPT_POSTFIELDS, $fileContent);
+                        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                            "Authorization: Bearer {$supabaseKey}",
+                            "apiKey: {$supabaseKey}",
+                            "Content-Type: " . ($file['type'] ?: 'application/octet-stream')
+                        ]);
+                        $supaRes = curl_exec($ch);
+                        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                        curl_close($ch);
+
+                        if ($httpCode >= 200 && $httpCode < 300) {
+                            $targetPath = rtrim($supabaseUrl, '/') . "/storage/v1/object/authenticated/" . $supabaseBucket . "/" . $objectPath;
+                            $uploadedSuccessfully = true;
+                        } else {
+                            $message = "Supabase Storage upload failed with HTTP status {$httpCode}.";
+                            $message_type = "danger";
+                        }
+                    } else {
+                        // Local Mode: Upload to local filesystem
+                        $uploadDir = __DIR__ . '/../uploads/course_materials/';
+                        if (!is_dir($uploadDir)) {
+                            mkdir($uploadDir, 0755, true);
+                        }
+                        $uniqueName = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file['name']);
+                        $targetPath = $uploadDir . $uniqueName;
+
+                        if (move_uploaded_file($file['tmp_name'], $targetPath)) {
+                            $uploadedSuccessfully = true;
+                        } else {
+                            $message = "Failed to save uploaded file on server filesystem.";
+                            $message_type = "danger";
+                        }
                     }
 
-                    $uniqueName = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file['name']);
-                    $targetPath = $uploadDir . $uniqueName;
+                    if ($uploadedSuccessfully) {
+                        // Insert document metadata row first
+                        $uploadedBy = (int)($_SESSION['user_id'] ?? 1);
+                        $fileSize   = (int)$file['size'];
+                        $insStmt = $conn->prepare("INSERT INTO ai_documents (filename, original_name, file_path, file_size, subject, topic, status, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)");
+                        $insStmt->bind_param("sssissi", $file['name'], $file['name'], $targetPath, $fileSize, $subject, $topic, $uploadedBy);
+                        $insStmt->execute();
+                        $docId = (int)$insStmt->insert_id;
 
-                    if (move_uploaded_file($file['tmp_name'], $targetPath)) {
                         // Call AI Client RAG Ingestion API
                         $aiClient = new AiClient();
-                        $ingestRes = $aiClient->ingestDocument($targetPath, $file['name'], $subject, $topic);
+                        $ingestRes = $aiClient->ingestDocument($targetPath, $docId, $file['name'], $subject, $topic);
 
                         if ($ingestRes['status'] === 'success') {
-                            $docData = $ingestRes['data'];
-                            $docId = (int)($docData['document_id'] ?? 0);
-                            $pages = (int)($docData['total_pages'] ?? 0);
+                            $docData = $ingestRes['data'] ?? [];
+                            $pages = (int)($docData['total_pages'] ?? 1);
                             $chunks = (int)($docData['total_chunks'] ?? 0);
 
-                            // Sync DB status to ingested
-                            $stmt = $conn->prepare("UPDATE ai_documents SET status = 'ingested' WHERE id = ?");
-                            $stmt->bind_param("i", $docId);
-                            $stmt->execute();
+                            $updStmt = $conn->prepare("UPDATE ai_documents SET status = 'ingested', total_pages = ?, total_chunks = ? WHERE id = ?");
+                            $updStmt->bind_param("iii", $pages, $chunks, $docId);
+                            $updStmt->execute();
 
                             $message = "Course material '{$file['name']}' uploaded and ingested successfully into RAG Vector Store! ({$chunks} text chunks generated across {$pages} pages)";
                             $message_type = "success";
                         } else {
                             $errMsg = $ingestRes['message'] ?? 'RAG Ingestion Service failed.';
+                            $updStmt = $conn->prepare("UPDATE ai_documents SET status = 'failed', error_message = ? WHERE id = ?");
+                            $updStmt->bind_param("si", $errMsg, $docId);
+                            $updStmt->execute();
+
                             $message = "File uploaded, but RAG Ingestion failed: " . htmlspecialchars($errMsg);
                             $message_type = "warning";
                         }
-                    } else {
-                        $message = "Failed to save uploaded file on server.";
-                        $message_type = "danger";
                     }
                 }
             }
         } elseif ($action === 'delete_material') {
             $docId = (int)($_POST['doc_id'] ?? 0);
             if ($docId > 0) {
-                // Fetch document details
                 $stmt = $conn->prepare("SELECT file_path, subject, topic FROM ai_documents WHERE id = ?");
                 $stmt->bind_param("i", $docId);
                 $stmt->execute();
@@ -94,12 +142,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $aiClient = new AiClient();
                     $delRes = $aiClient->deleteDocument($docId);
 
-                    // Delete file from disk if exists
-                    if (file_exists($res['file_path'])) {
+                    // If Supabase Storage URL, send HTTP DELETE to Supabase API
+                    $supabaseUrl    = getenv('SUPABASE_URL');
+                    $supabaseKey    = getenv('SUPABASE_KEY');
+                    $supabaseBucket = getenv('SUPABASE_BUCKET') ?: 'course-materials';
+
+                    if (str_contains($res['file_path'], '/storage/v1/object/') && !empty($supabaseKey)) {
+                        $objKey = preg_replace('#^.*/storage/v1/object/(public|authenticated)/' . preg_quote($supabaseBucket, '#') . '/#', '', $res['file_path']);
+                        $delUrl = rtrim($supabaseUrl, '/') . "/storage/v1/object/" . $supabaseBucket . "/" . $objKey;
+                        $ch = curl_init($delUrl);
+                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
+                        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                            "Authorization: Bearer {$supabaseKey}",
+                            "apiKey: {$supabaseKey}"
+                        ]);
+                        curl_exec($ch);
+                        curl_close($ch);
+                    } elseif (file_exists($res['file_path'])) {
                         @unlink($res['file_path']);
                     }
 
-                    // Delete metadata from database
                     $delStmt = $conn->prepare("DELETE FROM ai_documents WHERE id = ?");
                     $delStmt->bind_param("i", $docId);
                     $delStmt->execute();
@@ -175,33 +238,33 @@ if ($res) {
             </div>
         <?php endif; ?>
 
-        <!-- Upload Form Card -->
-        <div class="card border-0 shadow-sm mb-4 rounded-3 w-100">
+        <!-- Manual Upload Card -->
+        <div class="card border-0 shadow-sm rounded-3 mb-4">
             <div class="card-header bg-white py-3">
-                <h5 class="card-title fw-bold text-dark mb-0"><i class="fa-solid fa-cloud-arrow-up text-primary me-2"></i>Upload New Study Material</h5>
+                <h5 class="card-title fw-bold text-dark mb-0">
+                    <i class="fa-solid fa-cloud-arrow-up text-primary me-2"></i>Upload My Own Material
+                </h5>
             </div>
             <div class="card-body p-4">
+                <p class="text-muted small mb-3">Upload your own PDF, TXT, or MD course notes manually from your filesystem.</p>
                 <form method="POST" enctype="multipart/form-data" class="row g-3">
                     <input type="hidden" name="action" value="upload_material">
                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
 
-                    <div class="col-md-4">
+                    <div class="col-md-6">
                         <label class="form-label fw-semibold">Subject / Course</label>
                         <input type="text" name="subject" class="form-control" placeholder="e.g. Operating Systems" required>
                     </div>
-
-                    <div class="col-md-4">
+                    <div class="col-md-6">
                         <label class="form-label fw-semibold">Topic / Module</label>
                         <input type="text" name="topic" class="form-control" placeholder="e.g. Process Management" required>
                     </div>
-
-                    <div class="col-md-4">
+                    <div class="col-12">
                         <label class="form-label fw-semibold">Course File (.pdf, .txt, .md)</label>
                         <input type="file" name="material_file" class="form-control" accept=".pdf,.txt,.md" required>
                     </div>
-
                     <div class="col-12 mt-3">
-                        <button type="submit" class="btn btn-primary fw-semibold px-4">
+                        <button type="submit" class="btn btn-primary fw-semibold px-4 py-2">
                             <i class="fa-solid fa-upload me-2"></i>Upload &amp; Index Material
                         </button>
                     </div>
@@ -258,7 +321,7 @@ if ($res) {
                                         </td>
                                         <td class="small text-muted"><?= date('M d, Y H:i', strtotime($doc['created_at'])) ?></td>
                                         <td>
-                                            <form method="POST" onsubmit="return confirm('Are you sure you want to delete this document and remove its vectors?');">
+                                            <form method="POST">
                                                 <input type="hidden" name="action" value="delete_material">
                                                 <input type="hidden" name="doc_id" value="<?= $doc['id'] ?>">
                                                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
@@ -279,6 +342,6 @@ if ($res) {
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></script>
 </body>
 </html>

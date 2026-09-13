@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Literal
+from typing import Dict, List, Optional, Literal, Any
 from pydantic import BaseModel, Field, field_validator
 
 class QuestionGenerationRequest(BaseModel):
@@ -52,3 +52,33 @@ class QuestionGenerationResponse(BaseModel):
     model_used: str = Field(...)
     questions: List[GeneratedQuestionItem] = Field(default_factory=list)
     error_message: Optional[str] = None
+
+class FocusedNotesRequest(BaseModel):
+    question_id: Optional[int] = Field(None, description="Optional active question ID")
+    ai_question_id: Optional[int] = Field(None, description="Optional AI staged question ID")
+    practice_answer_id: Optional[int] = Field(None, description="Optional practice answer ID")
+    question: str = Field(..., min_length=5, description="Full question text")
+    subject: str = Field(..., min_length=1, max_length=100, description="Subject name")
+    topic: str = Field(..., min_length=1, max_length=100, description="Topic name")
+    correct_answer: Optional[str] = Field("A", description="Correct answer option or text")
+    explanation: Optional[str] = Field("", description="Existing brief answer explanation")
+    options: Optional[Dict[str, str]] = Field(None, description="Optional choices dictionary")
+
+    @field_validator('question', 'subject', 'topic')
+    def validate_non_empty(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            raise ValueError("Field cannot be blank")
+        return s
+
+class FocusedNotesResponse(BaseModel):
+    status: Literal["success", "error"] = "success"
+    question_id: Optional[int] = None
+    ai_question_id: Optional[int] = None
+    practice_answer_id: Optional[int] = None
+    concept_title: str = Field(..., description="Title of the specific tested concept")
+    notes_content: str = Field(..., description="Detailed structured study notes")
+    rag_sources: List[Dict[str, Any]] = Field(default_factory=list, description="Citations from course materials")
+    is_grounded: bool = Field(False, description="True if grounded in approved course material chunks")
+    source_count: int = Field(0, description="Number of retrieved RAG source chunks")
+    message: Optional[str] = None

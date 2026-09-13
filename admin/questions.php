@@ -422,7 +422,7 @@ border-radius:4px;
 <td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; text-align:center;"><span style="background:#e0e7ff; color:#3730a3; padding:4px 10px; border-radius:12px; font-weight:bold;"><?= htmlspecialchars($q['correct_option']) ?></span></td>
 <td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; text-align:center;" class="action-btns">
 <a href="questions.php?mode=edit&id=<?= $q['id'] ?>" class="edit-link" style="background:#22d3ee; color:#0f172a; padding:6px 12px; border-radius:6px; border:none; text-decoration:none; font-weight:600; font-size:13px; display:inline-block;">Edit</a>
-<a href="questions.php?delete=<?= $q['id'] ?>" class="delete-link" onclick="return confirm('Are you sure you want to delete this question?')" style="background:#dc3545; color:white; padding:6px 12px; border-radius:6px; border:none; text-decoration:none; font-weight:600; font-size:13px; display:inline-block;">Delete</a>
+<a href="questions.php?delete=<?= $q['id'] ?>" class="delete-link" style="background:#dc3545; color:white; padding:6px 12px; border-radius:6px; border:none; text-decoration:none; font-weight:600; font-size:13px; display:inline-block;">Delete</a>
 </td>
 </tr>
 <?php endwhile; ?>

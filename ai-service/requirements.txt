@@ -17,4 +17,7 @@ scikit-learn>=1.2.0
 # RAG, Document Processing & Vector Storage
 chromadb>=0.4.0
 sentence-transformers>=2.2.0
+fastembed>=0.2.0
+psycopg2-binary>=2.9.0
+pgvector>=0.2.0
 pypdf>=3.0.0

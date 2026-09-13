@@ -85,11 +85,11 @@ def readiness_check():
     """
     try:
         vs = VectorStoreManager.get_instance()
-        count = vs.collection.count()
+        count = vs.collection.count() if hasattr(vs, 'collection') else 0
         return {
             "status": "ready",
             "service": settings.SERVICE_NAME,
-            "vector_store": "connected",
+            "vector_store": settings.VECTOR_STORE_TYPE,
             "total_indexed_chunks": count
         }
     except Exception as e:

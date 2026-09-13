@@ -105,6 +105,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 }
 
+// 2b. Handle On-Demand Question Study Notes Generation
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'generate_question_notes') {
+    $ans_id = (int)$_POST['practice_answer_id'];
+    $session_id = (int)$_POST['session_id'];
+
+    // Deduplication & DB Caching Check
+    $cachedNotes = null;
+    try {
+        $stmtChk = $conn->prepare("SELECT * FROM question_study_notes WHERE practice_answer_id = ? ORDER BY id DESC LIMIT 1");
+        if ($stmtChk) {
+            $stmtChk->bind_param("i", $ans_id);
+            $stmtChk->execute();
+            $cachedNotes = $stmtChk->get_result()->fetch_assoc();
+        }
+    } catch (Exception $ex) {
+        // Table may not be migrated yet
+    }
+
+    if ($cachedNotes) {
+        $_SESSION['notes_practice_' . $ans_id] = [
+            'title' => $cachedNotes['concept_title'],
+            'content' => $cachedNotes['notes_content'],
+            'grounded' => (bool)$cachedNotes['is_grounded']
+        ];
+    } else {
+        $stmt_q = $conn->prepare("SELECT * FROM ai_practice_answers WHERE id = ? AND student_id = ?");
+        $stmt_q->bind_param("ii", $ans_id, $student_id);
+        $stmt_q->execute();
+        $pq = $stmt_q->get_result()->fetch_assoc();
+
+        if ($pq) {
+            $aiClient = new AiClient();
+            $notesRes = $aiClient->generateFocusedStudyNotes(
+                $pq['question_text'],
+                $pq['subject'],
+                $pq['topic'],
+                $pq['correct_option'],
+                $pq['explanation'] ?? '',
+                null,
+                null,
+                $pq['id']
+            );
+
+            if (!empty($notesRes['success']) || ($notesRes['data']['status'] ?? '') === 'success') {
+                $notesData = $notesRes['data'] ?? $notesRes;
+                $conceptTitle = $notesData['concept_title'] ?? ($pq['topic'] . ' Concept Notes');
+                $notesContent = $notesData['notes_content'] ?? '';
+                $ragSources = json_encode($notesData['rag_sources'] ?? []);
+                $isGrounded = !empty($notesData['is_grounded']) ? 1 : 0;
+                $sourceCount = (int)($notesData['source_count'] ?? 0);
+
+                try {
+                    $insNotes = $conn->prepare("INSERT INTO question_study_notes (practice_answer_id, subject, topic, concept_title, notes_content, rag_sources, is_grounded, source_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                    if ($insNotes) {
+                        $insNotes->bind_param("isssssii", $ans_id, $pq['subject'], $pq['topic'], $conceptTitle, $notesContent, $ragSources, $isGrounded, $sourceCount);
+                        $insNotes->execute();
+                    }
+                } catch (Exception $ex) {
+                    // Fallback if migration not executed
+                }
+
+                $_SESSION['notes_practice_' . $ans_id] = [
+                    'title' => $conceptTitle,
+                    'content' => $notesContent,
+                    'grounded' => $isGrounded
+                ];
+            }
+        }
+    }
+    header("Location: practice_session.php?session_id=" . $session_id);
+    exit();
+}
+
 // 3. Load Active / Completed Session
 if (isset($_GET['session_id'])) {
     $session_id = (int)$_GET['session_id'];
@@ -223,7 +296,50 @@ function len($arr) { return count($arr); }
                                 <div class="small fw-bold text-dark mb-1">
                                     <i class="fa-solid fa-lightbulb text-warning me-1"></i>Correct Answer: Option <?= $q['correct_option'] ?>
                                 </div>
-                                <div class="small text-secondary"><?= htmlspecialchars($q['explanation']) ?></div>
+                                <div class="small text-secondary mb-3"><?= htmlspecialchars($q['explanation']) ?></div>
+
+                                <?php
+                                $existing_notes = null;
+                                $tableChk = $conn->query("SHOW TABLES LIKE 'question_study_notes'");
+                                if ($tableChk && $tableChk->num_rows > 0) {
+                                    $chkNotes = $conn->prepare("SELECT * FROM question_study_notes WHERE practice_answer_id = ? ORDER BY id DESC LIMIT 1");
+                                    $chkNotes->bind_param("i", $q['id']);
+                                    $chkNotes->execute();
+                                    $existing_notes = $chkNotes->get_result()->fetch_assoc();
+                                }
+                                if (!$existing_notes && !empty($_SESSION['notes_practice_' . $q['id']])) {
+                                    $existing_notes = [
+                                        'concept_title' => $_SESSION['notes_practice_' . $q['id']]['title'],
+                                        'notes_content' => $_SESSION['notes_practice_' . $q['id']]['content'],
+                                        'is_grounded' => $_SESSION['notes_practice_' . $q['id']]['grounded']
+                                    ];
+                                }
+                                ?>
+
+                                <?php if ($existing_notes): ?>
+                                    <details class="mt-2 p-3 bg-white rounded border shadow-sm">
+                                        <summary class="fw-bold text-primary" style="cursor: pointer;">
+                                            <i class="fa-solid fa-book-open me-2"></i>Focused Study Notes: <?= htmlspecialchars($existing_notes['concept_title']) ?>
+                                            <?php if (!empty($existing_notes['is_grounded'])): ?>
+                                                <span class="badge bg-success ms-2"><i class="fa-solid fa-shield-halved me-1"></i>RAG Grounded</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-warning text-dark ms-2">AI Domain Knowledge</span>
+                                            <?php endif; ?>
+                                        </summary>
+                                        <div class="mt-3 text-dark small style-notes">
+                                            <?= nl2br(htmlspecialchars($existing_notes['notes_content'])) ?>
+                                        </div>
+                                    </details>
+                                <?php else: ?>
+                                    <form method="POST" class="mt-2">
+                                        <input type="hidden" name="action" value="generate_question_notes">
+                                        <input type="hidden" name="practice_answer_id" value="<?= $q['id'] ?>">
+                                        <input type="hidden" name="session_id" value="<?= $session_data['id'] ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-primary fw-semibold">
+                                            <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Generate Focused Study Notes for this Question
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
                             </div>
                         <?php endif; ?>
                     </div>

@@ -23,7 +23,7 @@ class RAGService:
         topic: str
     ) -> Dict[str, Any]:
         """
-        Loads, validates, chunks, and indexes a document in ChromaDB.
+        Loads, validates, chunks, and indexes a document in ChromaDB/PgVector.
         Ensures index consistency by clearing pre-existing vectors for document_id.
         """
         doc_info = DocumentLoader.load_document(file_path, filename)
@@ -72,7 +72,7 @@ class RAGService:
         threshold = threshold if threshold is not None else settings.RAG_RELEVANCE_THRESHOLD
 
         detected_subj, detected_top = SubjectDetector.detect(query)
-        target_subject = subject or detected_subj
+        target_subject = SubjectDetector.normalize_subject(subject) or detected_subj
         target_topic = topic or detected_top
 
         vector_store = VectorStoreManager.get_instance()
@@ -83,7 +83,18 @@ class RAGService:
             topic=target_topic
         )
 
-        relevant_chunks = [c for c in retrieved_chunks if c["similarity_score"] >= threshold]
+        relevant_chunks = []
+        for c in retrieved_chunks:
+            if c.get("similarity_score", 0.0) < threshold:
+                continue
+            if target_subject:
+                c_subj = SubjectDetector.normalize_subject(c.get("subject"))
+                if c_subj != target_subject:
+                    continue
+            if target_topic:
+                if c.get("topic", "").strip().lower() != target_topic.strip().lower():
+                    continue
+            relevant_chunks.append(c)
 
         return {
             "query": query,
@@ -94,7 +105,8 @@ class RAGService:
             "retrieved_count": len(retrieved_chunks),
             "relevant_count": len(relevant_chunks),
             "has_sufficient_context": len(relevant_chunks) > 0,
-            "chunks": relevant_chunks if relevant_chunks else []
+            "chunks": relevant_chunks if relevant_chunks else [],
+            "results": relevant_chunks if relevant_chunks else []
         }
 
     @classmethod
@@ -113,7 +125,13 @@ class RAGService:
     ) -> Dict[str, Any]:
         """
         Executes Whole-System AI Assistant Pipeline across User Context, Performance, Admin Stats, and Grounded RAG.
+        Enforces strict Subject Isolation (Mode A vs Mode B).
         """
+        # Detect Subject/Topic upfront for strict subject isolation
+        detected_subj, detected_top = SubjectDetector.detect(question)
+        target_subject = SubjectDetector.normalize_subject(subject) or detected_subj
+        target_topic = topic or detected_top
+
         intent, direct_response = IntentClassifier.classify(question)
 
         # 1. Casual / Conversational / Assistant Identity intents (No RAG)
@@ -208,13 +226,28 @@ class RAGService:
 
         # 5. Student Performance Intent
         if intent == "performance":
-            if not history or len(history) == 0:
-                ans = "You haven't completed any exam attempts yet. Take an exam or practice session to view your performance metrics!"
+            if target_subject:
+                # Mode A: Subject-Specific performance query
+                subj_history = [
+                    h for h in (history or [])
+                    if SubjectDetector.normalize_subject(h.get("subject")) == target_subject
+                ]
+                if not subj_history:
+                    ans = f"You haven't completed any exam attempts in {target_subject} yet."
+                else:
+                    tot = len(subj_history)
+                    corr = sum(1 for h in subj_history if h.get("is_correct") or h.get("correct"))
+                    acc = round((corr / tot) * 100, 1)
+                    ans = f"Based on your exam records in {target_subject}, you have attempted {tot} questions with an accuracy of {acc}%."
             else:
-                tot = len(history)
-                corr = sum(1 for h in history if h.get("is_correct") or h.get("correct"))
-                acc = round((corr / tot) * 100, 1)
-                ans = f"Based on your exam records, you have attempted {tot} questions with an overall accuracy of {acc}%. Keep practicing to continue improving your score!"
+                # Mode B: General performance query
+                if not history or len(history) == 0:
+                    ans = "You haven't completed any exam attempts yet. Take an exam or practice session to view your performance metrics!"
+                else:
+                    tot = len(history)
+                    corr = sum(1 for h in history if h.get("is_correct") or h.get("correct"))
+                    acc = round((corr / tot) * 100, 1)
+                    ans = f"Based on your exam records, you have attempted {tot} questions with an overall accuracy of {acc}%. Keep practicing to continue improving your score!"
 
             return {
                 "question": question,
@@ -239,11 +272,6 @@ class RAGService:
                 "is_conversational": True
             }
 
-        # Detect Subject/Topic upfront for strict subject isolation
-        detected_subj, detected_top = SubjectDetector.detect(question)
-        target_subject = subject or detected_subj
-        target_topic = topic or detected_top
-
         # 7. Personalized Recommendation Intent
         if intent == "recommendation":
             perf_response, identified_topics = cls._generate_personalized_recommendation(question, history, target_subject)
@@ -258,36 +286,38 @@ class RAGService:
             )
 
             if search_res["has_sufficient_context"]:
-                rag_data = cls._build_grounded_answer(question, search_res["chunks"])
-                full_answer = f"{perf_response}\n\n📖 **Course Material Insight:**\n{rag_data['answer']}"
-                return {
-                    "question": question,
-                    "answer": full_answer,
-                    "has_sufficient_context": True,
-                    "sources": rag_data["sources"],
-                    "retrieved_chunks": rag_data["retrieved_chunks"],
-                    "intent": "recommendation",
-                    "is_conversational": False
-                }
-            else:
-                if target_subject:
-                    missing_msg = (
-                        f"However, I don't currently have enough {target_subject} course material uploaded to provide a grounded study plan. "
-                        f"Please ask your admin to upload the relevant {target_subject} study material."
-                    )
-                    full_answer = f"{perf_response}\n\n⚠️ {missing_msg}" if perf_response else f"I don't have enough information about {target_subject} in the uploaded course materials yet. Please ask your admin to upload the relevant {target_subject} study material."
-                else:
-                    full_answer = perf_response
+                rag_data = cls._build_grounded_answer(question, search_res["chunks"], target_subject=target_subject)
+                if rag_data.get("has_sufficient_context"):
+                    full_answer = f"{perf_response}\n\n📖 **Course Material Insight:**\n{rag_data['answer']}"
+                    return {
+                        "question": question,
+                        "answer": full_answer,
+                        "has_sufficient_context": True,
+                        "sources": rag_data["sources"],
+                        "retrieved_chunks": rag_data["retrieved_chunks"],
+                        "intent": "recommendation",
+                        "is_conversational": False
+                    }
 
-                return {
-                    "question": question,
-                    "answer": full_answer,
-                    "has_sufficient_context": False,
-                    "sources": [],
-                    "retrieved_chunks": [],
-                    "intent": "recommendation",
-                    "is_conversational": False
-                }
+            # No grounded course material available for target_subject
+            if target_subject:
+                missing_msg = (
+                    f"I don't have enough information about {target_subject} in the uploaded course materials yet. "
+                    f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
+                )
+                full_answer = f"{perf_response}\n\n⚠️ {missing_msg}" if perf_response else missing_msg
+            else:
+                full_answer = perf_response
+
+            return {
+                "question": question,
+                "answer": full_answer,
+                "has_sufficient_context": False,
+                "sources": [],
+                "retrieved_chunks": [],
+                "intent": "recommendation",
+                "is_conversational": False
+            }
 
         # 8. Academic RAG Question
         search_res = cls.search_context(
@@ -300,7 +330,10 @@ class RAGService:
 
         if not search_res["has_sufficient_context"]:
             if target_subject:
-                missing_msg = f"I don't have enough information about {target_subject} in the uploaded course materials yet. Please ask your admin to upload the relevant {target_subject} study material."
+                missing_msg = (
+                    f"I don't have enough information about {target_subject} in the uploaded course materials yet. "
+                    f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
+                )
             else:
                 missing_msg = "I couldn't find enough information about this in the uploaded course materials."
 
@@ -320,7 +353,25 @@ class RAGService:
         if any(re.match(r'^(' + tok + r')\b', q_lower) for tok in [r"hi+", r"hello", r"hey+", r"good\s+morning", r"good\s+afternoon", r"good\s+evening"]):
             greeting_prefix = "Hello! 👋 "
 
-        rag_data = cls._build_grounded_answer(question, search_res["chunks"])
+        rag_data = cls._build_grounded_answer(question, search_res["chunks"], target_subject=target_subject)
+        if not rag_data.get("has_sufficient_context", True):
+            if target_subject:
+                missing_msg = (
+                    f"I don't have enough information about {target_subject} in the uploaded course materials yet. "
+                    f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
+                )
+            else:
+                missing_msg = "I couldn't find enough information about this in the uploaded course materials."
+            return {
+                "question": question,
+                "answer": missing_msg,
+                "has_sufficient_context": False,
+                "sources": [],
+                "retrieved_chunks": [],
+                "intent": "academic_question",
+                "is_conversational": False
+            }
+
         final_answer = f"{greeting_prefix}{rag_data['answer']}" if greeting_prefix else rag_data["answer"]
 
         return {
@@ -341,10 +392,12 @@ class RAGService:
         target_subject: Optional[str] = None
     ) -> Tuple[str, List[str]]:
         """
-        Analyzes real student performance history with optional subject filtering.
+        Analyzes real student performance history with strict subject isolation in Mode A.
         """
+        norm_target_subject = SubjectDetector.normalize_subject(target_subject)
+
         if not history or len(history) == 0:
-            subj_label = f" for {target_subject}" if target_subject else ""
+            subj_label = f" for {norm_target_subject}" if norm_target_subject else ""
             return (
                 f"I don't have enough performance data yet{subj_label} to identify your weakest topics. "
                 "Complete a few exams or practice sessions, and I'll be able to give you more personalized recommendations.",
@@ -355,21 +408,27 @@ class RAGService:
         for item in history:
             t = item.get("topic", "General")
             s = item.get("subject", "General")
+            norm_s = SubjectDetector.normalize_subject(s) or s
             is_corr = bool(item.get("is_correct", False) or item.get("correct", False))
 
-            if target_subject and s.lower() != target_subject.lower():
+            if norm_target_subject and norm_s.lower() != norm_target_subject.lower():
                 continue
 
             if t not in topic_stats:
-                topic_stats[t] = {"subject": s, "total": 0, "correct": 0}
+                topic_stats[t] = {"subject": norm_s, "total": 0, "correct": 0}
             topic_stats[t]["total"] += 1
             if is_corr:
                 topic_stats[t]["correct"] += 1
 
         if not topic_stats:
-            subj_label = f" for {target_subject}" if target_subject else ""
+            if norm_target_subject:
+                return (
+                    f"I don't have performance data for {norm_target_subject} yet. "
+                    f"Complete a few {norm_target_subject} exams or practice sessions to get personalized performance insights.",
+                    []
+                )
             return (
-                f"I don't have enough performance data yet{subj_label} to identify your weakest topics. "
+                "I don't have enough performance data yet to identify your weakest topics. "
                 "Complete a few exams or practice sessions, and I'll be able to give you more personalized recommendations.",
                 []
             )
@@ -427,19 +486,49 @@ class RAGService:
         )
 
     @classmethod
-    def _build_grounded_answer(cls, question: str, chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _build_grounded_answer(
+        cls,
+        question: str,
+        chunks: List[Dict[str, Any]],
+        target_subject: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Constructs grounded answer & citations from retrieved vector chunks.
+        Enforces strict Subject Source Validation and Prompt-Level Isolation.
         """
+        norm_target = SubjectDetector.normalize_subject(target_subject) if target_subject else None
+
+        valid_chunks = []
+        for c in chunks:
+            if norm_target:
+                c_subj = SubjectDetector.normalize_subject(c.get("subject"))
+                if c_subj != norm_target:
+                    logger.warning(f"Rejecting cross-subject chunk filename={c.get('filename')} subject={c.get('subject')} for target={norm_target}")
+                    continue
+            valid_chunks.append(c)
+
+        if not valid_chunks:
+            if norm_target:
+                msg = f"I don't have enough information about {norm_target} in the uploaded course materials yet. You can upload {norm_target} notes under Subject = {norm_target} to enable grounded recommendations."
+            else:
+                msg = "I couldn't find enough information about this in the uploaded course materials."
+            return {
+                "answer": msg,
+                "sources": [],
+                "retrieved_chunks": [],
+                "has_sufficient_context": False
+            }
+
         citations_map = {}
         context_blocks = []
 
-        for idx, chunk in enumerate(chunks, 1):
+        for idx, chunk in enumerate(valid_chunks, 1):
             fname = chunk.get("filename", "Course_Material.pdf")
             pnum = chunk.get("page_number", 1)
+            c_subj = chunk.get("subject", norm_target or "General")
             cit_key = f"{fname} - Page {pnum}"
-            citations_map[cit_key] = {"filename": fname, "page_number": pnum}
-            context_blocks.append(f"[Document Chunk {idx} ({cit_key})]:\n{chunk['chunk_text']}")
+            citations_map[cit_key] = {"filename": fname, "page_number": pnum, "subject": c_subj}
+            context_blocks.append(f"[Document Chunk {idx} ({cit_key}) (Subject: {c_subj})]:\n{chunk['chunk_text']}")
 
         context_str = "\n\n".join(context_blocks)
         sources_list = [{"filename": v["filename"], "page_number": v["page_number"]} for v in citations_map.values()]
@@ -457,7 +546,15 @@ class RAGService:
             "5. Keep the response concise, clear, and academic."
         )
 
-        user_prompt = f"STUDENT QUESTION:\n{question}\n\nRELEVANT COURSE MATERIAL CONTEXT:\n{context_str}"
+        if norm_target:
+            system_prompt += (
+                f"\n\nSTRICT SUBJECT SCOPE RULE:\n"
+                f"The requested subject is '{norm_target}'. You MUST ONLY provide advice and information specifically for '{norm_target}'. "
+                f"Never use information or citations from another subject."
+            )
+            user_prompt = f"TARGET SUBJECT: {norm_target}\nSTUDENT QUESTION:\n{question}\n\nRELEVANT {norm_target} COURSE MATERIAL CONTEXT:\n{context_str}"
+        else:
+            user_prompt = f"STUDENT QUESTION:\n{question}\n\nRELEVANT COURSE MATERIAL CONTEXT:\n{context_str}"
 
         if settings.LLM_API_KEY and settings.LLM_PROVIDER != "heuristic":
             try:
@@ -465,13 +562,14 @@ class RAGService:
                 answer_text = llm_response.strip()
             except Exception as e:
                 logger.error(f"LLM call failed in RAG service: {e}")
-                answer_text = cls._generate_grounded_fallback_answer(question, chunks)
+                answer_text = cls._generate_grounded_fallback_answer(question, valid_chunks)
         else:
-            answer_text = cls._generate_grounded_fallback_answer(question, chunks)
+            answer_text = cls._generate_grounded_fallback_answer(question, valid_chunks)
 
         return {
             "answer": answer_text,
             "sources": sources_list,
+            "has_sufficient_context": True,
             "retrieved_chunks": [
                 {
                     "chunk_id": c["chunk_id"],
@@ -479,7 +577,7 @@ class RAGService:
                     "page_number": c["page_number"],
                     "similarity_score": c["similarity_score"]
                 }
-                for c in chunks
+                for c in valid_chunks
             ]
         }
 

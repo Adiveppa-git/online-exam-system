@@ -122,7 +122,8 @@ class IntentClassifier:
         r"my accuracy",
         r"my exam scores",
         r"my grades",
-        r"which subject am i weak in"
+        r"which subject am i weak in",
+        r"weakest subject"
     ]
 
     RECOMMENDATION_PATTERNS = [
@@ -136,7 +137,10 @@ class IntentClassifier:
         r"what should i study",
         r"scored low",
         r"improve my (marks|score|performance|grade|grades)",
-        r"my weak topics"
+        r"my weak topics",
+        r"which subject should i improve",
+        r"which subject to improve",
+        r"which subject do i need to improve"
     ]
 
     EXAM_INFO_PATTERNS = [

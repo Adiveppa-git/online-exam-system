@@ -124,6 +124,36 @@ class AiClient {
         return $this->request('DELETE', "/api/v1/rag/document/{$docId}");
     }
 
+    public function deleteDocument(int $docId): array {
+        return $this->deleteRAGDocument($docId);
+    }
+
+    public function generateFocusedStudyNotes(
+        string $questionText,
+        string $subject,
+        string $topic,
+        string $correctAnswer = 'A',
+        string $explanation = '',
+        ?int $questionId = null,
+        ?int $aiQuestionId = null,
+        ?int $practiceAnswerId = null,
+        ?array $options = null
+    ): array {
+        $payload = [
+            'question' => $questionText,
+            'subject' => $subject,
+            'topic' => $topic,
+            'correct_answer' => $correctAnswer,
+            'explanation' => $explanation
+        ];
+        if ($questionId !== null) $payload['question_id'] = $questionId;
+        if ($aiQuestionId !== null) $payload['ai_question_id'] = $aiQuestionId;
+        if ($practiceAnswerId !== null) $payload['practice_answer_id'] = $practiceAnswerId;
+        if (!empty($options)) $payload['options'] = $options;
+
+        return $this->request('POST', '/api/v1/questions/focused-notes', $payload);
+    }
+
     // --- Phase H: Personalized Recommendations Methods ---
 
     public function getLearningProfile(int $studentId, array $history): array {
