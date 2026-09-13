@@ -10,33 +10,52 @@ services:
     dockerContext: .
     plan: free
     healthCheckPath: /index.php
+
     envVars:
       - key: APP_ENV
         value: production
+
       - key: APP_DEBUG
         value: "false"
+
       - key: DB_DRIVER
         value: pgsql
+
       - key: DB_PORT
         value: "5432"
+
       - key: DB_NAME
         value: postgres
+
+      # Supabase PostgreSQL credentials
       - key: DB_USER
         sync: false
+
       - key: DB_HOST
         sync: false
+
       - key: DB_PASS
         sync: false
+
+      # Supabase
       - key: SUPABASE_URL
         sync: false
+
       - key: SUPABASE_KEY
         sync: false
+
       - key: SUPABASE_BUCKET
         value: course-materials
+
+      # FastAPI AI Service
+      # Public URL is required because both services are on Render Free.
       - key: AI_SERVICE_URL
-        sync: false
+        value: https://exam-online-ai.onrender.com
+
+      # Keep the API key secret
       - key: AI_SERVICE_KEY
         sync: false
+
 
   # 2. FastAPI AI Service
   - type: web
@@ -46,22 +65,35 @@ services:
     dockerContext: ./ai-service
     plan: free
     healthCheckPath: /health
+
     envVars:
       - key: ENVIRONMENT
         value: production
+
       - key: DEBUG
         value: "false"
+
+      # RAG / pgvector
       - key: VECTOR_STORE_TYPE
         value: pgvector
+
       - key: EMBEDDING_MODEL_NAME
         value: BAAI/bge-small-en-v1.5
+
+      # Supabase PostgreSQL
       - key: SUPABASE_DB_URL
         sync: false
+
+      # Supabase
       - key: SUPABASE_URL
         sync: false
+
       - key: SUPABASE_KEY
         sync: false
+
       - key: SUPABASE_BUCKET
         value: course-materials
+
+      # Internal authentication between PHP and FastAPI
       - key: INTERNAL_API_KEY
         sync: false
