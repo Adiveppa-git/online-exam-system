@@ -31,7 +31,11 @@ if (isset($_GET['delete'])) {
     $conn->query("DELETE FROM student_answers WHERE exam_id=$exam_id");
     $conn->query("DELETE FROM results WHERE exam_id=$exam_id");
     $conn->query("DELETE FROM violations WHERE exam_id=$exam_id");
+    $conn->query("DELETE FROM violation_report WHERE exam_id=$exam_id");
+    $conn->query("DELETE FROM exam_violations WHERE exam_id=$exam_id");
     $conn->query("DELETE FROM questions WHERE exam_id=$exam_id");
+    $conn->query("DELETE FROM ai_generated_questions WHERE exam_id=$exam_id");
+    $conn->query("DELETE FROM ai_generation_requests WHERE exam_id=$exam_id");
     $conn->query("DELETE FROM exams WHERE id=$exam_id");
 
     header("Location: exams.php");
@@ -46,6 +50,8 @@ if (isset($_GET['reassign'])) {
     $conn->query("DELETE FROM student_answers WHERE exam_id=$exam_id");
     $conn->query("DELETE FROM results WHERE exam_id=$exam_id");
     $conn->query("DELETE FROM violations WHERE exam_id=$exam_id");
+    $conn->query("DELETE FROM violation_report WHERE exam_id=$exam_id");
+    $conn->query("DELETE FROM exam_violations WHERE exam_id=$exam_id");
 
     header("Location: exams.php?msg=reassigned");
     exit;
@@ -70,14 +76,16 @@ if (isset($_POST['add_exam'])) {
     } else {
 
         $stmt=$conn->prepare(
-        "INSERT INTO exams(title,duration,marks_per_question)
-         VALUES(?,?,?)");
+        "INSERT INTO exams(title,duration,marks_per_question,total_marks)
+         VALUES(?,?,?,0)");
 
         $stmt->bind_param("sii",$title,$duration,$marks);
-        $stmt->execute();
-
-        header("Location: exams.php");
-        exit;
+        if ($stmt->execute()) {
+            header("Location: exams.php");
+            exit;
+        } else {
+            $message = "Failed to add exam: " . ($stmt->error ?: $conn->error);
+        }
     }
 }
 
@@ -97,10 +105,12 @@ if (isset($_POST['update_exam'])) {
     ");
 
     $stmt->bind_param("siii", $title, $duration, $marks, $exam_id);
-    $stmt->execute();
-
-    header("Location: exams.php");
-    exit;
+    if ($stmt->execute()) {
+        header("Location: exams.php");
+        exit;
+    } else {
+        $message = "Failed to update exam: " . ($stmt->error ?: $conn->error);
+    }
 }
 
 /* FETCH EXAMS */

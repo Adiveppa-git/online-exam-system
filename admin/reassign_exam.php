@@ -27,6 +27,16 @@ $conn->query("
     WHERE exam_id = $exam_id
 ");
 
+$conn->query("
+    DELETE FROM violation_report
+    WHERE exam_id = $exam_id
+");
+
+$conn->query("
+    DELETE FROM exam_violations
+    WHERE exam_id = $exam_id
+");
+
 /* DELETE SAVED ANSWERS */
 $conn->query("
     DELETE FROM student_answers 
