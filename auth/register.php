@@ -218,6 +218,7 @@ required>
 id="password"
 name="password"
 placeholder="Password"
+oninput="checkStrength();checkMatch()"
 onkeyup="checkStrength();checkMatch()"
 required>
 
@@ -247,6 +248,7 @@ style="font-size:13px">
 id="confirmPassword"
 name="confirm_password"
 placeholder="Confirm Password"
+oninput="checkMatch()"
 onkeyup="checkMatch()"
 required>
 
@@ -348,9 +350,11 @@ function togglePassword(id, eye)
 
 function checkStrength()
 {
-    const p=password.value;
-    const bar=strengthBar;
-    const txt=strengthText;
+    const p=document.getElementById('password')?.value || '';
+    const bar=document.getElementById('strengthBar');
+    const txt=document.getElementById('strengthText');
+
+    if(!bar || !txt) return;
 
     let s=0;
 
@@ -377,33 +381,47 @@ function checkStrength()
 
 function checkMatch()
 {
-    const p=password.value;
-    const c=confirmPassword.value;
-    const t=matchText;
-    const b=registerBtn;
+    const pEl=document.getElementById('password');
+    const cEl=document.getElementById('confirmPassword');
+    const t=document.getElementById('matchText');
+    const b=document.getElementById('registerBtn');
+
+    if(!pEl || !cEl || !t || !b) return;
+
+    const p=pEl.value;
+    const c=cEl.value;
 
     if(!c)
     {
+        t.textContent="";
         b.disabled=true;
         b.classList.add("disabled");
         return;
     }
 
-    if(p===c && p.length>=8 && p.length<=15)
-    {
-        t.textContent="Passwords match";
-        t.style.color="green";
-
-        b.disabled=false;
-        b.classList.remove("disabled");
-    }
-    else
+    if(p !== c)
     {
         t.textContent="Passwords do not match";
         t.style.color="red";
 
         b.disabled=true;
         b.classList.add("disabled");
+    }
+    else if(p.length < 8 || p.length > 15)
+    {
+        t.textContent="Password must be 8 to 15 characters";
+        t.style.color="red";
+
+        b.disabled=true;
+        b.classList.add("disabled");
+    }
+    else
+    {
+        t.textContent="Passwords match";
+        t.style.color="green";
+
+        b.disabled=false;
+        b.classList.remove("disabled");
     }
 }
 

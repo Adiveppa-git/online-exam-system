@@ -124,7 +124,7 @@ if ($qFetch && $qFetch->num_rows > 0) {
         FROM questions q
         LEFT JOIN student_answers sa ON q.id = sa.question_id
         WHERE q.id = $targetQId
-        GROUP BY q.id
+        GROUP BY q.id, q.correct_option
     ")->fetch_assoc();
 
     if ($aggRes && (int)$aggRes['total_attempts'] >= 1 && (int)$aggRes['correct_attempts'] >= 1) {

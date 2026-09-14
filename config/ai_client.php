@@ -12,14 +12,25 @@ class AiClient {
     private string $apiKey;
 
     public function __construct(?string $baseUrl = null, int $timeout = 35, ?string $apiKey = null) {
-        if ($baseUrl !== null) {
-            $this->baseUrl = rtrim($baseUrl, '/');
+        if ($baseUrl !== null && trim($baseUrl) !== '') {
+            $this->baseUrl = rtrim(trim($baseUrl), '/');
         } else {
-            $envUrl = getenv('AI_SERVICE_URL');
-            $this->baseUrl = defined('AI_SERVICE_URL') ? rtrim(AI_SERVICE_URL, '/') : ($envUrl ? rtrim($envUrl, '/') : 'http://127.0.0.1:8001');
+            $envUrl = getenv('AI_SERVICE_URL') ?: ($_ENV['AI_SERVICE_URL'] ?? ($_SERVER['AI_SERVICE_URL'] ?? ''));
+            if (!empty($envUrl) && trim($envUrl) !== '') {
+                $this->baseUrl = rtrim(trim($envUrl), '/');
+            } elseif (defined('AI_SERVICE_URL') && !empty(AI_SERVICE_URL)) {
+                $this->baseUrl = rtrim(trim(AI_SERVICE_URL), '/');
+            } else {
+                $appEnv = strtolower(getenv('APP_ENV') ?: ($_ENV['APP_ENV'] ?? 'development'));
+                if (in_array($appEnv, ['production', 'prod', 'staging'], true)) {
+                    $this->baseUrl = 'https://exam-online-ai.onrender.com';
+                } else {
+                    $this->baseUrl = 'http://127.0.0.1:8001';
+                }
+            }
         }
         $this->timeout = defined('AI_SERVICE_TIMEOUT') ? AI_SERVICE_TIMEOUT : (getenv('AI_SERVICE_TIMEOUT') ? (int)getenv('AI_SERVICE_TIMEOUT') : $timeout);
-        $this->apiKey = $apiKey ?? (defined('AI_SERVICE_KEY') ? AI_SERVICE_KEY : (getenv('AI_SERVICE_KEY') ?: 'dev_secret_key_change_in_production'));
+        $this->apiKey = $apiKey ?? (defined('AI_SERVICE_KEY') ? AI_SERVICE_KEY : (getenv('AI_SERVICE_KEY') ?: (getenv('INTERNAL_API_KEY') ?: 'dev_secret_key_change_in_production')));
     }
 
     public function getBaseUrl(): string {
@@ -190,7 +201,8 @@ class AiClient {
         $headers = [
             'Content-Type: application/json',
             'Accept: application/json',
-            'X-API-Key: ' . $this->apiKey
+            'X-API-Key: ' . $this->apiKey,
+            'X-Internal-API-Key: ' . $this->apiKey
         ];
 
         $timeoutToUse = $overrideTimeout ?? $this->timeout;

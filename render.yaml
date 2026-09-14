@@ -56,6 +56,34 @@ services:
       - key: AI_SERVICE_KEY
         sync: false
 
+      # Outbound Email Service Configuration (SMTP / Brevo)
+      - key: MAIL_DRIVER
+        value: auto
+
+      - key: SMTP_HOST
+        sync: false
+
+      - key: SMTP_PORT
+        value: "587"
+
+      - key: SMTP_ENCRYPTION
+        value: tls
+
+      - key: SMTP_USERNAME
+        sync: false
+
+      - key: SMTP_PASSWORD
+        sync: false
+
+      - key: SENDER_EMAIL
+        sync: false
+
+      - key: SENDER_NAME
+        value: "Online Examination System"
+
+      - key: BREVO_API_KEY
+        sync: false
+
 
   # 2. FastAPI AI Service
   - type: web

@@ -93,8 +93,10 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                     return is_bool($var) ? ($var ? 1 : 0) : $var;
                 }, $this->boundVars);
 
-                $isInsert = (bool)preg_match('/^\s*INSERT\s+INTO\s+([`"\w]+)/i', $this->sql, $matches);
-                $sqlToRun = $this->sql;
+                $sqlToRun = str_replace('`', '', $this->sql);
+                $sqlToRun = preg_replace('/IFNULL\(/i', 'COALESCE(', $sqlToRun);
+
+                $isInsert = (bool)preg_match('/^\s*INSERT\s+INTO\s+([`"\w]+)/i', $sqlToRun, $matches);
                 if ($isInsert && !preg_match('/RETURNING\s+/i', $sqlToRun)) {
                     $sqlToRun .= ' RETURNING id';
                 }
@@ -121,6 +123,7 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                 return true;
             } catch (PDOException $e) {
                 $this->error = $e->getMessage();
+                error_log("PgSqlStmtAdapter execute error: " . $e->getMessage() . " | SQL: " . $this->sql);
                 return false;
             }
         }
@@ -133,6 +136,7 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                 $rows = $this->stmt->fetchAll(PDO::FETCH_ASSOC);
                 return new PgSqlResultAdapter($rows ?: []);
             } catch (Throwable $e) {
+                error_log("PgSqlStmtAdapter get_result error: " . $e->getMessage());
                 return new PgSqlResultAdapter([]);
             }
         }
@@ -178,20 +182,22 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
 
         public function query(string $sql): PgSqlResultAdapter|bool {
             try {
-                if (preg_match('/^\s*SHOW\s+TABLES\s+LIKE\s+[\'"]([^\'"]+)[\'"]/i', $sql, $matches)) {
+                $sqlToRun = str_replace('`', '', $sql);
+                $sqlToRun = preg_replace('/IFNULL\(/i', 'COALESCE(', $sqlToRun);
+
+                if (preg_match('/^\s*SHOW\s+TABLES\s+LIKE\s+[\'"]([^\'"]+)[\'"]/i', $sqlToRun, $matches)) {
                     $tbl = $matches[1];
                     $stmt = $this->pdo->prepare("SELECT tablename AS \"Tables_in_dbname\" FROM pg_tables WHERE schemaname = 'public' AND tablename = ?");
                     $stmt->execute([$tbl]);
                     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     return new PgSqlResultAdapter($rows);
-                } elseif (preg_match('/^\s*SHOW\s+TABLES/i', $sql)) {
+                } elseif (preg_match('/^\s*SHOW\s+TABLES/i', $sqlToRun)) {
                     $stmt = $this->pdo->query("SELECT tablename AS \"Tables_in_dbname\" FROM pg_tables WHERE schemaname = 'public'");
                     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     return new PgSqlResultAdapter($rows);
                 }
 
-                $isInsert = (bool)preg_match('/^\s*INSERT\s+INTO\s+/i', $sql);
-                $sqlToRun = $sql;
+                $isInsert = (bool)preg_match('/^\s*INSERT\s+INTO\s+/i', $sqlToRun);
                 if ($isInsert && !preg_match('/RETURNING\s+/i', $sqlToRun)) {
                     $sqlToRun .= ' RETURNING id';
                 }
@@ -220,6 +226,7 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                 return new PgSqlResultAdapter($rows ?: []);
             } catch (PDOException $e) {
                 $this->error = $e->getMessage();
+                error_log("PgSqlDbAdapter query error: " . $e->getMessage() . " | SQL: " . $sql);
                 return false;
             }
         }
@@ -248,6 +255,10 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
 
     try {
         $dsn = "pgsql:host={$host};port={$port};dbname={$db}";
+        $sslMode = getenv('PG_SSLMODE') ?: getenv('DB_SSLMODE');
+        if ($sslMode !== false && trim($sslMode) !== '') {
+            $dsn .= ";sslmode=" . trim($sslMode);
+        }
         $pdoOptions = [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,

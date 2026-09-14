@@ -165,8 +165,8 @@ function sendBrevoMail($to, $subject, $body)
         return false;
     }
 
-    $senderEmail = trim(getenv('SENDER_EMAIL') ?: '');
-    $senderName  = trim(getenv('SENDER_NAME') ?: 'Online Examination System');
+    $senderEmail = trim(getenv('SENDER_EMAIL') ?: (getenv('MAIL_FROM') ?: ''));
+    $senderName  = trim(getenv('SENDER_NAME') ?: (getenv('MAIL_FROM_NAME') ?: 'Online Examination System'));
 
     if (empty($senderEmail) || $senderEmail === 'noreply@example.com' || strpos($senderEmail, 'example.com') !== false || !filter_var($senderEmail, FILTER_VALIDATE_EMAIL)) {
         $GLOBALS['last_mail_error'] = "Invalid or placeholder SENDER_EMAIL configured.";
@@ -207,8 +207,8 @@ function sendBrevoMail($to, $subject, $body)
         }
 
         if ($httpCode === 201) {
-            if (session_status() !== PHP_SESSION_ACTIVE) {
-                @session_start();
+            if (session_status() === PHP_SESSION_NONE) {
+                session_start();
             }
             if (!isset($_SESSION)) {
                 $_SESSION = [];
@@ -243,8 +243,8 @@ function sendBrevoMail($to, $subject, $body)
     curl_close($ch);
 
     if ($httpCode === 201) {
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            @session_start();
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
         }
         if (!isset($_SESSION)) {
             $_SESSION = [];
@@ -269,8 +269,8 @@ function sendSmtpMail($to, $subject, $body)
     $encryption  = strtolower(trim(getenv('SMTP_ENCRYPTION') ?: (getenv('SMTP_SECURE') ?: 'tls')));
     $username    = trim(getenv('SMTP_USERNAME') ?: (getenv('SMTP_USER') ?: ''));
     $password    = trim(getenv('SMTP_PASSWORD') ?: (getenv('SMTP_PASS') ?: ''));
-    $senderEmail = trim(getenv('SENDER_EMAIL') ?: '');
-    $senderName  = trim(getenv('SENDER_NAME') ?: 'Online Examination System');
+    $senderEmail = trim(getenv('SENDER_EMAIL') ?: (getenv('MAIL_FROM') ?: ''));
+    $senderName  = trim(getenv('SENDER_NAME') ?: (getenv('MAIL_FROM_NAME') ?: 'Online Examination System'));
 
     // Strip internal spaces if App Password was pasted with spaces (e.g. "abcd efgh ijkl mnop")
     $password = str_replace(' ', '', $password);
@@ -311,8 +311,8 @@ function sendSmtpMail($to, $subject, $body)
 
         if (is_bool($mockRes)) {
             if ($mockRes === true) {
-                if (session_status() !== PHP_SESSION_ACTIVE) {
-                    @session_start();
+                if (session_status() === PHP_SESSION_NONE) {
+                    session_start();
                 }
                 if (!isset($_SESSION)) {
                     $_SESSION = [];
@@ -326,8 +326,8 @@ function sendSmtpMail($to, $subject, $body)
 
         if (is_array($mockRes)) {
             if (!empty($mockRes['success'])) {
-                if (session_status() !== PHP_SESSION_ACTIVE) {
-                    @session_start();
+                if (session_status() === PHP_SESSION_NONE) {
+                    session_start();
                 }
                 if (!isset($_SESSION)) {
                     $_SESSION = [];
@@ -383,8 +383,8 @@ function sendSmtpMail($to, $subject, $body)
 
         $mail->send();
 
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            @session_start();
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
         }
         if (!isset($_SESSION)) {
             $_SESSION = [];

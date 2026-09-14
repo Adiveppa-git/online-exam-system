@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require_once "../config/db.php";
 
 /* ADMIN AUTH */
@@ -52,7 +54,7 @@ JOIN exams e ON e.id = v.exam_id
 
 $where
 
-GROUP BY v.user_id, v.exam_id
+GROUP BY v.user_id, v.exam_id, u.name, e.title
 
 ORDER BY violation_count DESC
 ";
@@ -181,7 +183,7 @@ padding:10px;
 
 <option value="">All Exams</option>
 
-<?php while($e=$exams->fetch_assoc()): ?>
+<?php while ($exams && $e = $exams->fetch_assoc()): ?>
 
 <option value="<?= $e['id'] ?>"
 <?= ($exam_id==$e['id'])?'selected':'' ?>>
@@ -199,7 +201,7 @@ padding:10px;
 
 <option value="">All Students</option>
 
-<?php while($s=$students->fetch_assoc()): ?>
+<?php while ($students && $s = $students->fetch_assoc()): ?>
 
 <option value="<?= $s['id'] ?>"
 <?= ($student_id==$s['id'])?'selected':'' ?>>
@@ -244,9 +246,9 @@ Export PDF
 <th>Status</th>
 </tr>
 
-<?php if($result->num_rows > 0): ?>
+<?php if ($result && $result->num_rows > 0): ?>
 
-<?php $i=1; while($row=$result->fetch_assoc()): 
+<?php $i=1; while ($result && $row = $result->fetch_assoc()):
 
 $status = $row['violation_count'] >= 3 ? "VIOLATED" : "OK";
 

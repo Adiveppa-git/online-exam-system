@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../config/db.php';
 
 $res = $conn->query("
@@ -8,7 +8,7 @@ $res = $conn->query("
            COUNT(DISTINCT sa.student_id) AS unique_students
     FROM questions q
     LEFT JOIN student_answers sa ON q.id = sa.question_id
-    GROUP BY q.id
+    GROUP BY q.id, q.question, q.difficulty, q.correct_option
 ");
 
 echo "=== QUESTION ATTEMPTS SUMMARY ===\n";

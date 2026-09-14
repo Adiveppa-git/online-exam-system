@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require_once "../config/db.php";
 
 /* ADMIN AUTH */
@@ -36,7 +38,7 @@ JOIN exams e ON e.id = v.exam_id
 
 $where
 
-GROUP BY v.user_id, v.exam_id
+GROUP BY v.user_id, v.exam_id, u.name, e.title
 
 ORDER BY created_at DESC
 ";
@@ -63,9 +65,9 @@ echo "
 
 $i = 1;
 
-if ($result->num_rows > 0) {
+if ($result && $result->num_rows > 0) {
 
-    while ($row = $result->fetch_assoc()) {
+    while ($result && $row = $result->fetch_assoc()) {
 
         $status = $row['violation_count'] >= 3 ? "VIOLATED" : "OK";
 

@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require_once "../config/db.php";
 require_once "../config/ai_client.php";
 
@@ -90,7 +92,7 @@ $query = "
     FROM questions q
     JOIN exams e ON q.exam_id = e.id
     LEFT JOIN student_answers sa ON q.id = sa.question_id
-    GROUP BY q.id
+    GROUP BY q.id, q.question, q.subject, q.topic, q.difficulty, q.correct_option, e.title
     ORDER BY q.id ASC
 ";
 $res = $conn->query($query);
@@ -98,7 +100,7 @@ $res = $conn->query($query);
 $aiClient = new AiClient();
 $analyzed_questions = [];
 
-while ($row = $res->fetch_assoc()) {
+while ($res && $row = $res->fetch_assoc()) {
     $attempts = (int)$row['total_attempts'];
     $correct = (int)$row['correct_attempts'];
     $students = (int)$row['unique_students'];

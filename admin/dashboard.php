@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     header("Location: ../index.php");
@@ -39,7 +41,7 @@ FROM results
 JOIN users ON users.id = results.user_id
 JOIN exams ON exams.id = results.exam_id
 LEFT JOIN questions ON questions.exam_id = exams.id
-GROUP BY results.id
+GROUP BY results.id, users.name, exams.title, results.score, exams.marks_per_question
 ORDER BY results.id DESC
 LIMIT 4
 ");
@@ -114,7 +116,7 @@ ORDER BY id ASC
 
 <div class="card">
 
-<?php if($recent_activity->num_rows > 0): ?>
+<?php if ($recent_activity && $recent_activity->num_rows > 0): ?>
 
 <table>
 
@@ -168,7 +170,7 @@ $status = $percent >= 40 ? "PASS" : "FAIL";
 <!-- TOP STUDENTS EXAM WISE -->
 <h2>Top Students (Exam Wise)</h2>
 
-<?php while($exam = $exam_list->fetch_assoc()): ?>
+<?php while ($exam_list && $exam = $exam_list->fetch_assoc()): ?>
 
 <div class="card">
 
@@ -180,13 +182,14 @@ $exam_id = $exam['id'];
 $marks_per_question = $exam['marks_per_question'];
 
 /* total questions */
-$q = $conn->query("
+$q_res = $conn->query("
 SELECT COUNT(*) AS total_questions
 FROM questions
 WHERE exam_id = $exam_id
-")->fetch_assoc();
+");
+$q = $q_res ? $q_res->fetch_assoc() : ['total_questions' => 0];
 
-$total_marks = $q['total_questions'] * $marks_per_question;
+$total_marks = ($q['total_questions'] ?? 0) * $marks_per_question;
 
 /* top 3 distinct scores */
 $top_scores = $conn->query("
@@ -197,7 +200,7 @@ ORDER BY score DESC
 LIMIT 3
 ");
 
-if($top_scores->num_rows > 0):
+if ($top_scores && $top_scores->num_rows > 0):
 ?>
 
 <table>
@@ -227,7 +230,7 @@ WHERE results.exam_id = $exam_id
 AND results.score = $score
 ");
 
-while($student = $students->fetch_assoc()):
+while ($students && $student = $students->fetch_assoc()):
 
 /* ✅ FINAL FIX LOGIC */
 $obtained = $student['score'] * $marks_per_question;
