@@ -37,7 +37,7 @@ class AiClient {
         return $this->baseUrl;
     }
 
-    public function checkHealth(int $customTimeout = 2): array {
+    public function checkHealth(int $customTimeout = 5): array {
         return $this->request('GET', '/health', null, $customTimeout);
     }
 
@@ -193,7 +193,7 @@ class AiClient {
         return $this->request('POST', '/api/v1/recommendations/practice-questions', $payload);
     }
 
-    private function request(string $method, string $endpoint, ?array $payload = null, ?int $overrideTimeout = null): array {
+    private function request(string $method, string $endpoint, ?array $payload = null, ?int $overrideTimeout = null, int $retryCount = 0): array {
         $endpointClean = '/' . ltrim($endpoint, '/');
         $url = $this->baseUrl . $endpointClean;
         $ch = curl_init();
@@ -228,6 +228,10 @@ class AiClient {
         curl_close($ch);
 
         if ($response === false) {
+            if ($retryCount < 2 && in_array($curlErrno, [28, 7, 52], true)) {
+                sleep(2);
+                return $this->request($method, $endpoint, $payload, $overrideTimeout, $retryCount + 1);
+            }
             return [
                 'success' => false,
                 'online' => false,
@@ -245,6 +249,11 @@ class AiClient {
             $decoded = [];
         }
         $isSuccess = ($httpCode >= 200 && $httpCode < 300);
+
+        if (!$isSuccess && in_array($httpCode, [502, 503, 504], true) && $retryCount < 2) {
+            sleep(2);
+            return $this->request($method, $endpoint, $payload, $overrideTimeout, $retryCount + 1);
+        }
 
         $errMessage = null;
         if (!$isSuccess) {
