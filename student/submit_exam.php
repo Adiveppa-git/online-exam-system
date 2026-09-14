@@ -26,9 +26,9 @@ $check = $conn->prepare(
 );
 $check->bind_param("ii", $student_id, $exam_id);
 $check->execute();
-$check->store_result();
+$checkRes = $check->get_result();
 
-if ($check->num_rows > 0) {
+if ($checkRes->num_rows > 0) {
     header("Location: result.php");
     exit;
 }

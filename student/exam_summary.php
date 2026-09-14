@@ -20,8 +20,8 @@ if (!$exam_id) die("Invalid exam");
 $chk = $conn->prepare("SELECT id FROM results WHERE user_id=? AND exam_id=?");
 $chk->bind_param("ii",$user_id,$exam_id);
 $chk->execute();
-$chk->store_result();
-if ($chk->num_rows > 0) {
+$resChk = $chk->get_result();
+if ($resChk->num_rows > 0) {
     header("Location: result.php");
     exit;
 }

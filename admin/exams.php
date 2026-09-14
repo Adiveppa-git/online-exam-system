@@ -61,9 +61,9 @@ if (isset($_POST['add_exam'])) {
     $check=$conn->prepare("SELECT id FROM exams WHERE LOWER(title)=LOWER(?)");
     $check->bind_param("s",$title);
     $check->execute();
-    $check->store_result();
+    $res = $check->get_result();
 
-    if ($check->num_rows > 0) {
+    if ($res->num_rows > 0) {
 
         $message="Exam already exists";
 
