@@ -13,7 +13,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
 $exam_id = $_GET['exam_id'] ?? '';
 $student_id = $_GET['student_id'] ?? '';
 
-$where = "WHERE 1";
+$where = "WHERE 1=1";
 
 if ($exam_id != "") {
     $where .= " AND v.exam_id=".(int)$exam_id;

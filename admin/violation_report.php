@@ -30,7 +30,7 @@ ORDER BY name ASC
 ");
 
 /* BUILD FILTER */
-$where = "WHERE 1";
+$where = "WHERE 1=1";
 
 if (!empty($exam_id)) {
     $where .= " AND v.exam_id=".(int)$exam_id;
