@@ -105,6 +105,20 @@ font-weight:600;
 background:#0b5ed7;
 }
 
+.reset-btn{
+background:#6c757d;
+color:white;
+padding:10px 22px;
+border-radius:6px;
+text-decoration:none;
+font-weight:600;
+display:inline-block;
+}
+
+.reset-btn:hover{
+background:#5c636a;
+}
+
 .export-btn{
 background:#198754;
 color:white;
@@ -137,6 +151,7 @@ box-sizing:border-box;
 }
 
 .filter-btn,
+.reset-btn,
 .export-btn{
 width:100%;
 text-align:center;
@@ -217,6 +232,10 @@ padding:10px;
 Filter
 </button>
 
+<a class="reset-btn" href="violation_report.php">
+Reset Filters
+</a>
+
 
 <a class="export-btn"
 href="export_excel.php?exam_id=<?= $exam_id ?>&student_id=<?= $student_id ?>">
@@ -246,9 +265,17 @@ Export PDF
 <th>Status</th>
 </tr>
 
-<?php if ($result && $result->num_rows > 0): ?>
+<?php if ($result === false): ?>
 
-<?php $i=1; while ($result && $row = $result->fetch_assoc()):
+<tr>
+<td colspan="5" style="text-align:center;color:red;font-weight:bold;">
+Error loading violation report.
+</td>
+</tr>
+
+<?php elseif ($result->num_rows > 0): ?>
+
+<?php $i=1; while ($row = $result->fetch_assoc()):
 
 $status = $row['violation_count'] >= 3 ? "VIOLATED" : "OK";
 
@@ -281,7 +308,7 @@ font-weight:bold;
 
 <tr>
 <td colspan="5" style="text-align:center;">
-No violations found
+No violations found for selected filter.
 </td>
 </tr>
 

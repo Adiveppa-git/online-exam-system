@@ -65,9 +65,13 @@ echo "
 
 $i = 1;
 
-if ($result && $result->num_rows > 0) {
+if ($result === false) {
 
-    while ($result && $row = $result->fetch_assoc()) {
+    echo "<tr><td colspan='6' style='color:red;font-weight:bold;'>Error loading violation report.</td></tr>";
+
+} elseif ($result->num_rows > 0) {
+
+    while ($row = $result->fetch_assoc()) {
 
         $status = $row['violation_count'] >= 3 ? "VIOLATED" : "OK";
 
@@ -85,7 +89,7 @@ if ($result && $result->num_rows > 0) {
 
 } else {
 
-    echo "<tr><td colspan='6'>No data found</td></tr>";
+    echo "<tr><td colspan='6'>No violations found for selected filter.</td></tr>";
 
 }
 

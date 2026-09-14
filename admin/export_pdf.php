@@ -65,21 +65,23 @@ $html='
 </tr>
 ';
 
-$i=1;
-
-while ($result && $row = $result->fetch_assoc()) {
-
-$status=$row['violation_count']>=3?"VIOLATED":"OK";
-
-$html.="
-<tr>
-<td>".$i++."</td>
-<td>".$row['student']."</td>
-<td>".$row['exam']."</td>
-<td>".$row['violation_count']."</td>
-<td>".$status."</td>
-<td>".$row['created_at']."</td>
-</tr>";
+if ($result === false) {
+    $html .= "<tr><td colspan='6' style='text-align:center;color:red;font-weight:bold;'>Error loading violation report.</td></tr>";
+} elseif ($result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $status=$row['violation_count']>=3?"VIOLATED":"OK";
+        $html.="
+        <tr>
+        <td>".$i++."</td>
+        <td>".$row['student']."</td>
+        <td>".$row['exam']."</td>
+        <td>".$row['violation_count']."</td>
+        <td>".$status."</td>
+        <td>".$row['created_at']."</td>
+        </tr>";
+    }
+} else {
+    $html .= "<tr><td colspan='6' style='text-align:center;'>No violations found for selected filter.</td></tr>";
 }
 
 $html.="</table>";
