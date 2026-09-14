@@ -123,12 +123,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])
                     $req_id = "req_fail_" . uniqid();
                     $stmt = $conn->prepare("INSERT INTO ai_generation_requests (request_id, admin_id, exam_id, subject, topic, difficulty, question_type, number_requested, additional_context, model_used, status, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'failed', ?)");
                     $model = 'fastapi-ai-service';
-                    $errMsg = $response['error'];
+                    $errMsg = (string)($response['error'] ?? ($response['message'] ?? 'AI Service request failed.'));
                     $stmt->bind_param("siisssissss", $req_id, $admin_id, $exam_id, $subject, $topic, $difficulty, $question_type, $num_questions, $context, $model, $errMsg);
                     $stmt->execute();
                     $conn->commit();
 
-                    $error = "AI Generation Failed: " . htmlspecialchars($response['error']);
+                    $error = "AI Generation Failed: " . htmlspecialchars($errMsg);
                 } else {
                     $data = $response['data'];
                     $request_id = $data['request_id'] ?? ("req_" . uniqid());

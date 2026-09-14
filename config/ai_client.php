@@ -232,22 +232,43 @@ class AiClient {
                 'success' => false,
                 'online' => false,
                 'status' => $httpCode,
+                'http_code' => $httpCode,
                 'error' => "AI Service connection error ({$curlErrno}): {$curlError}",
                 'message' => "AI Service connection error ({$curlErrno}): {$curlError}",
-                'code' => $curlErrno
+                'code' => $curlErrno,
+                'data' => []
             ];
         }
 
-        $decoded = json_decode($response, true) ?? [];
+        $decoded = json_decode($response, true);
+        if (!is_array($decoded)) {
+            $decoded = [];
+        }
         $isSuccess = ($httpCode >= 200 && $httpCode < 300);
+
+        $errMessage = null;
+        if (!$isSuccess) {
+            if (isset($decoded['detail']) && is_string($decoded['detail'])) {
+                $errMessage = $decoded['detail'];
+            } elseif (isset($decoded['detail']) && is_array($decoded['detail'])) {
+                $errMessage = json_encode($decoded['detail']);
+            } elseif (isset($decoded['error']) && is_string($decoded['error'])) {
+                $errMessage = $decoded['error'];
+            } elseif (isset($decoded['message']) && is_string($decoded['message'])) {
+                $errMessage = $decoded['message'];
+            } else {
+                $errMessage = "HTTP Error {$httpCode}";
+            }
+        }
 
         return [
             'success' => $isSuccess,
             'online' => true,
             'status' => $isSuccess ? 'success' : 'error',
             'http_code' => $httpCode,
+            'error' => $errMessage,
+            'message' => $errMessage ?? ($isSuccess ? 'Success' : "HTTP Error {$httpCode}"),
             'data' => $decoded,
-            'message' => $decoded['detail'] ?? ($isSuccess ? 'Success' : "HTTP Error {$httpCode}"),
             'raw' => $decoded
         ];
     }
