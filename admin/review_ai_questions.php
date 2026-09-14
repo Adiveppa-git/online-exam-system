@@ -22,13 +22,6 @@ $success = $_SESSION['success'] ?? '';
 $error = $_SESSION['error'] ?? '';
 unset($_SESSION['success'], $_SESSION['error']);
 
-/* ===== FETCH EXAMS FOR APPROVAL SELECTION ===== */
-$exams_res = $conn->query("SELECT id, title FROM exams ORDER BY title ASC");
-$exams_list = [];
-while ($row = $exams_res->fetch_assoc()) {
-    $exams_list[] = $row;
-}
-
 /* ===== HANDLE POST ACTIONS (APPROVE / EDIT / REJECT) ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // CSRF Validation
@@ -43,105 +36,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $qid = (int)($_POST['question_id'] ?? 0);
 
     if ($action === 'bulk_approve') {
-        $exam_id = (int)($_POST['exam_id'] ?? 0);
-
-        if (!$exam_id) {
-            $_SESSION['error'] = "Please select an exam to assign the pending questions to.";
-        } else {
-            $conn->begin_transaction();
-            try {
-                // Fetch all pending questions with row lock
-                $pendingStmt = $conn->prepare("SELECT * FROM ai_generated_questions WHERE status = 'pending' FOR UPDATE");
-                $pendingStmt->execute();
-                $pendingRes = $pendingStmt->get_result();
-                $pending_questions = $pendingRes->fetch_all(MYSQLI_ASSOC);
-
-                if (empty($pending_questions)) {
-                    throw new Exception("No pending questions found to approve.");
-                }
-
-                $insStmt = $conn->prepare("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option, subject, topic, difficulty, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-
-                $updStmt = $conn->prepare("UPDATE ai_generated_questions SET status = 'approved', exam_id = ?, reviewed_by = ?, reviewed_at = NOW() WHERE status = 'pending'");
-                $updStmt->bind_param("ii", $exam_id, $admin_id);
-
-                $count = 0;
-                foreach ($pending_questions as $gq) {
-                    $insStmt->bind_param("issssssssss",
-                        $exam_id, $gq['question'], $gq['option_a'], $gq['option_b'], $gq['option_c'], $gq['option_d'],
-                        $gq['correct_option'], $gq['subject'], $gq['topic'], $gq['difficulty'], $gq['explanation']
-                    );
-                    if (!$insStmt->execute()) {
-                        throw new Exception("Failed to insert question: " . $conn->error);
-                    }
-                    $count++;
-                }
-
-                if (!$updStmt->execute() || $updStmt->affected_rows === 0) {
-                    throw new Exception("Failed to update question statuses.");
-                }
-
-                // Mark exam as AI generation completed
-                $conn->query("UPDATE exams SET ai_generated = 1 WHERE id = {$exam_id}");
-
-                $conn->commit();
-                $_SESSION['success'] = "Successfully approved and published {$count} pending question(s) to the selected exam!";
-            } catch (Exception $ex) {
-                $conn->rollback();
-                $_SESSION['error'] = "Bulk Approval Transaction Failed: " . $ex->getMessage();
+        $conn->begin_transaction();
+        try {
+            // Fetch all pending questions with row lock
+            $pendingStmt = $conn->prepare("SELECT * FROM ai_generated_questions WHERE status = 'pending' FOR UPDATE");
+            $pendingStmt->execute();
+            $pendingRes = $pendingStmt->get_result();
+            $pending_questions = [];
+            while ($row = $pendingRes->fetch_assoc()) {
+                $pending_questions[] = $row;
             }
+
+            if (empty($pending_questions)) {
+                throw new Exception("No pending questions found to approve.");
+            }
+
+            $insStmt = $conn->prepare("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option, subject, topic, difficulty, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $updStmt = $conn->prepare("UPDATE ai_generated_questions SET status = 'approved', reviewed_by = ?, reviewed_at = NOW() WHERE id = ? AND status = 'pending'");
+            $updExamStmt = $conn->prepare("UPDATE exams SET ai_generated = 1 WHERE id = ?");
+
+            $count = 0;
+            $processedExams = [];
+
+            foreach ($pending_questions as $gq) {
+                $eId = (int)($gq['exam_id'] ?? 0);
+                if (!$eId) {
+                    throw new Exception("Pending question #" . $gq['id'] . " does not have an assigned exam ID.");
+                }
+
+                $insStmt->bind_param("issssssssss",
+                    $eId, $gq['question'], $gq['option_a'], $gq['option_b'], $gq['option_c'], $gq['option_d'],
+                    $gq['correct_option'], $gq['subject'], $gq['topic'], $gq['difficulty'], $gq['explanation']
+                );
+                if (!$insStmt->execute()) {
+                    throw new Exception("Failed to insert question #" . $gq['id'] . ": " . ($insStmt->error ?: $conn->error));
+                }
+
+                $updStmt->bind_param("ii", $admin_id, $gq['id']);
+                if (!$updStmt->execute()) {
+                    throw new Exception("Failed to update status for question #" . $gq['id']);
+                }
+
+                $processedExams[$eId] = true;
+                $count++;
+            }
+
+            foreach (array_keys($processedExams) as $eIdToUpdate) {
+                $updExamStmt->bind_param("i", $eIdToUpdate);
+                $updExamStmt->execute();
+            }
+
+            $conn->commit();
+            $_SESSION['success'] = "Successfully approved and published {$count} pending question(s) into their assigned exams!";
+        } catch (Exception $ex) {
+            $conn->rollback();
+            $_SESSION['error'] = "Bulk Approval Transaction Failed: " . $ex->getMessage();
         }
         header("Location: review_ai_questions.php?status=" . urlencode($status_filter) . ($request_id_filter ? "&request_id=" . urlencode($request_id_filter) : ""));
         exit;
     }
 
     if ($action === 'approve') {
-        $exam_id = (int)($_POST['exam_id'] ?? 0);
-        
-        if (!$exam_id) {
-            $_SESSION['error'] = "Please select an exam to assign the approved question to.";
-        } else {
-            // Transactional Approval to prevent partial state or race conditions
-            $conn->begin_transaction();
-            try {
-                // Fetch pending question with row lock
-                $qStmt = $conn->prepare("SELECT * FROM ai_generated_questions WHERE id = ? AND status = 'pending' FOR UPDATE");
-                $qStmt->bind_param("i", $qid);
-                $qStmt->execute();
-                $gq = $qStmt->get_result()->fetch_assoc();
+        $conn->begin_transaction();
+        try {
+            // Fetch pending question with row lock
+            $qStmt = $conn->prepare("SELECT * FROM ai_generated_questions WHERE id = ? AND status = 'pending' FOR UPDATE");
+            $qStmt->bind_param("i", $qid);
+            $qStmt->execute();
+            $gq = $qStmt->get_result()->fetch_assoc();
 
-                if (!$gq) {
-                    throw new Exception("Question not found or already reviewed.");
-                }
-
-                // 1. Insert into active questions table
-                $insStmt = $conn->prepare("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option, subject, topic, difficulty, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $insStmt->bind_param("issssssssss", 
-                    $exam_id, $gq['question'], $gq['option_a'], $gq['option_b'], $gq['option_c'], $gq['option_d'], 
-                    $gq['correct_option'], $gq['subject'], $gq['topic'], $gq['difficulty'], $gq['explanation']
-                );
-                
-                if (!$insStmt->execute()) {
-                    throw new Exception("Failed to insert question: " . $conn->error);
-                }
-
-                // 2. Mark as approved & link exam_id
-                $updStmt = $conn->prepare("UPDATE ai_generated_questions SET status = 'approved', exam_id = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ? AND status = 'pending'");
-                $updStmt->bind_param("iii", $exam_id, $admin_id, $qid);
-                
-                if (!$updStmt->execute() || $updStmt->affected_rows === 0) {
-                    throw new Exception("Failed to update status to approved.");
-                }
-
-                // Mark exam as AI generation completed
-                $conn->query("UPDATE exams SET ai_generated = 1 WHERE id = {$exam_id}");
-
-                $conn->commit();
-                $_SESSION['success'] = "Question approved and added to active exam question bank!";
-            } catch (Exception $ex) {
-                $conn->rollback();
-                $_SESSION['error'] = "Approval Transaction Failed: " . $ex->getMessage();
+            if (!$gq) {
+                throw new Exception("Question not found or already reviewed.");
             }
+
+            $eId = (int)($gq['exam_id'] ?? 0);
+            if (!$eId) {
+                throw new Exception("This pending question does not have an assigned exam ID.");
+            }
+
+            $diffInput = strtolower(trim($_POST['difficulty'] ?? ''));
+            $difficultyToUse = in_array($diffInput, ['easy', 'medium', 'hard'], true) ? $diffInput : $gq['difficulty'];
+
+            // 1. Insert into active questions table
+            $insStmt = $conn->prepare("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option, subject, topic, difficulty, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $insStmt->bind_param("issssssssss",
+                $eId, $gq['question'], $gq['option_a'], $gq['option_b'], $gq['option_c'], $gq['option_d'],
+                $gq['correct_option'], $gq['subject'], $gq['topic'], $difficultyToUse, $gq['explanation']
+            );
+
+            if (!$insStmt->execute()) {
+                throw new Exception("Failed to insert question: " . ($insStmt->error ?: $conn->error));
+            }
+
+            // 2. Mark as approved, update difficulty if modified, set reviewed_by
+            $updStmt = $conn->prepare("UPDATE ai_generated_questions SET status = 'approved', difficulty = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ? AND status = 'pending'");
+            $updStmt->bind_param("sii", $difficultyToUse, $admin_id, $qid);
+
+            if (!$updStmt->execute() || $updStmt->affected_rows === 0) {
+                throw new Exception("Failed to update status to approved.");
+            }
+
+            // 3. Mark exam as AI generation completed
+            $updExam = $conn->prepare("UPDATE exams SET ai_generated = 1 WHERE id = ?");
+            $updExam->bind_param("i", $eId);
+            $updExam->execute();
+
+            $conn->commit();
+            $_SESSION['success'] = "Question approved and published to active exam question bank!";
+        } catch (Exception $ex) {
+            $conn->rollback();
+            $_SESSION['error'] = "Approval Transaction Failed: " . $ex->getMessage();
         }
         header("Location: review_ai_questions.php?status=" . urlencode($status_filter) . ($request_id_filter ? "&request_id=" . urlencode($request_id_filter) : ""));
         exit;
@@ -264,23 +268,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 /* ===== FETCH AI GENERATED QUESTIONS ===== */
-$query = "SELECT * FROM ai_generated_questions WHERE 1=1";
+$query = "SELECT gq.*, e.title AS exam_title
+          FROM ai_generated_questions gq
+          LEFT JOIN exams e ON gq.exam_id = e.id
+          WHERE 1=1";
 $params = [];
 $types = "";
 
 if (!empty($status_filter) && $status_filter !== 'all') {
-    $query .= " AND status = ?";
+    $query .= " AND gq.status = ?";
     $params[] = $status_filter;
     $types .= "s";
 }
 
 if (!empty($request_id_filter)) {
-    $query .= " AND request_id = ?";
+    $query .= " AND gq.request_id = ?";
     $params[] = $request_id_filter;
     $types .= "s";
 }
 
-$query .= " ORDER BY id DESC";
+$query .= " ORDER BY gq.id DESC";
 
 $stmt = $conn->prepare($query);
 if (!empty($types)) {
@@ -442,7 +449,7 @@ $cnt_active = $conn->query("SELECT COUNT(*) AS c FROM questions")->fetch_assoc()
             <h1 style="margin: 0;">📋 AI Question Review Queue</h1>
             <a href="manage_questions.php" style="background: #0d6efd; color: white; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">&larr; Manage Questions</a>
         </div>
-        <p style="color: #666; margin-bottom: 20px;">Review AI-generated questions. Edit details if needed, then select an exam to approve and publish into the active question bank.</p>
+        <p style="color: #666; margin-bottom: 20px;">Review AI-generated questions. Edit details if needed, adjust difficulty, then approve or reject.</p>
 
         <?php if (!empty($error)): ?>
             <div class="alert-error"><?= htmlspecialchars($error) ?></div>
@@ -456,18 +463,12 @@ $cnt_active = $conn->query("SELECT COUNT(*) AS c FROM questions")->fetch_assoc()
         <?php if ($cnt_pending > 0 && ($status_filter === 'pending' || $status_filter === 'all' || empty($status_filter))): ?>
             <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 15px 20px; margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
                 <div style="font-weight: 600; color: #166534; font-size: 15px;">
-                    ⚡ <strong>Bulk Approval:</strong> Publish all <strong><?= $cnt_pending ?></strong> pending question(s) into the active question bank.
+                    ⚡ <strong>Bulk Approval:</strong> Publish all <strong><?= $cnt_pending ?></strong> pending question(s) into their assigned exams.
                 </div>
-                <form method="POST" onsubmit="return confirmBulkApprove(this)" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <form method="POST" onsubmit="return confirm('Are you sure you want to approve and publish all pending questions into their assigned exams?');" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
                     <input type="hidden" name="action" value="bulk_approve">
 
-                    <select name="exam_id" class="select-exam" style="background: white; border-color: #86efac;" required>
-                        <option value="">-- Select Exam to Assign All --</option>
-                        <?php foreach($exams_list as $ex): ?>
-                            <option value="<?= $ex['id'] ?>"><?= htmlspecialchars($ex['title']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
                     <button type="submit" class="btn-action btn-approve">
                         ✓ Approve & Publish All
                     </button>
@@ -505,6 +506,7 @@ $cnt_active = $conn->query("SELECT COUNT(*) AS c FROM questions")->fetch_assoc()
                 <div class="q-card status-<?= $q['status'] ?>">
                     <div>
                         <span class="badge badge-<?= $q['status'] ?>"><?= strtoupper($q['status']) ?></span>
+                        <span class="badge badge-subject" style="background: #fef3c7; color: #92400e;">EXAM: <?= htmlspecialchars($q['exam_title'] ?? ('Exam #' . ($q['exam_id'] ?? 'N/A'))) ?></span>
                         <span class="badge badge-subject"><?= htmlspecialchars($q['subject']) ?></span>
                         <span class="badge badge-subject"><?= htmlspecialchars($q['topic']) ?></span>
                         <span class="badge badge-diff"><?= strtoupper($q['difficulty']) ?></span>
@@ -544,16 +546,16 @@ $cnt_active = $conn->query("SELECT COUNT(*) AS c FROM questions")->fetch_assoc()
                     <div class="action-row">
                         <?php if ($q['status'] === 'pending'): ?>
                             <!-- APPROVE FORM -->
-                            <form method="POST" style="display: flex; gap: 10px; align-items: center;">
+                            <form method="POST" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
                                 <input type="hidden" name="action" value="approve">
                                 <input type="hidden" name="question_id" value="<?= $q['id'] ?>">
                                 
-                                <select name="exam_id" class="select-exam" required>
-                                    <option value="">-- Assign to Exam --</option>
-                                    <?php foreach($exams_list as $ex): ?>
-                                        <option value="<?= $ex['id'] ?>"><?= htmlspecialchars($ex['title']) ?></option>
-                                    <?php endforeach; ?>
+                                <label style="font-size: 13px; font-weight: 600; color: #374151;">Difficulty:</label>
+                                <select name="difficulty" class="select-exam" style="padding: 6px 10px; font-size: 13px;">
+                                    <option value="easy" <?= strtolower($q['difficulty'])==='easy'?'selected':'' ?>>Easy</option>
+                                    <option value="medium" <?= strtolower($q['difficulty'])==='medium'?'selected':'' ?>>Medium</option>
+                                    <option value="hard" <?= strtolower($q['difficulty'])==='hard'?'selected':'' ?>>Hard</option>
                                 </select>
                                 <button type="submit" class="btn-action btn-approve">✔ Approve & Publish</button>
                             </form>
@@ -632,13 +634,22 @@ $cnt_active = $conn->query("SELECT COUNT(*) AS c FROM questions")->fetch_assoc()
                                     </select>
                                 </div>
                                 <div>
+                                    <label>Difficulty</label>
+                                    <select name="difficulty" required>
+                                        <option value="easy" <?= strtolower($q['difficulty'])==='easy'?'selected':'' ?>>Easy</option>
+                                        <option value="medium" <?= strtolower($q['difficulty'])==='medium'?'selected':'' ?>>Medium</option>
+                                        <option value="hard" <?= strtolower($q['difficulty'])==='hard'?'selected':'' ?>>Hard</option>
+                                    </select>
+                                </div>
+                                <div>
                                     <label>Subject</label>
                                     <input type="text" name="subject" value="<?= htmlspecialchars($q['subject']) ?>" required>
                                 </div>
-                                <div>
-                                    <label>Topic</label>
-                                    <input type="text" name="topic" value="<?= htmlspecialchars($q['topic']) ?>" required>
-                                </div>
+                            </div>
+
+                            <div style="margin-top: 10px;">
+                                <label>Topic</label>
+                                <input type="text" name="topic" value="<?= htmlspecialchars($q['topic']) ?>" required>
                             </div>
 
                             <label style="margin-top: 10px;">Explanation</label>
@@ -657,15 +668,6 @@ $cnt_active = $conn->query("SELECT COUNT(*) AS c FROM questions")->fetch_assoc()
 </div>
 
 <script>
-function confirmBulkApprove(form) {
-    const examSelect = form.querySelector('select[name="exam_id"]');
-    if (!examSelect || !examSelect.value) {
-        alert("Please select an exam to assign the pending questions to.");
-        return false;
-    }
-    return true;
-}
-
 function toggleEdit(id) {
     const el = document.getElementById("edit_form_" + id);
     if (el.style.display === "block") {
