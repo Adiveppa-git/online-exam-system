@@ -95,9 +95,19 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
 
                 $sqlToRun = str_replace('`', '', $this->sql);
                 $sqlToRun = preg_replace('/IFNULL\(/i', 'COALESCE(', $sqlToRun);
+                $sqlToRun = preg_replace(
+                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+answer\s*=\s*(?:VALUES\(answer\)|EXCLUDED\.answer|\?)/i',
+                    'ON CONFLICT (student_id, exam_id, question_id) DO UPDATE SET answer = EXCLUDED.answer',
+                    $sqlToRun
+                );
+                $sqlToRun = preg_replace(
+                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+violation_count\s*=\s*(?:VALUES\(violation_count\)|EXCLUDED\.violation_count|\?)/i',
+                    'ON CONFLICT (student_id, exam_id) DO UPDATE SET violation_count = EXCLUDED.violation_count',
+                    $sqlToRun
+                );
 
                 $isInsert = (bool)preg_match('/^\s*INSERT\s+INTO\s+([`"\w]+)/i', $sqlToRun, $matches);
-                if ($isInsert && !preg_match('/RETURNING\s+/i', $sqlToRun)) {
+                if ($isInsert && !preg_match('/RETURNING\s+/i', $sqlToRun) && !preg_match('/ON\s+CONFLICT/i', $sqlToRun)) {
                     $sqlToRun .= ' RETURNING id';
                 }
 
@@ -184,6 +194,16 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
             try {
                 $sqlToRun = str_replace('`', '', $sql);
                 $sqlToRun = preg_replace('/IFNULL\(/i', 'COALESCE(', $sqlToRun);
+                $sqlToRun = preg_replace(
+                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+answer\s*=\s*(?:VALUES\(answer\)|EXCLUDED\.answer|\?)/i',
+                    'ON CONFLICT (student_id, exam_id, question_id) DO UPDATE SET answer = EXCLUDED.answer',
+                    $sqlToRun
+                );
+                $sqlToRun = preg_replace(
+                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+violation_count\s*=\s*(?:VALUES\(violation_count\)|EXCLUDED\.violation_count|\?)/i',
+                    'ON CONFLICT (student_id, exam_id) DO UPDATE SET violation_count = EXCLUDED.violation_count',
+                    $sqlToRun
+                );
 
                 if (preg_match('/^\s*SHOW\s+TABLES\s+LIKE\s+[\'"]([^\'"]+)[\'"]/i', $sqlToRun, $matches)) {
                     $tbl = $matches[1];
@@ -198,7 +218,7 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                 }
 
                 $isInsert = (bool)preg_match('/^\s*INSERT\s+INTO\s+/i', $sqlToRun);
-                if ($isInsert && !preg_match('/RETURNING\s+/i', $sqlToRun)) {
+                if ($isInsert && !preg_match('/RETURNING\s+/i', $sqlToRun) && !preg_match('/ON\s+CONFLICT/i', $sqlToRun)) {
                     $sqlToRun .= ' RETURNING id';
                 }
 

@@ -68,6 +68,7 @@ $html='
 if ($result === false) {
     $html .= "<tr><td colspan='6' style='text-align:center;color:red;font-weight:bold;'>Error loading violation report.</td></tr>";
 } elseif ($result->num_rows > 0) {
+    $i = 1;
     while ($row = $result->fetch_assoc()) {
         $status=$row['violation_count']>=3?"VIOLATED":"OK";
         $html.="

@@ -207,7 +207,7 @@ function sendBrevoMail($to, $subject, $body)
         }
 
         if ($httpCode === 201) {
-            if (session_status() === PHP_SESSION_NONE) {
+            if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
                 session_start();
             }
             if (!isset($_SESSION)) {
@@ -243,7 +243,7 @@ function sendBrevoMail($to, $subject, $body)
     curl_close($ch);
 
     if ($httpCode === 201) {
-        if (session_status() === PHP_SESSION_NONE) {
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
             session_start();
         }
         if (!isset($_SESSION)) {
@@ -311,7 +311,7 @@ function sendSmtpMail($to, $subject, $body)
 
         if (is_bool($mockRes)) {
             if ($mockRes === true) {
-                if (session_status() === PHP_SESSION_NONE) {
+                if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
                     session_start();
                 }
                 if (!isset($_SESSION)) {
@@ -326,7 +326,7 @@ function sendSmtpMail($to, $subject, $body)
 
         if (is_array($mockRes)) {
             if (!empty($mockRes['success'])) {
-                if (session_status() === PHP_SESSION_NONE) {
+                if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
                     session_start();
                 }
                 if (!isset($_SESSION)) {
@@ -383,7 +383,7 @@ function sendSmtpMail($to, $subject, $body)
 
         $mail->send();
 
-        if (session_status() === PHP_SESSION_NONE) {
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
             session_start();
         }
         if (!isset($_SESSION)) {

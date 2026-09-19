@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     if ($gen_res['success'] === true && !empty($gen_res['data']['questions'])) {
         $questions = $gen_res['data']['questions'];
-        $actual_count = len($questions);
+        $actual_count = count($questions);
 
         // Create practice session record in MySQL
         $stmt_s = $conn->prepare("INSERT INTO ai_practice_sessions (student_id, subject, topic, difficulty, total_questions, status) VALUES (?, ?, ?, ?, ?, 'in_progress')");

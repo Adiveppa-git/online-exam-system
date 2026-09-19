@@ -102,7 +102,7 @@ $conn->query("DELETE FROM ai_documents WHERE id = {$doc_id}");
 if (file_exists($sample_pdf_path)) @unlink($sample_pdf_path);
 
 $ask_after_del = $aiClient->askRAG("What is Round Robin scheduling?", "Operating Systems");
-$step9_pass = ($ask_after_del['data']['has_sufficient_context'] === false);
+$step9_pass = (($ask_after_del['data']['has_sufficient_context'] ?? null) === false);
 log_step(8, "Document Deletion & Vector Cleanup Verification", $step9_pass, "Deleted document content no longer retrieved.");
 
 // --- Step 10: Core Exam System Regression Verification ---
