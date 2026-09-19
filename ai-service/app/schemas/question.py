@@ -3,18 +3,22 @@ from pydantic import BaseModel, Field, field_validator
 
 class QuestionGenerationRequest(BaseModel):
     subject: str = Field(..., min_length=1, max_length=100, description="Subject area")
-    topic: str = Field(..., min_length=1, max_length=100, description="Specific topic")
+    topic: Optional[str] = Field("", max_length=100, description="Specific topic (optional)")
     difficulty: Literal["easy", "medium", "hard"] = Field("medium", description="Difficulty level")
     question_type: str = Field("mcq", description="Question type (default mcq)")
     number_of_questions: int = Field(5, ge=1, le=20, description="Number of questions to generate (1-20)")
     additional_context: Optional[str] = Field(None, max_length=1000, description="Optional background material/notes")
 
-    @field_validator('subject', 'topic')
-    def strip_whitespace(cls, v: str) -> str:
-        s = v.strip()
+    @field_validator('subject')
+    def strip_whitespace_subject(cls, v: str) -> str:
+        s = (v or "").strip()
         if not s:
             raise ValueError("Field cannot be blank")
         return s
+
+    @field_validator('topic')
+    def strip_whitespace_topic(cls, v: Optional[str]) -> str:
+        return (v or "").strip()
 
 class GeneratedQuestionItem(BaseModel):
     question: str = Field(..., min_length=5)
@@ -22,7 +26,7 @@ class GeneratedQuestionItem(BaseModel):
     correct_answer: Literal["A", "B", "C", "D"] = Field(...)
     explanation: str = Field(..., min_length=5)
     subject: str = Field(...)
-    topic: str = Field(...)
+    topic: Optional[str] = Field("", description="Topic name")
     difficulty: Literal["easy", "medium", "hard"] = Field(...)
 
     @field_validator('options')

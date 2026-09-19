@@ -62,14 +62,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])
         $subject = trim($_POST['subject'] ?? '');
         $topic = trim($_POST['topic'] ?? '');
         $difficulty = $_POST['difficulty'] ?? 'medium';
-        $question_type = $_POST['question_type'] ?? 'mcq';
+        $question_type = 'mcq';
         $num_questions = (int)($_POST['number_of_questions'] ?? 5);
         $context = trim($_POST['additional_context'] ?? '');
 
         if ($exam_id <= 0) {
             $error = "Please select a valid exam.";
-        } elseif (empty($subject) || empty($topic)) {
-            $error = "Subject and Topic fields are required.";
+        } elseif (empty($subject)) {
+            $error = "Subject field is required.";
+        } elseif (empty($difficulty) || !in_array($difficulty, ['easy', 'medium', 'hard'], true)) {
+            $error = "Please select a valid difficulty level.";
         } elseif ($num_questions < 1 || $num_questions > 20) {
             $error = "Number of questions must be between 1 and 20.";
         } else {
@@ -337,28 +339,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])
                         <input type="text" name="subject" id="subject" required placeholder="e.g. Computer Science, Python, Physics" value="<?= htmlspecialchars($_POST['subject'] ?? '') ?>">
                     </div>
                     <div class="form-group">
-                        <label>Topic *</label>
-                        <input type="text" name="topic" id="topic" required placeholder="e.g. Data Structures, OOP, SQL Queries" value="<?= htmlspecialchars($_POST['topic'] ?? '') ?>">
+                        <label>Topic (Optional)</label>
+                        <input type="text" name="topic" id="topic" placeholder="e.g. Data Structures, OOP, SQL Queries" value="<?= htmlspecialchars($_POST['topic'] ?? '') ?>">
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Difficulty</label>
-                        <select name="difficulty">
+                        <label>Difficulty *</label>
+                        <select name="difficulty" required>
                             <option value="easy" <?= ($_POST['difficulty'] ?? '') === 'easy' ? 'selected' : '' ?>>Easy</option>
                             <option value="medium" <?= ($_POST['difficulty'] ?? 'medium') === 'medium' ? 'selected' : '' ?>>Medium</option>
                             <option value="hard" <?= ($_POST['difficulty'] ?? '') === 'hard' ? 'selected' : '' ?>>Hard</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Question Type</label>
-                        <select name="question_type">
-                            <option value="mcq">Multiple Choice Question (MCQ)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Number of Questions (1-20)</label>
+                        <label>Number of Questions (1-20) *</label>
                         <input type="number" name="number_of_questions" min="1" max="20" value="<?= (int)($_POST['number_of_questions'] ?? 5) ?>" required>
                     </div>
                 </div>
@@ -388,11 +384,9 @@ function handleExamSelect(selectEl) {
     const statusBox = document.getElementById("aiStatusBox");
     const btnSubmit = document.getElementById("btnSubmit");
     const subjectInput = document.getElementById("subject");
-    const topicInput = document.getElementById("topic");
 
     if (title && (!subjectInput.value || subjectInput.value === title)) {
         subjectInput.value = title;
-        if (!topicInput.value) topicInput.value = "General";
     }
 
     if (status === "completed") {

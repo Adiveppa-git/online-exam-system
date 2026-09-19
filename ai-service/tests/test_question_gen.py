@@ -54,3 +54,16 @@ def test_generate_questions_invalid_difficulty():
     }
     response = client.post("/api/v1/questions/generate", json=payload)
     assert response.status_code == 422
+
+def test_generate_questions_empty_topic():
+    payload = {
+        "subject": "Python Programming",
+        "topic": "",
+        "difficulty": "medium",
+        "number_of_questions": 5
+    }
+    response = client.post("/api/v1/questions/generate", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert len(data["questions"]) == 5

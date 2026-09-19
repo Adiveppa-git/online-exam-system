@@ -68,13 +68,15 @@ class LLMService:
                     continue
                 seen_questions.add(q_text)
 
+                topic_label = req.topic if req.topic else req.subject
+                exp_default = f"Correct answer is option {item.get('correct_answer')} based on {topic_label} principles."
                 validated = GeneratedQuestionItem(
                     question=q_text,
                     options=item.get("options", {}),
                     correct_answer=item.get("correct_answer", "A"),
-                    explanation=item.get("explanation", f"Correct answer is option {item.get('correct_answer')} based on {req.topic} principles."),
+                    explanation=item.get("explanation", exp_default),
                     subject=req.subject,
-                    topic=req.topic,
+                    topic=req.topic or "",
                     difficulty=req.difficulty
                 )
                 validated_items.append(validated)
@@ -96,10 +98,12 @@ class LLMService:
             "Content-Type": "application/json"
         }
 
+        topic_str = f"Topic: {req.topic}" if req.topic else f"Topic: General {req.subject} concepts"
+
         prompt = f"""
 Generate {req.number_of_questions} multiple choice questions (MCQ) for an examination.
 Subject: {req.subject}
-Topic: {req.topic}
+{topic_str}
 Difficulty: {req.difficulty}
 Additional Context: {req.additional_context or 'None'}
 
@@ -132,36 +136,37 @@ Each object must have:
     def _generate_heuristic_questions(req: QuestionGenerationRequest) -> List[Dict[str, Any]]:
         results = []
         diff_label = req.difficulty.capitalize()
+        topic_label = req.topic if req.topic else req.subject
         
         base_templates = [
             {
-                "q": f"What is a fundamental core concept of {req.topic} in {req.subject}?",
+                "q": f"What is a fundamental core concept of {topic_label} in {req.subject}?" if req.topic else f"What is a fundamental core concept of {req.subject}?",
                 "opts": {
-                    "A": f"Primary principle of {req.topic}",
+                    "A": f"Primary principle of {topic_label}",
                     "B": f"Secondary non-standard implementation",
                     "C": f"Unrelated legacy protocol",
                     "D": f"Deprecated configuration pattern"
                 },
                 "ans": "A",
-                "exp": f"The primary principle of {req.topic} forms the foundation of {req.subject}."
+                "exp": f"The primary principle of {topic_label} forms the foundation of {req.subject}."
             },
             {
-                "q": f"Which of the following best describes the function of {req.topic}?",
+                "q": f"Which of the following best describes the function of {topic_label}?",
                 "opts": {
                     "A": "Provides temporary storage allocation",
-                    "B": f"Encapsulates and processes core {req.topic} operations efficiently",
+                    "B": f"Encapsulates and processes core {topic_label} operations efficiently",
                     "C": "Restricts network bandwidth usage",
                     "D": "Ignores syntax error handling"
                 },
                 "ans": "B",
-                "exp": f"{req.topic} is specifically designed to encapsulate core operational logic."
+                "exp": f"{topic_label} is specifically designed to encapsulate core operational logic."
             },
             {
-                "q": f"In a {diff_label} scenario involving {req.topic}, which strategy is recommended?",
+                "q": f"In a {diff_label} scenario involving {topic_label}, which strategy is recommended?",
                 "opts": {
                     "A": "Bypass validation routines",
                     "B": "Hardcode dynamic variable bindings",
-                    "C": f"Apply modular patterns tailored for {req.topic}",
+                    "C": f"Apply modular patterns tailored for {topic_label}",
                     "D": "Disable exception reporting"
                 },
                 "ans": "C",
