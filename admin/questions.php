@@ -125,9 +125,9 @@ $exams = $conn->query("
 
 /* ================= FETCH QUESTIONS ================= */
 $questions = $conn->query("
-    SELECT q.*, e.title AS exam_title
+    SELECT q.*, COALESCE(e.title, 'General Exam') AS exam_title
     FROM questions q
-    JOIN exams e ON q.exam_id=e.id
+    LEFT JOIN exams e ON q.exam_id = e.id
     ORDER BY q.id ASC
 ");
 ?>

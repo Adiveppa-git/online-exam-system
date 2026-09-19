@@ -64,9 +64,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception("Pending question #" . $gq['id'] . " does not have an assigned exam ID.");
                 }
 
+                $diffToUse = strtolower(trim($gq['difficulty'] ?? 'medium'));
+                if (!in_array($diffToUse, ['easy', 'medium', 'hard'], true)) {
+                    $diffToUse = 'medium';
+                }
+                $subjToUse = trim($gq['subject'] ?? '') ?: 'General';
+                $topicToUse = trim($gq['topic'] ?? '');
+                $expToUse = trim($gq['explanation'] ?? '');
+
                 $insStmt->bind_param("issssssssss",
                     $eId, $gq['question'], $gq['option_a'], $gq['option_b'], $gq['option_c'], $gq['option_d'],
-                    $gq['correct_option'], $gq['subject'], $gq['topic'], $gq['difficulty'], $gq['explanation']
+                    $gq['correct_option'], $subjToUse, $topicToUse, $diffToUse, $expToUse
                 );
                 if (!$insStmt->execute()) {
                     throw new Exception("Failed to insert question #" . $gq['id'] . ": " . ($insStmt->error ?: $conn->error));
@@ -115,13 +123,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $diffInput = strtolower(trim($_POST['difficulty'] ?? ''));
-            $difficultyToUse = in_array($diffInput, ['easy', 'medium', 'hard'], true) ? $diffInput : $gq['difficulty'];
+            $difficultyToUse = in_array($diffInput, ['easy', 'medium', 'hard'], true) ? $diffInput : strtolower(trim($gq['difficulty'] ?? 'medium'));
+            if (!in_array($difficultyToUse, ['easy', 'medium', 'hard'], true)) {
+                $difficultyToUse = 'medium';
+            }
+            $subjToUse = trim($gq['subject'] ?? '') ?: 'General';
+            $topicToUse = trim($gq['topic'] ?? '');
+            $expToUse = trim($gq['explanation'] ?? '');
 
             // 1. Insert into active questions table
             $insStmt = $conn->prepare("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option, subject, topic, difficulty, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $insStmt->bind_param("issssssssss",
                 $eId, $gq['question'], $gq['option_a'], $gq['option_b'], $gq['option_c'], $gq['option_d'],
-                $gq['correct_option'], $gq['subject'], $gq['topic'], $difficultyToUse, $gq['explanation']
+                $gq['correct_option'], $subjToUse, $topicToUse, $difficultyToUse, $expToUse
             );
 
             if (!$insStmt->execute()) {
