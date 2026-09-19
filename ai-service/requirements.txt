@@ -11,7 +11,7 @@ pytest>=7.0.0
 
 # Machine Learning
 joblib>=1.2.0
-numpy>=1.24.0
+numpy>=2.0.0
 scikit-learn>=1.2.0
 
 # RAG, Document Processing & Vector Storage

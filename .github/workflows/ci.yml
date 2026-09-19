@@ -24,10 +24,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python 3.10
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.10"
           cache: "pip"
@@ -36,7 +36,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.1"
-          extensions: mysqli, curl, json, mbstring
+          extensions: mysqli, pdo_pgsql, pgsql, curl, json, mbstring
 
       - name: Install Python Dependencies
         run: |
