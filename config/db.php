@@ -73,17 +73,22 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
         private ?PDOStatement $stmt = null;
         private array $boundVars = [];
         private array $resultVars = [];
+        private ?PgSqlDbAdapter $parentAdapter = null;
         public int $insert_id = 0;
         public int $affected_rows = 0;
         public string $error = "";
 
-        public function __construct(PDO $pdo, string $sql) {
+        public function __construct(PDO $pdo, string $sql, ?PgSqlDbAdapter $parentAdapter = null) {
             $this->pdo = $pdo;
             $this->sql = $sql;
+            $this->parentAdapter = $parentAdapter;
         }
 
         public function bind_param(string $types, &...$params): bool {
-            $this->boundVars = &$params;
+            $this->boundVars = [];
+            foreach ($params as $k => &$v) {
+                $this->boundVars[$k] = &$v;
+            }
             return true;
         }
 
@@ -107,15 +112,36 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                 );
 
                 $isInsert = (bool)preg_match('/^\s*INSERT\s+INTO\s+([`"\w]+)/i', $sqlToRun, $matches);
+                $targetTable = $matches[1] ?? '';
+
                 if ($isInsert && !preg_match('/RETURNING\s+/i', $sqlToRun) && !preg_match('/ON\s+CONFLICT/i', $sqlToRun)) {
                     $sqlToRun .= ' RETURNING id';
                 }
 
                 $this->stmt = $this->pdo->prepare($sqlToRun);
-                $this->stmt->execute($execParams);
+                
+                try {
+                    $this->stmt->execute($execParams);
+                } catch (PDOException $e) {
+                    // Auto-heal sequence mismatch in PostgreSQL (SQLSTATE 23505 on PK sequence)
+                    if ($isInsert && !empty($targetTable) && (str_contains($e->getMessage(), '23505') || str_contains($e->getMessage(), 'unique constraint'))) {
+                        try {
+                            $this->pdo->exec("SELECT setval(pg_get_serial_sequence('{$targetTable}', 'id'), COALESCE((SELECT MAX(id) FROM \"{$targetTable}\"), 0) + 1, false)");
+                            $this->stmt = $this->pdo->prepare($sqlToRun);
+                            $this->stmt->execute($execParams);
+                        } catch (Throwable $seqEx) {
+                            throw $e; // Throw original exception if retry fails
+                        }
+                    } else {
+                        throw $e;
+                    }
+                }
 
                 $this->affected_rows = $this->stmt->rowCount();
                 $this->error = "";
+                if ($this->parentAdapter) {
+                    $this->parentAdapter->error = "";
+                }
 
                 if ($isInsert) {
                     try {
@@ -133,6 +159,9 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                 return true;
             } catch (PDOException $e) {
                 $this->error = $e->getMessage();
+                if ($this->parentAdapter) {
+                    $this->parentAdapter->error = $e->getMessage();
+                }
                 error_log("PgSqlStmtAdapter execute error: " . $e->getMessage() . " | SQL: " . $this->sql);
                 return false;
             }
@@ -187,7 +216,7 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
         }
 
         public function prepare(string $sql): PgSqlStmtAdapter {
-            return new PgSqlStmtAdapter($this->pdo, $sql);
+            return new PgSqlStmtAdapter($this->pdo, $sql, $this);
         }
 
         public function query(string $sql): PgSqlResultAdapter|bool {
@@ -218,6 +247,8 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                 }
 
                 $isInsert = (bool)preg_match('/^\s*INSERT\s+INTO\s+/i', $sqlToRun);
+                $isSelect = (bool)preg_match('/^\s*(SELECT|SHOW|EXPLAIN|WITH)\s+/i', $sqlToRun);
+
                 if ($isInsert && !preg_match('/RETURNING\s+/i', $sqlToRun) && !preg_match('/ON\s+CONFLICT/i', $sqlToRun)) {
                     $sqlToRun .= ' RETURNING id';
                 }
@@ -229,6 +260,8 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                 }
 
                 $this->affected_rows = $stmt->rowCount();
+                $this->error = "";
+
                 if ($isInsert) {
                     try {
                         $returned = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -242,6 +275,10 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                     }
                 }
 
+                if (!$isSelect) {
+                    return true;
+                }
+
                 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 return new PgSqlResultAdapter($rows ?: []);
             } catch (PDOException $e) {
@@ -252,15 +289,24 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
         }
 
         public function begin_transaction(): bool {
+            if ($this->pdo->inTransaction()) {
+                return true;
+            }
             return $this->pdo->beginTransaction();
         }
 
         public function commit(): bool {
-            return $this->pdo->commit();
+            if ($this->pdo->inTransaction()) {
+                return $this->pdo->commit();
+            }
+            return true;
         }
 
         public function rollback(): bool {
-            return $this->pdo->rollBack();
+            if ($this->pdo->inTransaction()) {
+                return $this->pdo->rollBack();
+            }
+            return true;
         }
 
         public function real_escape_string(string $str): string {
