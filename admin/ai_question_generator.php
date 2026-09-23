@@ -411,10 +411,15 @@ function handleExamSelect(selectEl) {
 
 function showLoading() {
     const btnSubmit = document.getElementById("btnSubmit");
-    if (btnSubmit.disabled) return false;
+    if (!btnSubmit || btnSubmit.disabled || btnSubmit.getAttribute("data-submitting") === "true") {
+        return false;
+    }
+    btnSubmit.setAttribute("data-submitting", "true");
     btnSubmit.style.opacity = "0.6";
-    btnSubmit.innerText = "Generating...";
+    btnSubmit.style.pointerEvents = "none";
+    btnSubmit.innerText = "⚡ Generating AI Questions... Please wait";
     document.getElementById("loadingSpinner").style.display = "block";
+    return true;
 }
 
 document.addEventListener("DOMContentLoaded", function() {

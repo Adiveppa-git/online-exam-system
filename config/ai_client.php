@@ -250,21 +250,32 @@ class AiClient {
         }
         $isSuccess = ($httpCode >= 200 && $httpCode < 300);
 
-        if (!$isSuccess && in_array($httpCode, [502, 503, 504], true) && $retryCount < 2) {
+        if (!$isSuccess && in_array($httpCode, [429, 502, 503, 504], true) && $retryCount < 2) {
             sleep(2);
             return $this->request($method, $endpoint, $payload, $overrideTimeout, $retryCount + 1);
         }
 
         $errMessage = null;
         if (!$isSuccess) {
+            $rawDetail = '';
             if (isset($decoded['detail']) && is_string($decoded['detail'])) {
-                $errMessage = $decoded['detail'];
+                $rawDetail = $decoded['detail'];
             } elseif (isset($decoded['detail']) && is_array($decoded['detail'])) {
-                $errMessage = json_encode($decoded['detail']);
+                $rawDetail = json_encode($decoded['detail']);
             } elseif (isset($decoded['error']) && is_string($decoded['error'])) {
-                $errMessage = $decoded['error'];
+                $rawDetail = $decoded['error'];
             } elseif (isset($decoded['message']) && is_string($decoded['message'])) {
-                $errMessage = $decoded['message'];
+                $rawDetail = $decoded['message'];
+            }
+
+            if ($httpCode === 429) {
+                if (preg_match('/(quota|RESOURCE_EXHAUSTED|limit exceeded)/i', $rawDetail)) {
+                    $errMessage = "AI generation quota has been reached. Please try again after the quota resets.";
+                } else {
+                    $errMessage = "AI generation service is temporarily rate-limited. Please try again shortly.";
+                }
+            } elseif (!empty($rawDetail)) {
+                $errMessage = $rawDetail;
             } else {
                 $errMessage = "HTTP Error {$httpCode}";
             }
