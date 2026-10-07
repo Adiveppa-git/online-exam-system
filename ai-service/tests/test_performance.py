@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 from app.main import app
+from app.config import settings
 
 client = TestClient(app)
+AUTH_HEADERS = {"X-Internal-API-Key": settings.INTERNAL_API_KEY}
 
 def test_performance_no_history():
     payload = {
@@ -9,7 +11,7 @@ def test_performance_no_history():
         "exams": [],
         "topics": []
     }
-    response = client.post("/api/v1/performance/analyze", json=payload)
+    response = client.post("/api/v1/performance/analyze", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["student_id"] == 101
@@ -32,7 +34,7 @@ def test_performance_multiple_exams_and_topics():
             {"subject": "Database", "topic": "SQL", "attempted": 10, "correct": 7, "accuracy": 70.0}
         ]
     }
-    response = client.post("/api/v1/performance/analyze", json=payload)
+    response = client.post("/api/v1/performance/analyze", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["total_exams_attempted"] == 2

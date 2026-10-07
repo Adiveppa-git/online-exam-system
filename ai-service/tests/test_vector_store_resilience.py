@@ -12,6 +12,7 @@ from app.services.vector_store import (
 )
 
 client = TestClient(app)
+AUTH_HEADERS = {"X-Internal-API-Key": settings.INTERNAL_API_KEY}
 
 def test_chroma_vector_store_health():
     vs = ChromaVectorStoreManager.get_instance()
@@ -65,12 +66,12 @@ def test_rag_endpoints_degraded_responses(monkeypatch):
     monkeypatch.setattr(VectorStoreManager, "get_instance", classmethod(lambda cls: pg_mgr))
 
     # Search
-    s_res = client.post("/api/v1/rag/search", json={"query": "test query", "subject": "OS"})
+    s_res = client.post("/api/v1/rag/search", json={"query": "test query", "subject": "OS"}, headers=AUTH_HEADERS)
     assert s_res.status_code == 503
     assert s_res.json()["detail"] == "RAG vector store is temporarily unavailable."
 
     # Ask
-    a_res = client.post("/api/v1/rag/ask", json={"question": "What is process scheduling?", "subject": "OS"})
+    a_res = client.post("/api/v1/rag/ask", json={"question": "What is process scheduling?", "subject": "OS"}, headers=AUTH_HEADERS)
     assert a_res.status_code == 503
     assert a_res.json()["detail"] == "RAG vector store is temporarily unavailable."
 
@@ -81,6 +82,6 @@ def test_rag_endpoints_degraded_responses(monkeypatch):
         "filename": "test.txt",
         "subject": "OS",
         "topic": "Process"
-    })
+    }, headers=AUTH_HEADERS)
     assert i_res.status_code == 503
     assert i_res.json()["detail"] == "RAG vector store is temporarily unavailable."

@@ -1,10 +1,12 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from app.config import settings
 from app.schemas.question import FocusedNotesRequest
 from app.services.llm_service import LLMService
 
 client = TestClient(app)
+AUTH_HEADERS = {"X-Internal-API-Key": settings.INTERNAL_API_KEY}
 
 def test_focused_notes_request_validation():
     # Test valid request object instantiation
@@ -30,7 +32,7 @@ def test_focused_notes_endpoint_malformed_payload():
     resp = client.post("/api/v1/questions/focused-notes", json={
         "question": "Short",
         "subject": ""
-    })
+    }, headers=AUTH_HEADERS)
     assert resp.status_code == 422
 
 def test_focused_notes_fallback_generation(monkeypatch):
@@ -41,7 +43,7 @@ def test_focused_notes_fallback_generation(monkeypatch):
         "topic": "Process Management",
         "correct_answer": "SJF (Shortest Job First)",
         "explanation": "SJF is provably optimal for minimizing average wait time."
-    })
+    }, headers=AUTH_HEADERS)
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "success"

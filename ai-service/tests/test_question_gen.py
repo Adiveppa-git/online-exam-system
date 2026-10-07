@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 from app.main import app
+from app.config import settings
 
 client = TestClient(app)
+AUTH_HEADERS = {"X-Internal-API-Key": settings.INTERNAL_API_KEY}
 
 def test_generate_questions_valid():
     payload = {
@@ -10,7 +12,7 @@ def test_generate_questions_valid():
         "difficulty": "medium",
         "number_of_questions": 3
     }
-    response = client.post("/api/v1/questions/generate", json=payload)
+    response = client.post("/api/v1/questions/generate", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
@@ -33,7 +35,7 @@ def test_generate_questions_invalid_number_high():
         "topic": "Loops",
         "number_of_questions": 50
     }
-    response = client.post("/api/v1/questions/generate", json=payload)
+    response = client.post("/api/v1/questions/generate", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 422  # Unprocessable Entity (Pydantic validation error)
 
 def test_generate_questions_invalid_number_low():
@@ -42,7 +44,7 @@ def test_generate_questions_invalid_number_low():
         "topic": "Loops",
         "number_of_questions": 0
     }
-    response = client.post("/api/v1/questions/generate", json=payload)
+    response = client.post("/api/v1/questions/generate", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 422
 
 def test_generate_questions_invalid_difficulty():
@@ -52,7 +54,7 @@ def test_generate_questions_invalid_difficulty():
         "difficulty": "extreme",
         "number_of_questions": 5
     }
-    response = client.post("/api/v1/questions/generate", json=payload)
+    response = client.post("/api/v1/questions/generate", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 422
 
 def test_generate_questions_empty_topic():
@@ -62,7 +64,7 @@ def test_generate_questions_empty_topic():
         "difficulty": "medium",
         "number_of_questions": 5
     }
-    response = client.post("/api/v1/questions/generate", json=payload)
+    response = client.post("/api/v1/questions/generate", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"

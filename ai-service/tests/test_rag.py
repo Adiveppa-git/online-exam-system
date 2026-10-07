@@ -3,12 +3,14 @@ import tempfile
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from app.config import settings
 from app.services.document_loader import DocumentLoader, DocumentLoaderError
 from app.services.chunker import TextChunker
 from app.services.vector_store import VectorStoreManager
 from app.services.rag_service import RAGService
 
 client = TestClient(app)
+AUTH_HEADERS = {"X-Internal-API-Key": settings.INTERNAL_API_KEY}
 
 @pytest.fixture
 def sample_text_file():
@@ -93,7 +95,7 @@ def test_rag_ingest_search_ask_pipeline(sample_text_file):
     assert "scheduling" in ask_res["answer"].lower()
 
     # Clean up ChromaDB vectors
-    del_res = client.delete(f"/api/v1/rag/document/{doc_id}")
+    del_res = client.delete(f"/api/v1/rag/document/{doc_id}", headers=AUTH_HEADERS)
     assert del_res.status_code == 200
 
 def test_rag_no_context_behavior():
@@ -116,7 +118,7 @@ def test_fastapi_rag_endpoints(sample_text_file):
         "subject": "Computer Networks",
         "topic": "TCP/IP"
     }
-    response = client.post("/api/v1/rag/ingest", json=ingest_payload)
+    response = client.post("/api/v1/rag/ingest", json=ingest_payload, headers=AUTH_HEADERS)
     assert response.status_code == 200
     assert response.json()["status"] == "success"
 
@@ -125,7 +127,7 @@ def test_fastapi_rag_endpoints(sample_text_file):
         "query": "scheduling algorithms",
         "subject": "Computer Networks"
     }
-    search_response = client.post("/api/v1/rag/search", json=search_payload)
+    search_response = client.post("/api/v1/rag/search", json=search_payload, headers=AUTH_HEADERS)
     assert search_response.status_code == 200
 
     # Ask via API
@@ -133,14 +135,14 @@ def test_fastapi_rag_endpoints(sample_text_file):
         "question": "What algorithms are mentioned in the course notes?",
         "subject": "Computer Networks"
     }
-    ask_response = client.post("/api/v1/rag/ask", json=ask_payload)
+    ask_response = client.post("/api/v1/rag/ask", json=ask_payload, headers=AUTH_HEADERS)
     assert ask_response.status_code == 200
     data = ask_response.json()
     assert "answer" in data
     assert "sources" in data
 
     # Delete via API
-    del_res = client.delete("/api/v1/rag/document/902")
+    del_res = client.delete("/api/v1/rag/document/902", headers=AUTH_HEADERS)
     assert del_res.status_code == 200
 
 def test_intent_classification_chatbot_responses():
@@ -204,7 +206,7 @@ def test_cross_container_base64_ingestion():
         "filename": "cross_container_notes.txt",
         "subject": "Operating Systems",
         "topic": "Process Management"
-    })
+    }, headers=AUTH_HEADERS)
 
     assert response.status_code == 200
     data = response.json()
@@ -216,11 +218,11 @@ def test_cross_container_base64_ingestion():
     search_res = client.post("/api/v1/rag/search", json={
         "query": "Round Robin process scheduling",
         "subject": "Operating Systems"
-    })
+    }, headers=AUTH_HEADERS)
     assert search_res.status_code == 200
     search_data = search_res.json()
     assert len(search_data["chunks"]) >= 1
 
     # Clean up
-    del_res = client.delete("/api/v1/rag/document/9999")
+    del_res = client.delete("/api/v1/rag/document/9999", headers=AUTH_HEADERS)
     assert del_res.status_code == 200

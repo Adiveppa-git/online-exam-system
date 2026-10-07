@@ -1,9 +1,11 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from app.config import settings
 from app.services.recommendation_service import RecommendationService
 
 client = TestClient(app)
+AUTH_HEADERS = {"X-Internal-API-Key": settings.INTERNAL_API_KEY}
 
 def test_profile_no_history():
     profile = RecommendationService.build_student_profile(student_id=1, history=[])
@@ -68,12 +70,12 @@ def test_fastapi_recommendation_endpoints():
     payload = {"student_id": 10, "history": history}
 
     # Profile API
-    res_prof = client.post("/api/v1/recommendations/profile", json=payload)
+    res_prof = client.post("/api/v1/recommendations/profile", json=payload, headers=AUTH_HEADERS)
     assert res_prof.status_code == 200
     assert res_prof.json()["status"] == "reliable"
 
     # Plan API
-    res_plan = client.post("/api/v1/recommendations/plan", json=payload)
+    res_plan = client.post("/api/v1/recommendations/plan", json=payload, headers=AUTH_HEADERS)
     assert res_plan.status_code == 200
     assert "plan_items" in res_plan.json()
 
@@ -84,6 +86,6 @@ def test_fastapi_recommendation_endpoints():
         "difficulty": "easy",
         "number_of_questions": 5
     }
-    res_prac = client.post("/api/v1/recommendations/practice-questions", json=practice_payload)
+    res_prac = client.post("/api/v1/recommendations/practice-questions", json=practice_payload, headers=AUTH_HEADERS)
     assert res_prac.status_code == 200
     assert len(res_prac.json()["questions"]) == 5

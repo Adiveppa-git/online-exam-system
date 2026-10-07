@@ -1,9 +1,10 @@
 import time
 import logging
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
+from app.auth import verify_internal_api_key
 from app.routes import health, question_gen, performance, ml_difficulty, rag, recommendations
 from app.services.vector_store import VectorStoreManager
 
@@ -54,20 +55,22 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(health.router, tags=["Health Check"])
 app.include_router(health.router, prefix=settings.API_V1_STR, tags=["Health Check"])
 
-app.include_router(question_gen.router, tags=["Question Generation"])
-app.include_router(question_gen.router, prefix=settings.API_V1_STR, tags=["Question Generation"])
+auth_deps = [Depends(verify_internal_api_key)]
 
-app.include_router(performance.router, tags=["Performance Analytics"])
-app.include_router(performance.router, prefix=settings.API_V1_STR, tags=["Performance Analytics"])
+app.include_router(question_gen.router, tags=["Question Generation"], dependencies=auth_deps)
+app.include_router(question_gen.router, prefix=settings.API_V1_STR, tags=["Question Generation"], dependencies=auth_deps)
 
-app.include_router(ml_difficulty.router, tags=["ML Question Difficulty"])
-app.include_router(ml_difficulty.router, prefix=settings.API_V1_STR, tags=["ML Question Difficulty"])
+app.include_router(performance.router, tags=["Performance Analytics"], dependencies=auth_deps)
+app.include_router(performance.router, prefix=settings.API_V1_STR, tags=["Performance Analytics"], dependencies=auth_deps)
 
-app.include_router(rag.router, tags=["RAG Study Assistant"])
-app.include_router(rag.router, prefix=settings.API_V1_STR, tags=["RAG Study Assistant"])
+app.include_router(ml_difficulty.router, tags=["ML Question Difficulty"], dependencies=auth_deps)
+app.include_router(ml_difficulty.router, prefix=settings.API_V1_STR, tags=["ML Question Difficulty"], dependencies=auth_deps)
 
-app.include_router(recommendations.router, tags=["Personalized Adaptive Learning"])
-app.include_router(recommendations.router, prefix=settings.API_V1_STR, tags=["Personalized Adaptive Learning"])
+app.include_router(rag.router, tags=["RAG Study Assistant"], dependencies=auth_deps)
+app.include_router(rag.router, prefix=settings.API_V1_STR, tags=["RAG Study Assistant"], dependencies=auth_deps)
+
+app.include_router(recommendations.router, tags=["Personalized Adaptive Learning"], dependencies=auth_deps)
+app.include_router(recommendations.router, prefix=settings.API_V1_STR, tags=["Personalized Adaptive Learning"], dependencies=auth_deps)
 
 @app.get("/")
 def root():

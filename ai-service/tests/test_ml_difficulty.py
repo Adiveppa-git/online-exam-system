@@ -1,8 +1,10 @@
 from fastapi.testclient import TestClient
 from app.main import app
+from app.config import settings
 from app.ml.features.feature_extractor import extract_features_from_dict
 
 client = TestClient(app)
+AUTH_HEADERS = {"X-Internal-API-Key": settings.INTERNAL_API_KEY}
 
 def test_feature_extraction():
     data = {
@@ -25,7 +27,7 @@ def test_ml_predict_insufficient_real_data():
         "unique_students": 2,
         "min_attempts_threshold": 3
     }
-    response = client.post("/api/v1/ml/question-difficulty", json=payload)
+    response = client.post("/api/v1/ml/question-difficulty", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "insufficient_real_data"
@@ -41,7 +43,7 @@ def test_ml_predict_synthetic_benchmark_easy():
         "unique_students": 25,
         "min_attempts_threshold": 3
     }
-    response = client.post("/api/v1/ml/question-difficulty", json=payload)
+    response = client.post("/api/v1/ml/question-difficulty", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["status"] in ["synthetic_benchmark", "predicted"]
@@ -58,7 +60,7 @@ def test_ml_predict_synthetic_benchmark_hard():
         "unique_students": 35,
         "min_attempts_threshold": 3
     }
-    response = client.post("/api/v1/ml/question-difficulty", json=payload)
+    response = client.post("/api/v1/ml/question-difficulty", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["status"] in ["synthetic_benchmark", "predicted"]
@@ -75,7 +77,7 @@ def test_ml_predict_boundary_3_attempts():
         "unique_students": 3,
         "min_attempts_threshold": 3
     }
-    response = client.post("/api/v1/ml/question-difficulty", json=payload)
+    response = client.post("/api/v1/ml/question-difficulty", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["status"] in ["synthetic_benchmark", "predicted"]
