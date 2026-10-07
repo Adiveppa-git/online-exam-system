@@ -101,12 +101,12 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                 $sqlToRun = str_replace('`', '', $this->sql);
                 $sqlToRun = preg_replace('/IFNULL\(/i', 'COALESCE(', $sqlToRun);
                 $sqlToRun = preg_replace(
-                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+answer\s*=\s*(?:VALUES\(answer\)|EXCLUDED\.answer|\?)/i',
+                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+answer\s*=\s*(?:VALUES\s*\(\s*answer\s*\)|EXCLUDED\.answer|\?)/i',
                     'ON CONFLICT (student_id, exam_id, question_id) DO UPDATE SET answer = EXCLUDED.answer',
                     $sqlToRun
                 );
                 $sqlToRun = preg_replace(
-                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+violation_count\s*=\s*(?:VALUES\(violation_count\)|EXCLUDED\.violation_count|\?)/i',
+                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+violation_count\s*=\s*(?:VALUES\s*\(\s*violation_count\s*\)|EXCLUDED\.violation_count|\?)/i',
                     'ON CONFLICT (student_id, exam_id) DO UPDATE SET violation_count = EXCLUDED.violation_count',
                     $sqlToRun
                 );
@@ -224,12 +224,12 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
                 $sqlToRun = str_replace('`', '', $sql);
                 $sqlToRun = preg_replace('/IFNULL\(/i', 'COALESCE(', $sqlToRun);
                 $sqlToRun = preg_replace(
-                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+answer\s*=\s*(?:VALUES\(answer\)|EXCLUDED\.answer|\?)/i',
+                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+answer\s*=\s*(?:VALUES\s*\(\s*answer\s*\)|EXCLUDED\.answer|\?)/i',
                     'ON CONFLICT (student_id, exam_id, question_id) DO UPDATE SET answer = EXCLUDED.answer',
                     $sqlToRun
                 );
                 $sqlToRun = preg_replace(
-                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+violation_count\s*=\s*(?:VALUES\(violation_count\)|EXCLUDED\.violation_count|\?)/i',
+                    '/ON\s+DUPLICATE\s+KEY\s+UPDATE\s+violation_count\s*=\s*(?:VALUES\s*\(\s*violation_count\s*\)|EXCLUDED\.violation_count|\?)/i',
                     'ON CONFLICT (student_id, exam_id) DO UPDATE SET violation_count = EXCLUDED.violation_count',
                     $sqlToRun
                 );
