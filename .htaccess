@@ -1,0 +1,22 @@
+<IfModule mod_headers.c>
+    # 1. Prevent MIME-Type Sniffing
+    Header always set X-Content-Type-Options "nosniff"
+
+    # 2. Clickjacking Protection
+    Header always set X-Frame-Options "SAMEORIGIN"
+
+    # 3. Referrer Policy
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # 4. Feature / Permissions Policy
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+
+    # 5. Content-Security-Policy (Tailored to App Dependencies)
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com data:; img-src 'self' data: https:; media-src 'self' data:; connect-src 'self' https://exam-online-ai.onrender.com; frame-ancestors 'self';"
+
+    # 6. HSTS (Production HTTPS only)
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTP:X-Forwarded-Proto} == 'https' || %{HTTPS} == 'on'"
+
+    # 7. Suppress PHP Version Banner
+    Header unset X-Powered-By
+</IfModule>
