@@ -31,6 +31,30 @@ if (
     exit;
 }
 
+/* ===== CHECK IF EXAM ALREADY COMPLETED ===== */
+$chkComp = $conn->prepare("SELECT id FROM results WHERE user_id = ? AND exam_id = ?");
+$chkComp->bind_param("ii", $student_id, $exam_id);
+$chkComp->execute();
+if ($chkComp->get_result()->num_rows > 0) {
+    echo json_encode([
+        "status" => "error",
+        "msg" => "Exam already completed"
+    ]);
+    exit;
+}
+
+/* ===== VALIDATE QUESTION BELONGS TO EXAM ===== */
+$chkQ = $conn->prepare("SELECT id FROM questions WHERE id = ? AND exam_id = ?");
+$chkQ->bind_param("ii", $question_id, $exam_id);
+$chkQ->execute();
+if ($chkQ->get_result()->num_rows === 0) {
+    echo json_encode([
+        "status" => "error",
+        "msg" => "Invalid question for exam"
+    ]);
+    exit;
+}
+
 /* ===== INSERT OR UPDATE ANSWER ===== */
 $stmt = $conn->prepare("
     INSERT INTO student_answers (student_id, exam_id, question_id, answer)

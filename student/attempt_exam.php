@@ -8,24 +8,49 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
     exit;
 }
 
-$user_id = $_SESSION['user_id'];
+$user_id = (int)$_SESSION['user_id'];
 $exam_id = (int)($_GET['exam_id'] ?? 0);
 
 if (!$exam_id) die("Invalid Exam");
 
+/* ===== PREVENT ATTEMPT IF ALREADY COMPLETED ===== */
+$chkRes = $conn->prepare("SELECT id FROM results WHERE user_id = ? AND exam_id = ?");
+$chkRes->bind_param("ii", $user_id, $exam_id);
+$chkRes->execute();
+if ($chkRes->get_result()->num_rows > 0) {
+    header("Location: result.php");
+    exit;
+}
+
 /* ===== FETCH EXAM ===== */
-$exam = $conn->query("SELECT * FROM exams WHERE id=$exam_id")->fetch_assoc();
+$stmtExam = $conn->prepare("SELECT * FROM exams WHERE id = ?");
+$stmtExam->bind_param("i", $exam_id);
+$stmtExam->execute();
+$exam = $stmtExam->get_result()->fetch_assoc();
 if (!$exam) die("Exam not found");
 
 /* ===== FETCH QUESTIONS ===== */
 $questions = [];
-$q = $conn->query("SELECT * FROM questions WHERE exam_id=$exam_id ORDER BY id ASC");
+$stmtQ = $conn->prepare("SELECT * FROM questions WHERE exam_id = ? ORDER BY id ASC");
+$stmtQ->bind_param("i", $exam_id);
+$stmtQ->execute();
+$resQ = $stmtQ->get_result();
 
-while ($row = $q->fetch_assoc()) {
+while ($row = $resQ->fetch_assoc()) {
     $questions[] = $row;
 }
 
 if (count($questions) === 0) die("No questions added.");
+
+/* ===== FETCH SAVED ANSWERS FOR THIS STUDENT & EXAM ===== */
+$saved_answers = [];
+$stmtAns = $conn->prepare("SELECT question_id, answer FROM student_answers WHERE student_id = ? AND exam_id = ?");
+$stmtAns->bind_param("ii", $user_id, $exam_id);
+$stmtAns->execute();
+$resAns = $stmtAns->get_result();
+while ($rowAns = $resAns->fetch_assoc()) {
+    $saved_answers[(int)$rowAns['question_id']] = $rowAns['answer'];
+}
 
 $total_questions = count($questions);
 $duration = $exam['duration'] * 60;
@@ -41,10 +66,7 @@ $duration = $exam['duration'] * 60;
 <title>Attempt Exam</title>
 
 <link rel="stylesheet" href="../assets/css/style.css">
-
 <link rel="stylesheet" href="../assets/css/attempt_exam.css">
-
-
 
 </head>
 
@@ -72,9 +94,22 @@ $duration = $exam['duration'] * 60;
 <div><span style="color:#e53935">⬤</span> Not Visited</div>
 </div>
 
-<?php for($i=0;$i<$total_questions;$i++): ?>
+<?php for($i=0;$i<$total_questions;$i++): 
+    $qid = (int)$questions[$i]['id'];
+    $is_answered = isset($saved_answers[$qid]) && $saved_answers[$qid] !== '';
+    $classes = [];
+    if ($i === 0) {
+        $classes[] = 'active';
+    }
+    if ($is_answered) {
+        $classes[] = 'answered';
+    } else if ($i !== 0) {
+        $classes[] = 'not-visited';
+    }
+    $class_attr = implode(' ', $classes);
+?>
 <button type="button"
-class="q-btn <?= $i==0?'active':'not-visited' ?>"
+class="q-btn <?= $class_attr ?>"
 id="nav<?= $i ?>"
 onclick="showQuestion(<?= $i ?>)">
 <?= $i+1 ?>
@@ -100,13 +135,17 @@ style="<?= $index!==0?'display:none':'' ?>">
 
 <div class="options">
 
-<?php foreach(['A','B','C','D'] as $opt): ?>
+<?php foreach(['A','B','C','D'] as $opt): 
+    $qid = (int)$q['id'];
+    $isChecked = (isset($saved_answers[$qid]) && $saved_answers[$qid] === $opt) ? 'checked' : '';
+?>
 
 <label>
 <input type="radio"
 name="answer[<?= $q['id'] ?>]"
 value="<?= $opt ?>"
-onchange="markAnswered(<?= $index ?>)">
+<?= $isChecked ?>
+onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, '<?= $opt ?>')">
 <?= htmlspecialchars($q['option_'.strtolower($opt)]) ?>
 </label>
 
@@ -192,13 +231,43 @@ current=i;
 
 }
 
-function markAnswered(i){
+function markAnswered(i, qid, optVal){
 
 let btn=document.getElementById("nav"+i);
 
+if(btn){
 btn.classList.remove("not-visited","visited");
 btn.classList.add("answered");
+}
 
+if(qid && optVal){
+fetch("save_answer.php",{
+method:"POST",
+headers:{"Content-Type":"application/x-www-form-urlencoded"},
+body:"exam_id=<?= $exam_id ?>&question_id="+encodeURIComponent(qid)+"&answer="+encodeURIComponent(optVal)
+})
+.then(res => res.json())
+.then(data => {
+if(data.status !== "success"){
+showSaveError();
+}
+})
+.catch(err => {
+showSaveError();
+});
+}
+
+}
+
+function showSaveError(){
+let warningBox=document.getElementById("warningBox");
+if(warningBox){
+warningBox.innerText="Answer could not be saved. Please try again.";
+warningBox.style.display="block";
+setTimeout(()=>{
+warningBox.style.display="none";
+},3000);
+}
 }
 
 
