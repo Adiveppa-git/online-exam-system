@@ -88,12 +88,25 @@ class AiClient {
 
     public function ingestDocument(string $filePath, int $docId, string $filename, string $subject = 'General', string $topic = 'General'): array {
         $payload = [
-            'file_path' => $filePath,
             'document_id' => $docId,
             'filename' => $filename,
             'subject' => $subject,
             'topic' => $topic
         ];
+
+        if (preg_match('#^https?://#i', $filePath)) {
+            $payload['file_path'] = $filePath;
+        } elseif (file_exists($filePath)) {
+            $content = @file_get_contents($filePath);
+            if ($content !== false && strlen($content) > 0) {
+                $payload['file_content_base64'] = base64_encode($content);
+            } else {
+                $payload['file_path'] = $filePath;
+            }
+        } else {
+            $payload['file_path'] = $filePath;
+        }
+
         return $this->request('POST', '/api/v1/rag/ingest', $payload);
     }
 

@@ -192,3 +192,35 @@ def test_personalized_performance_queries():
     assert res_with_data["intent"] in ["recommendation", "performance"]
     assert "Grammar" in res_with_data["answer"]
     assert "English" in res_with_data["answer"]
+
+def test_cross_container_base64_ingestion():
+    import base64
+    sample_text = "Cross container RAG testing. Process scheduling algorithms include Round Robin and FCFS."
+    b64_content = base64.b64encode(sample_text.encode('utf-8')).decode('utf-8')
+
+    response = client.post("/api/v1/rag/ingest", json={
+        "file_content_base64": b64_content,
+        "document_id": 9999,
+        "filename": "cross_container_notes.txt",
+        "subject": "Operating Systems",
+        "topic": "Process Management"
+    })
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["document_id"] == 9999
+    assert data["total_chunks"] >= 1
+
+    # Verify search finds the chunk
+    search_res = client.post("/api/v1/rag/search", json={
+        "query": "Round Robin process scheduling",
+        "subject": "Operating Systems"
+    })
+    assert search_res.status_code == 200
+    search_data = search_res.json()
+    assert len(search_data["chunks"]) >= 1
+
+    # Clean up
+    del_res = client.delete("/api/v1/rag/document/9999")
+    assert del_res.status_code == 200

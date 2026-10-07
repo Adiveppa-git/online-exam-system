@@ -8,8 +8,9 @@ from app.services.vector_store import VectorStoreManager
 router = APIRouter()
 
 class IngestRequest(BaseModel):
-    file_path: str = Field(..., description="Absolute path to the uploaded document on server")
-    document_id: int = Field(..., description="MySQL document ID")
+    file_path: Optional[str] = Field(default=None, description="Absolute path or URL to the uploaded document on server")
+    file_content_base64: Optional[str] = Field(default=None, description="Base64 encoded file content for cross-container ingestion")
+    document_id: int = Field(..., description="Document database ID")
     filename: str = Field(..., description="Original filename")
     subject: str = Field(default="General")
     topic: str = Field(default="General")
@@ -62,7 +63,8 @@ def ingest_document(request: IngestRequest):
             document_id=request.document_id,
             filename=request.filename,
             subject=request.subject,
-            topic=request.topic
+            topic=request.topic,
+            file_content_base64=request.file_content_base64
         )
         return IngestResponse(
             status="success",

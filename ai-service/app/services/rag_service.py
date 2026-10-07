@@ -16,17 +16,22 @@ class RAGService:
     @classmethod
     def ingest_document(
         cls,
-        file_path: str,
+        file_path: Optional[str],
         document_id: int,
         filename: str,
         subject: str,
-        topic: str
+        topic: str,
+        file_content_base64: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Loads, validates, chunks, and indexes a document in ChromaDB/PgVector.
         Ensures index consistency by clearing pre-existing vectors for document_id.
         """
-        doc_info = DocumentLoader.load_document(file_path, filename)
+        doc_info = DocumentLoader.load_document(
+            file_path=file_path,
+            original_filename=filename,
+            file_content_base64=file_content_base64
+        )
         pages = doc_info["pages"]
 
         chunks = TextChunker.chunk_document_pages(
