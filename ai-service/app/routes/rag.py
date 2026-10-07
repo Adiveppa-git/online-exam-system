@@ -1,10 +1,12 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from app.services.rag_service import RAGService
 from app.services.document_loader import DocumentLoaderError
-from app.services.vector_store import VectorStoreManager
+from app.services.vector_store import VectorStoreManager, VectorStoreError, VectorStoreUnavailableError
 
+logger = logging.getLogger("rag_router")
 router = APIRouter()
 
 class IngestRequest(BaseModel):
@@ -74,10 +76,13 @@ def ingest_document(request: IngestRequest):
             total_chunks=res["total_chunks"],
             message=f"Successfully ingested '{res['filename']}' ({res['total_pages']} pages, {res['total_chunks']} chunks)."
         )
+    except (VectorStoreUnavailableError, VectorStoreError):
+        raise HTTPException(status_code=503, detail="RAG vector store is temporarily unavailable.")
     except DocumentLoaderError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Document ingestion failed: {str(e)}")
+        logger.error(f"Document ingestion exception: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal RAG ingestion error.")
 
 @router.post("/rag/search")
 def search_rag(request: SearchRequest):
@@ -90,8 +95,11 @@ def search_rag(request: SearchRequest):
             threshold=request.threshold
         )
         return res
+    except (VectorStoreUnavailableError, VectorStoreError):
+        raise HTTPException(status_code=503, detail="RAG vector store is temporarily unavailable.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Vector search failed: {str(e)}")
+        logger.error(f"Vector search exception: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal RAG search error.")
 
 @router.post("/rag/ask", response_model=AskResponse)
 def ask_rag(request: AskRequest):
@@ -109,8 +117,11 @@ def ask_rag(request: AskRequest):
             other_users_info=request.other_users_info
         )
         return AskResponse(**res)
+    except (VectorStoreUnavailableError, VectorStoreError):
+        raise HTTPException(status_code=503, detail="RAG vector store is temporarily unavailable.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"RAG query processing failed: {str(e)}")
+        logger.error(f"RAG query exception: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal RAG processing error.")
 
 @router.delete("/rag/document/{doc_id}")
 def delete_rag_document(doc_id: int):
@@ -123,5 +134,8 @@ def delete_rag_document(doc_id: int):
             "deleted_chunks": deleted_count,
             "message": f"Deleted {deleted_count} vectors for document ID {doc_id}."
         }
+    except (VectorStoreUnavailableError, VectorStoreError):
+        raise HTTPException(status_code=503, detail="RAG vector store is temporarily unavailable.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete vectors for document {doc_id}: {str(e)}")
+        logger.error(f"Failed to delete document vectors: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete document vectors.")

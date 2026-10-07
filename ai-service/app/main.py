@@ -85,18 +85,33 @@ def readiness_check():
     """
     try:
         vs = VectorStoreManager.get_instance()
-        count = vs.collection.count() if hasattr(vs, 'collection') else 0
+        health = vs.check_health() if hasattr(vs, 'check_health') else {"healthy": True, "status": "ready", "total_indexed_chunks": 0}
+        
+        if not health.get("healthy", True):
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "degraded",
+                    "service": settings.SERVICE_NAME,
+                    "vector_store": getattr(settings, "VECTOR_STORE_TYPE", "chroma"),
+                    "message": health.get("message", "RAG vector store is temporarily unavailable.")
+                }
+            )
+        
         return {
             "status": "ready",
             "service": settings.SERVICE_NAME,
-            "vector_store": settings.VECTOR_STORE_TYPE,
-            "total_indexed_chunks": count
+            "vector_store": getattr(settings, "VECTOR_STORE_TYPE", "chroma"),
+            "total_indexed_chunks": health.get("total_indexed_chunks", 0)
         }
     except Exception as e:
+        logger.error(f"Readiness check exception: {e}")
         return JSONResponse(
             status_code=503,
             content={
-                "status": "not_ready",
-                "error": str(e)
+                "status": "degraded",
+                "service": settings.SERVICE_NAME,
+                "vector_store": getattr(settings, "VECTOR_STORE_TYPE", "chroma"),
+                "message": "RAG vector store is temporarily unavailable."
             }
         )

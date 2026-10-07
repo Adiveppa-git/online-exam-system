@@ -1,8 +1,17 @@
 import os
+import logging
 import chromadb
 from chromadb.utils import embedding_functions
 from typing import List, Dict, Any, Optional
 from app.config import settings
+
+logger = logging.getLogger("vector_store")
+
+class VectorStoreError(Exception):
+    pass
+
+class VectorStoreUnavailableError(VectorStoreError):
+    pass
 
 class EmbeddingModelManager:
     _instance = None
@@ -82,6 +91,24 @@ class ChromaVectorStoreManager:
         if cls._instance is None:
             cls._instance = ChromaVectorStoreManager()
         return cls._instance
+
+    def check_health(self) -> Dict[str, Any]:
+        try:
+            count = self.collection.count() if hasattr(self, 'collection') else 0
+            return {
+                "healthy": True,
+                "status": "ready",
+                "vector_store": "chroma",
+                "total_indexed_chunks": count
+            }
+        except Exception as e:
+            logger.error(f"Chroma health check failed: {e}")
+            return {
+                "healthy": False,
+                "status": "degraded",
+                "vector_store": "chroma",
+                "message": "RAG vector store is temporarily unavailable."
+            }
 
     def add_chunks(self, chunks: List[Dict[str, Any]]) -> int:
         if not chunks:
@@ -191,8 +218,60 @@ class PgVectorStoreManager:
         return cls._instance
 
     def _get_connection(self):
-        import psycopg2
-        return psycopg2.connect(self.db_url)
+        if not self.db_url or not str(self.db_url).strip():
+            raise VectorStoreUnavailableError("RAG vector store configuration is unavailable.")
+        try:
+            import psycopg2
+            return psycopg2.connect(self.db_url)
+        except VectorStoreUnavailableError:
+            raise
+        except Exception as e:
+            clean_err = str(e)
+            if self.db_url:
+                import re
+                clean_err = re.sub(r'://[^@]+@', '://***:***@', clean_err)
+            logger.error(f"PgVector connection failure: {clean_err}")
+            raise VectorStoreUnavailableError("RAG vector store is temporarily unavailable.")
+
+    def check_health(self) -> Dict[str, Any]:
+        if not self.db_url or not str(self.db_url).strip():
+            return {
+                "healthy": False,
+                "status": "degraded",
+                "vector_store": "pgvector",
+                "message": "RAG vector store configuration is unavailable."
+            }
+        try:
+            conn = self._get_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                    cur.fetchone()
+                    cur.execute("SELECT COUNT(*) FROM ai_document_chunks")
+                    count = cur.fetchone()[0]
+                return {
+                    "healthy": True,
+                    "status": "ready",
+                    "vector_store": "pgvector",
+                    "total_indexed_chunks": count
+                }
+            finally:
+                conn.close()
+        except VectorStoreUnavailableError:
+            return {
+                "healthy": False,
+                "status": "degraded",
+                "vector_store": "pgvector",
+                "message": "RAG vector store is temporarily unavailable."
+            }
+        except Exception as e:
+            logger.error(f"PgVector health check error: {e}")
+            return {
+                "healthy": False,
+                "status": "degraded",
+                "vector_store": "pgvector",
+                "message": "RAG vector store is temporarily unavailable."
+            }
 
     def add_chunks(self, chunks: List[Dict[str, Any]]) -> int:
         if not chunks:
