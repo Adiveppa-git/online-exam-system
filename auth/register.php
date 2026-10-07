@@ -43,29 +43,41 @@ if (isset($_POST['send_otp']))
         }
         else
         {
-            $otp = rand(100000,999999);
-            $expiry = date("Y-m-d H:i:s", strtotime("+10 minutes"));
-
-            $_SESSION['reg_data'] =
-            [
-                'name'=>$name,
-                'email'=>$email,
-                'role'=>$role,
-                'password'=>password_hash($password,PASSWORD_DEFAULT),
-                'otp'=>$otp,
-                'expiry'=>$expiry
-            ];
-
-            $body = buildOtpEmailHtml("Email Verification", $otp, 10);
-
-            if (sendMail($email, "Verify Your Email - Online Examination System", $body))
+            $lastRegKey = 'last_otp_time_' . md5($email);
+            if (isset($_SESSION[$lastRegKey]) && (time() - (int)$_SESSION[$lastRegKey]) < OTP_REQUEST_COOLDOWN_SECONDS)
             {
-                $step = 2;
+                $msg = "❌ Please wait before requesting another verification code.";
+                $step = 1;
             }
             else
             {
-                $err = getLastMailError() ?: "Failed to send OTP";
-                $msg = "❌ " . $err;
+                $otp = rand(100000, 999999);
+                $expiry = date("Y-m-d H:i:s", strtotime("+10 minutes"));
+
+                $_SESSION['reg_data'] =
+                [
+                    'name'=>$name,
+                    'email'=>$email,
+                    'role'=>$role,
+                    'password'=>password_hash($password, PASSWORD_DEFAULT),
+                    'otp'=>$otp,
+                    'expiry'=>$expiry
+                ];
+
+                $body = buildOtpEmailHtml("Email Verification", $otp, 10);
+
+                if (sendMail($email, "Verify Your Email - Online Examination System", $body))
+                {
+                    $_SESSION[$lastRegKey] = time();
+                    $_SESSION['reg_otp_attempts_' . md5($email)] = 0;
+                    $step = 2;
+                }
+                else
+                {
+                    $err = getUserFacingMailError() ?: "Email service is temporarily unavailable. Please try again later.";
+                    $msg = "❌ " . $err;
+                    $step = 1;
+                }
             }
         }
     }
@@ -80,11 +92,47 @@ if (isset($_POST['verify_otp']))
         exit;
     }
 
-    $userOtp = trim($_POST['otp']);
     $data = $_SESSION['reg_data'];
+    $email = $data['email'] ?? '';
+    $attemptKey = 'reg_otp_attempts_' . md5($email);
+    if (!isset($_SESSION[$attemptKey]))
+    {
+        $_SESSION[$attemptKey] = 0;
+    }
 
-    if ($userOtp == $data['otp'] &&
-        strtotime($data['expiry']) >= time())
+    $userOtp = trim($_POST['otp']);
+
+    if ((int)$_SESSION[$attemptKey] >= OTP_MAX_VERIFICATION_ATTEMPTS)
+    {
+        unset($_SESSION['reg_data']);
+        unset($_SESSION[$attemptKey]);
+        $msg = "Too many failed verification attempts. Please request a new OTP.";
+        $step = 1;
+    }
+    elseif ($userOtp != $data['otp'])
+    {
+        $_SESSION[$attemptKey] = (int)$_SESSION[$attemptKey] + 1;
+        if ($_SESSION[$attemptKey] >= OTP_MAX_VERIFICATION_ATTEMPTS)
+        {
+            unset($_SESSION['reg_data']);
+            unset($_SESSION[$attemptKey]);
+            $msg = "Too many failed verification attempts. Please request a new OTP.";
+            $step = 1;
+        }
+        else
+        {
+            $msg = "Invalid verification code.";
+            $step = 2;
+        }
+    }
+    elseif (strtotime($data['expiry']) < time())
+    {
+        unset($_SESSION['reg_data']);
+        unset($_SESSION[$attemptKey]);
+        $msg = "Verification code has expired. Please request a new one.";
+        $step = 1;
+    }
+    else
     {
         $stmt = $conn->prepare(
         "INSERT INTO users (name,email,password,role)
@@ -101,14 +149,10 @@ if (isset($_POST['verify_otp']))
         $stmt->execute();
 
         unset($_SESSION['reg_data']);
+        unset($_SESSION[$attemptKey]);
 
         header("Location: login.php");
         exit;
-    }
-    else
-    {
-        $msg = "Invalid or expired OTP";
-        $step = 2;
     }
 }
 ?>

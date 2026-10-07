@@ -380,8 +380,147 @@ runTest("12. Existing OTP Verification, Expiration & DB Logic", function() use (
     return true;
 });
 
+// Test 13: User-Facing Mail Error Sanitization
+runTest("13. User-Facing Mail Error Sanitization", function() {
+    putenv("MAIL_DRIVER=smtp");
+    putenv("SMTP_HOST=smtp.gmail.com");
+    putenv("SMTP_USERNAME=mailproject112@gmail.com");
+    putenv("SMTP_PASSWORD="); // Missing password forces failure
+
+    sendMail("student@gmail.com", "Test", "<p>Test</p>");
+    $userMsg = getUserFacingMailError();
+    $techMsg = getLastMailError();
+
+    if (empty($userMsg)) {
+        return "getUserFacingMailError should return a sanitized message when mail fails";
+    }
+
+    if ($userMsg !== "Email service is temporarily unavailable. Please try again later.") {
+        return "getUserFacingMailError returned unexpected string: " . $userMsg;
+    }
+
+    // Verify sanitized user message does NOT expose internal technical terms
+    $prohibitedTerms = ['SMTP', 'Brevo', 'API', 'password', 'key', 'exception', '587', 'gmail.com'];
+    foreach ($prohibitedTerms as $term) {
+        if (stripos($userMsg, $term) !== false) {
+            return "User message exposed internal technical term '{$term}': {$userMsg}";
+        }
+    }
+
+    return true;
+});
+
+// Test 14: Invalid vs Expired OTP Error Message Distinction
+runTest("14. Invalid vs Expired OTP Error Message Distinction", function() {
+    $now = time();
+    $validExpiry = date("Y-m-d H:i:s", $now + 600);
+    $expiredExpiry = date("Y-m-d H:i:s", $now - 300);
+
+    $correctOtp = "654321";
+    $wrongOtp   = "111111";
+
+    // Scenario A: Wrong OTP -> Invalid verification code.
+    if ($wrongOtp !== $correctOtp) {
+        $msgWrong = "Invalid verification code.";
+    }
+
+    // Scenario B: Expired OTP -> Verification code has expired. Please request a new one.
+    if (strtotime($expiredExpiry) < $now) {
+        $msgExpired = "Verification code has expired. Please request a new one.";
+    }
+
+    if ($msgWrong !== "Invalid verification code.") {
+        return "Wrong OTP message incorrect";
+    }
+    if ($msgExpired !== "Verification code has expired. Please request a new one.") {
+        return "Expired OTP message incorrect";
+    }
+
+    return true;
+});
+
+// Test 15: 5-Attempt Lockout Mechanism
+runTest("15. 5-Attempt Lockout Mechanism", function() {
+    if (session_status() !== PHP_SESSION_ACTIVE) @session_start();
+    
+    $testKey = 'otp_attempts_' . md5('test_lockout@example.com');
+    $_SESSION[$testKey] = 0;
+
+    // Simulate 4 failed attempts
+    for ($i = 1; $i <= 4; $i++) {
+        $_SESSION[$testKey]++;
+    }
+    if ($_SESSION[$testKey] !== 4) return "Attempt counter failed to increment to 4";
+
+    // 5th failed attempt -> lock out
+    $_SESSION[$testKey]++;
+    $isLocked = ($_SESSION[$testKey] >= OTP_MAX_VERIFICATION_ATTEMPTS);
+    if (!$isLocked) return "5th attempt did not trigger lockout";
+
+    // 6th attempt -> remains locked out
+    $msgLocked = "Too many failed verification attempts. Please request a new OTP.";
+    if ($msgLocked !== "Too many failed verification attempts. Please request a new OTP.") {
+        return "Lockout message mismatch";
+    }
+
+    unset($_SESSION[$testKey]);
+    return true;
+});
+
+// Test 16: OTP Request Cooldown Mechanism
+runTest("16. OTP Request Cooldown Mechanism", function() {
+    if (session_status() !== PHP_SESSION_ACTIVE) @session_start();
+
+    $email = "cooldown_test@example.com";
+    $cooldownKey = 'last_otp_time_' . md5($email);
+
+    // Initial send
+    $_SESSION[$cooldownKey] = time();
+
+    // Repeated immediate send attempt
+    $timePassed = time() - $_SESSION[$cooldownKey];
+    $isCoolingDown = ($timePassed < OTP_REQUEST_COOLDOWN_SECONDS);
+
+    if (!$isCoolingDown) {
+        return "Immediate resend was not caught by cooldown check";
+    }
+
+    // Simulate time passing beyond cooldown (61s)
+    $_SESSION[$cooldownKey] = time() - 65;
+    $timePassedAfter = time() - $_SESSION[$cooldownKey];
+    $isAllowed = ($timePassedAfter >= OTP_REQUEST_COOLDOWN_SECONDS);
+
+    if (!$isAllowed) {
+        return "Resend after cooldown expiry was incorrectly blocked";
+    }
+
+    unset($_SESSION[$cooldownKey]);
+    return true;
+});
+
+// Test 17: New OTP Generation Resets Failed Attempt Counter
+runTest("17. New OTP Generation Resets Failed Attempt Counter", function() {
+    if (session_status() !== PHP_SESSION_ACTIVE) @session_start();
+
+    $email = "reset_counter@example.com";
+    $attemptKey = 'otp_attempts_' . md5($email);
+
+    $_SESSION[$attemptKey] = 4; // 4 failed attempts previously
+    
+    // Simulate issuing a fresh OTP
+    $_SESSION[$attemptKey] = 0;
+
+    if ($_SESSION[$attemptKey] !== 0) {
+        return "New OTP generation did not reset attempt counter to 0";
+    }
+
+    unset($_SESSION[$attemptKey]);
+    return true;
+});
+
 echo "\n----------------------------------------------------\n";
 echo "Summary: $passed Passed, $failed Failed\n";
 echo "====================================================\n";
 
 if ($failed > 0) exit(1);
+

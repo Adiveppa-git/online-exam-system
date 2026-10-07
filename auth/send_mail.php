@@ -1,6 +1,13 @@
 <?php
 require_once __DIR__ . '/../config/env_loader.php';
 
+if (!defined('OTP_REQUEST_COOLDOWN_SECONDS')) {
+    define('OTP_REQUEST_COOLDOWN_SECONDS', 60);
+}
+if (!defined('OTP_MAX_VERIFICATION_ATTEMPTS')) {
+    define('OTP_MAX_VERIFICATION_ATTEMPTS', 5);
+}
+
 // Include PHPMailer classes from vendor if available
 $phpmailerException = __DIR__ . '/../vendor/PHPMailer/src/Exception.php';
 $phpmailerMain      = __DIR__ . '/../vendor/PHPMailer/src/PHPMailer.php';
@@ -24,6 +31,20 @@ $GLOBALS['last_mail_error']  = null;
 function getLastMailError()
 {
     return $GLOBALS['last_mail_error'] ?? null;
+}
+
+/**
+ * Get the sanitized user-facing mail error message (if any).
+ * Never exposes technical, network, or credential details to end users.
+ *
+ * @return string|null
+ */
+function getUserFacingMailError()
+{
+    if (!empty($GLOBALS['last_mail_error'])) {
+        return "Email service is temporarily unavailable. Please try again later.";
+    }
+    return null;
 }
 
 /**
@@ -464,7 +485,7 @@ function sendDevLogMail($to, $subject, $body)
     $logEntry = "[DEVELOPMENT ONLY MAIL LOG] [$timestamp] To: $to | Subject: $subject | OTP: " . ($otp ?? 'N/A') . " | Content: $cleanBody\n";
 
     @file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
-    error_log("[DEVELOPMENT ONLY] OTP generated for $to: " . ($otp ?? 'N/A') . " (Logged to logs/mail.log)");
+    error_log("[DEVELOPMENT ONLY] OTP email generated for $to (Logged to logs/mail.log)");
 
     return true;
 }

@@ -25,40 +25,39 @@ if (isset($_POST['send_otp'])) {
         $res = $stmt->get_result();
 
         if ($res->num_rows === 1) {
-
-            /* GENERATE OTP */
-            $otp = rand(100000, 999999);
-            $expiry = date("Y-m-d H:i:s", strtotime("+10 minutes"));
-
-            /* SAVE OTP */
-            $stmt = $conn->prepare(
-                "UPDATE users SET reset_otp=?, otp_expiry=? WHERE email=?"
-            );
-
-            $stmt->bind_param("sss", $otp, $expiry, $email);
-            $stmt->execute();
-
-            /* SEND MAIL */
-            $body = buildOtpEmailHtml("Password Reset", $otp, 10);
-
-            if (sendMail($email, "Password Reset OTP - Online Examination System", $body)) {
-
-                $_SESSION['reset_email'] = $email;
-
-                header("Location: verify_reset_otp.php");
-                exit;
-
+            $lastSendKey = 'last_otp_time_' . md5($email);
+            if (isset($_SESSION[$lastSendKey]) && (time() - (int)$_SESSION[$lastSendKey]) < OTP_REQUEST_COOLDOWN_SECONDS) {
+                $msg = "❌ Please wait before requesting another verification code.";
             } else {
+                /* GENERATE OTP */
+                $otp = rand(100000, 999999);
+                $expiry = date("Y-m-d H:i:s", strtotime("+10 minutes"));
 
-                $err = getLastMailError() ?: "Failed to send OTP. Try again.";
-                $msg = "❌ " . $err;
+                /* SAVE OTP */
+                $stmt = $conn->prepare(
+                    "UPDATE users SET reset_otp=?, otp_expiry=? WHERE email=?"
+                );
 
+                $stmt->bind_param("sss", $otp, $expiry, $email);
+                $stmt->execute();
+
+                /* SEND MAIL */
+                $body = buildOtpEmailHtml("Password Reset", $otp, 10);
+
+                if (sendMail($email, "Password Reset OTP - Online Examination System", $body)) {
+                    $_SESSION['reset_email'] = $email;
+                    $_SESSION[$lastSendKey] = time();
+                    $_SESSION['otp_attempts_' . md5($email)] = 0; // Reset verification attempt counter
+
+                    header("Location: verify_reset_otp.php");
+                    exit;
+                } else {
+                    $err = getUserFacingMailError() ?: "Email service is temporarily unavailable. Please try again later.";
+                    $msg = "❌ " . $err;
+                }
             }
-
         } else {
-
             $msg = "❌ Email not registered";
-
         }
     }
 }

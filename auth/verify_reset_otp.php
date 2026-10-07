@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once "../config/db.php";
+require_once "send_mail.php";
 
 /* ===== AUTH CHECK ===== */
 if (!isset($_SESSION['reset_email'])) {
@@ -9,6 +9,10 @@ if (!isset($_SESSION['reset_email'])) {
 }
 
 $email = $_SESSION['reset_email'];
+$attemptKey = 'otp_attempts_' . md5($email);
+if (!isset($_SESSION[$attemptKey])) {
+    $_SESSION[$attemptKey] = 0;
+}
 $msg = "";
 
 /* ===== VERIFY OTP ===== */
@@ -17,7 +21,9 @@ if (isset($_POST['verify'])) {
     $otp     = trim($_POST['otp']);
     $newPass = $_POST['password'];
 
-    if (strlen($newPass) < 8 || strlen($newPass) > 15) {
+    if ((int)$_SESSION[$attemptKey] >= OTP_MAX_VERIFICATION_ATTEMPTS) {
+        $msg = "Too many failed verification attempts. Please request a new OTP.";
+    } elseif (strlen($newPass) < 8 || strlen($newPass) > 15) {
         $msg = "Password must be 8 to 15 characters";
     } else {
 
@@ -30,11 +36,22 @@ if (isset($_POST['verify'])) {
         $stmt->execute();
         $res = $stmt->get_result()->fetch_assoc();
 
-        if (
-            $res &&
-            $res['reset_otp'] === $otp &&
-            strtotime($res['otp_expiry']) >= time()
-        ) {
+        if (!$res || empty($res['reset_otp'])) {
+            $msg = "Verification code has expired. Please request a new one.";
+        } elseif ($res['reset_otp'] !== $otp) {
+            $_SESSION[$attemptKey] = (int)$_SESSION[$attemptKey] + 1;
+            if ($_SESSION[$attemptKey] >= OTP_MAX_VERIFICATION_ATTEMPTS) {
+                // Invalidate current OTP upon reaching attempt limit
+                $clearStmt = $conn->prepare("UPDATE users SET reset_otp=NULL, otp_expiry=NULL WHERE email=?");
+                $clearStmt->bind_param("s", $email);
+                $clearStmt->execute();
+                $msg = "Too many failed verification attempts. Please request a new OTP.";
+            } else {
+                $msg = "Invalid verification code.";
+            }
+        } elseif (strtotime($res['otp_expiry']) < time()) {
+            $msg = "Verification code has expired. Please request a new one.";
+        } else {
 
             $hashed = password_hash($newPass, PASSWORD_DEFAULT);
 
@@ -46,12 +63,10 @@ if (isset($_POST['verify'])) {
             $update->bind_param("ss", $hashed, $email);
             $update->execute();
 
-            session_destroy();
+            unset($_SESSION[$attemptKey]);
+            unset($_SESSION['reset_email']);
             header("Location: login.php");
             exit;
-
-        } else {
-            $msg = "Invalid or expired OTP";
         }
     }
 }
