@@ -324,6 +324,8 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
         $sslMode = getenv('PG_SSLMODE') ?: getenv('DB_SSLMODE');
         if ($sslMode !== false && trim($sslMode) !== '') {
             $dsn .= ";sslmode=" . trim($sslMode);
+        } elseif (in_array($appEnv, ['production', 'prod', 'staging'], true) && $host !== '127.0.0.1' && $host !== 'localhost') {
+            $dsn .= ";sslmode=require";
         }
         $pdoOptions = [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -332,8 +334,16 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
         $pdo = new PDO($dsn, $user, $pass, $pdoOptions);
         $conn = new PgSqlDbAdapter($pdo);
     } catch (PDOException $e) {
+        $cleanMsg = str_replace([$pass, $user], ['***', '***'], $e->getMessage());
+        error_log("[SECURITY] PostgreSQL Connection Failed: " . $cleanMsg);
         http_response_code(500);
-        die("Database Connection Error (PostgreSQL): " . $e->getMessage());
+        if ((isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json')) || 
+            (isset($_SERVER['CONTENT_TYPE']) && str_contains($_SERVER['CONTENT_TYPE'], 'application/json'))) {
+            header('Content-Type: application/json');
+            echo json_encode(['status' => 'error', 'message' => 'Database service is temporarily unavailable. Please try again later.']);
+            exit();
+        }
+        die("Database service is temporarily unavailable. Please try again later.");
     }
 
 } else {
@@ -352,14 +362,17 @@ if (in_array($dbDriver, ['pgsql', 'postgres', 'postgresql'], true)) {
     }
 
     if (!$conn) {
+        $errDetails = mysqli_connect_error() ?: "Connection failed";
+        $cleanErr = str_replace([$pass, $user], ['***', '***'], $errDetails);
+        error_log("[SECURITY] MySQL Connection Failed: " . $cleanErr);
         http_response_code(500);
-        $errMsg = "Database Connection Error: Unable to connect to MySQL database service at {$host}:{$port}. ";
-        if (empty($envHost) && in_array($appEnv, ['production', 'prod', 'staging'], true)) {
-            $errMsg .= "Production DB_HOST is unconfigured. Please configure DB_HOST, DB_PORT, DB_NAME, DB_USER, and DB_PASS in your production environment settings.";
-        } else {
-            $errMsg .= "Check DB_HOST and DB_PORT environment settings.";
+        if ((isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json')) || 
+            (isset($_SERVER['CONTENT_TYPE']) && str_contains($_SERVER['CONTENT_TYPE'], 'application/json'))) {
+            header('Content-Type: application/json');
+            echo json_encode(['status' => 'error', 'message' => 'Database service is temporarily unavailable. Please try again later.']);
+            exit();
         }
-        die($errMsg);
+        die("Database service is temporarily unavailable. Please try again later.");
     }
 }
 ?>
