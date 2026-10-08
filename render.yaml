@@ -9,7 +9,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     plan: free
-    healthCheckPath: /index.php
+    healthCheckPath: /health.php
 
     envVars:
       - key: APP_ENV
