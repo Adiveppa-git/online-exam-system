@@ -15,7 +15,8 @@
     Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com data:; img-src 'self' data: https:; media-src 'self' data:; connect-src 'self' https://exam-online-ai.onrender.com; frame-ancestors 'self';"
 
     # 6. HSTS (Production HTTPS only)
-    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTP:X-Forwarded-Proto} == 'https' || %{HTTPS} == 'on'"
+    SetEnvIf X-Forwarded-Proto "^https$" HTTPS_FORWARDED=1
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS_FORWARDED
 
     # 7. Suppress PHP Version Banner
     Header unset X-Powered-By

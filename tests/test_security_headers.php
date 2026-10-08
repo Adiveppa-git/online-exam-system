@@ -120,7 +120,8 @@ runTest("7. Verify Content-Security-Policy directives & CDN dependencies", funct
 // 8. Verify HSTS Conditional Production Expression
 // ----------------------------------------------------
 runTest("8. Verify HSTS directive is conditionally scoped to HTTPS / X-Forwarded-Proto", function() use ($htaccessContent) {
-    if (!preg_match('/Header\s+always\s+set\s+Strict-Transport-Security\s+"max-age=31536000;\s*includeSubDomains"\s+"expr=%\{HTTP:X-Forwarded-Proto\}\s*==\s*\'https\'\s*\|\|\s*%\{HTTPS\}\s*==\s*\'on\'"/i', $htaccessContent)) {
+    if (!preg_match('/SetEnvIf\s+X-Forwarded-Proto\s+"(\^https\$|https)"\s+HTTPS_FORWARDED=1/i', $htaccessContent) ||
+        !preg_match('/Header\s+always\s+set\s+Strict-Transport-Security\s+"max-age=31536000;\s*includeSubDomains"\s+env=HTTPS_FORWARDED/i', $htaccessContent)) {
         return "Missing or incorrect conditional HSTS expression in .htaccess";
     }
     return true;
