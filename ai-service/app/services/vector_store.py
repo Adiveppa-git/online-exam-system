@@ -256,7 +256,7 @@ class PgVectorStoreManager:
                         logger.error(f"PgVector Stage B (SELECT 1) failure [{type(e).__name__}]: {e}")
                         raise VectorStoreUnavailableError(f"Stage B query failure: {e}")
                     try:
-                        cur.execute("SELECT COUNT(*) FROM ai_document_chunks")
+                        cur.execute("SELECT COUNT(*) FROM public.ai_document_chunks")
                         count = cur.fetchone()[0]
                     except Exception as e:
                         logger.error(f"PgVector Stage C (SELECT COUNT ai_document_chunks) failure [{type(e).__name__}]: {e}")
