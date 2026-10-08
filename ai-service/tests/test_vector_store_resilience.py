@@ -85,3 +85,43 @@ def test_rag_endpoints_degraded_responses(monkeypatch):
     }, headers=AUTH_HEADERS)
     assert i_res.status_code == 503
     assert i_res.json()["detail"] == "RAG vector store is temporarily unavailable."
+
+def test_pgvector_sslmode_enforcement(monkeypatch):
+    captured_urls = []
+    
+    import sys
+    import types
+    
+    mock_psycopg2 = types.ModuleType("psycopg2")
+    def mock_connect(url):
+        captured_urls.append(url)
+        raise Exception("Mock connection error")
+    mock_psycopg2.connect = mock_connect
+    monkeypatch.setitem(sys.modules, "psycopg2", mock_psycopg2)
+
+    mgr = PgVectorStoreManager()
+
+    # Case 1: Remote PostgreSQL URL without sslmode should append sslmode=require
+    mgr.db_url = "postgresql://user:pass@aws-0-ap-south-1.pooler.supabase.com:5432/postgres"
+    with pytest.raises(VectorStoreUnavailableError):
+        mgr._get_connection()
+    assert captured_urls[-1] == "postgresql://user:pass@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require"
+
+    # Case 2: URL with existing query parameters should append &sslmode=require
+    mgr.db_url = "postgresql://user:pass@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?connect_timeout=10"
+    with pytest.raises(VectorStoreUnavailableError):
+        mgr._get_connection()
+    assert captured_urls[-1] == "postgresql://user:pass@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?connect_timeout=10&sslmode=require"
+
+    # Case 3: URL already specifying sslmode should not duplicate sslmode
+    mgr.db_url = "postgresql://user:pass@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require"
+    with pytest.raises(VectorStoreUnavailableError):
+        mgr._get_connection()
+    assert captured_urls[-1] == "postgresql://user:pass@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require"
+
+    # Case 4: Localhost URL should NOT append sslmode=require
+    mgr.db_url = "postgresql://user:pass@127.0.0.1:5432/postgres"
+    with pytest.raises(VectorStoreUnavailableError):
+        mgr._get_connection()
+    assert captured_urls[-1] == "postgresql://user:pass@127.0.0.1:5432/postgres"
+

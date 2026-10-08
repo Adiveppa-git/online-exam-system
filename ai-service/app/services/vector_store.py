@@ -222,7 +222,11 @@ class PgVectorStoreManager:
             raise VectorStoreUnavailableError("RAG vector store configuration is unavailable.")
         try:
             import psycopg2
-            return psycopg2.connect(self.db_url)
+            db_url = str(self.db_url).strip()
+            if "sslmode=" not in db_url.lower() and ("localhost" not in db_url.lower() and "127.0.0.1" not in db_url.lower()):
+                sep = "&" if "?" in db_url else "?"
+                db_url = f"{db_url}{sep}sslmode=require"
+            return psycopg2.connect(db_url)
         except VectorStoreUnavailableError:
             raise
         except Exception as e:
