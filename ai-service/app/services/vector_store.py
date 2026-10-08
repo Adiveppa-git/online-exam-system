@@ -230,8 +230,8 @@ class PgVectorStoreManager:
             if self.db_url:
                 import re
                 clean_err = re.sub(r'://[^@]+@', '://***:***@', clean_err)
-            logger.error(f"PgVector connection failure: {clean_err}")
-            raise VectorStoreUnavailableError("RAG vector store is temporarily unavailable.")
+            logger.error(f"PgVector Stage A (connect) failure [{type(e).__name__}]: {clean_err}")
+            raise VectorStoreUnavailableError(f"Stage A connection failure: {clean_err}")
 
     def check_health(self) -> Dict[str, Any]:
         if not self.db_url or not str(self.db_url).strip():
@@ -245,10 +245,18 @@ class PgVectorStoreManager:
             conn = self._get_connection()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT 1")
-                    cur.fetchone()
-                    cur.execute("SELECT COUNT(*) FROM ai_document_chunks")
-                    count = cur.fetchone()[0]
+                    try:
+                        cur.execute("SELECT 1")
+                        cur.fetchone()
+                    except Exception as e:
+                        logger.error(f"PgVector Stage B (SELECT 1) failure [{type(e).__name__}]: {e}")
+                        raise VectorStoreUnavailableError(f"Stage B query failure: {e}")
+                    try:
+                        cur.execute("SELECT COUNT(*) FROM ai_document_chunks")
+                        count = cur.fetchone()[0]
+                    except Exception as e:
+                        logger.error(f"PgVector Stage C (SELECT COUNT ai_document_chunks) failure [{type(e).__name__}]: {e}")
+                        raise VectorStoreUnavailableError(f"Stage C query failure: {e}")
                 return {
                     "healthy": True,
                     "status": "ready",
@@ -257,7 +265,8 @@ class PgVectorStoreManager:
                 }
             finally:
                 conn.close()
-        except VectorStoreUnavailableError:
+        except VectorStoreUnavailableError as e:
+            logger.error(f"PgVector health check unavailable error: {e}")
             return {
                 "healthy": False,
                 "status": "degraded",
@@ -265,7 +274,7 @@ class PgVectorStoreManager:
                 "message": "RAG vector store is temporarily unavailable."
             }
         except Exception as e:
-            logger.error(f"PgVector health check error: {e}")
+            logger.error(f"PgVector health check unhandled error [{type(e).__name__}]: {e}")
             return {
                 "healthy": False,
                 "status": "degraded",
