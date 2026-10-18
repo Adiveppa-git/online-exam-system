@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/env_loader.php';
+require_once __DIR__ . '/text_helpers.php';
 
 /**
  * AI Service Client
@@ -53,7 +54,16 @@ class AiClient {
                 'additional_context' => $additionalContext
             ];
         }
-        return $this->request('POST', '/api/v1/questions/generate', $payload);
+        $res = $this->request('POST', '/api/v1/questions/generate', $payload);
+        if ($res['success'] && !empty($res['data']['questions']) && is_array($res['data']['questions'])) {
+            foreach ($res['data']['questions'] as &$qItem) {
+                if (isset($qItem['question'])) {
+                    $qItem['question'] = clean_question_title($qItem['question']);
+                }
+            }
+            unset($qItem);
+        }
+        return $res;
     }
 
     public function analyzePerformance($studentIdOrPayload, array $history = []): array {
@@ -203,7 +213,16 @@ class AiClient {
             'difficulty' => strtolower($difficulty),
             'number_of_questions' => $count
         ];
-        return $this->request('POST', '/api/v1/recommendations/practice-questions', $payload);
+        $res = $this->request('POST', '/api/v1/recommendations/practice-questions', $payload);
+        if ($res['success'] && !empty($res['data']['questions']) && is_array($res['data']['questions'])) {
+            foreach ($res['data']['questions'] as &$qItem) {
+                if (isset($qItem['question'])) {
+                    $qItem['question'] = clean_question_title($qItem['question']);
+                }
+            }
+            unset($qItem);
+        }
+        return $res;
     }
 
     private function request(string $method, string $endpoint, ?array $payload = null, ?int $overrideTimeout = null, int $retryCount = 0): array {
@@ -241,17 +260,20 @@ class AiClient {
         curl_close($ch);
 
         if ($response === false) {
-            if ($retryCount < 2 && in_array($curlErrno, [28, 7, 52], true)) {
+            if ($retryCount < 2 && in_array($curlErrno, [28, 52], true)) {
                 sleep(2);
                 return $this->request($method, $endpoint, $payload, $overrideTimeout, $retryCount + 1);
             }
+            $errMsg = ($curlErrno === 7)
+                ? "AI Service connection error (7): Failed to connect to {$this->baseUrl}. The AI service is currently offline or unreachable. Please verify that the FastAPI service is running."
+                : "AI Service connection error ({$curlErrno}): {$curlError}";
             return [
                 'success' => false,
                 'online' => false,
                 'status' => $httpCode,
                 'http_code' => $httpCode,
-                'error' => "AI Service connection error ({$curlErrno}): {$curlError}",
-                'message' => "AI Service connection error ({$curlErrno}): {$curlError}",
+                'error' => $errMsg,
+                'message' => $errMsg,
                 'code' => $curlErrno,
                 'data' => []
             ];

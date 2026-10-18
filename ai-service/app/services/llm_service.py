@@ -2,6 +2,7 @@ import json
 import logging
 import uuid
 import httpx
+import re
 from typing import List, Dict, Any, Tuple
 from app.config import settings
 from app.schemas.question import QuestionGenerationRequest, GeneratedQuestionItem, FocusedNotesRequest
@@ -64,6 +65,10 @@ class LLMService:
         for idx, item in enumerate(raw_questions):
             try:
                 q_text = item.get("question", "").strip()
+                # Narrowly strip any artificial trailing variant suffix (e.g., "(Variant 48)", "(variant 7)")
+                q_text = re.sub(r'\s*\([Vv]ariant\s+\d+\)\s*$', '', q_text).strip()
+                if q_text and q_text[-1] not in "?!.":
+                    q_text += "?"
                 if not q_text or q_text in seen_questions:
                     continue
                 seen_questions.add(q_text)
@@ -170,38 +175,219 @@ Each object must have:
                     "D": "Disable exception reporting"
                 },
                 "ans": "C",
-                "exp": f"Applying modular patterns provides optimal reliability for {req.topic}."
+                "exp": f"Applying modular patterns provides optimal reliability for {topic_label}."
             },
             {
-                "q": f"What is a key advantage of utilizing {req.topic} properly in {req.subject}?",
+                "q": f"What is a key advantage of utilizing {topic_label} properly in {req.subject}?",
                 "opts": {
-                    "A": f"Improved performance, maintainability, and scalability for {req.topic}",
+                    "A": f"Improved performance, maintainability, and scalability for {topic_label}",
                     "B": "Increased compilation overhead",
                     "C": "Forced single-threaded execution",
                     "D": "Elimination of type checking"
                 },
                 "ans": "A",
-                "exp": f"Proper utilization of {req.topic} enhances system maintainability and scalability."
+                "exp": f"Proper utilization of {topic_label} enhances system maintainability and scalability."
             },
             {
-                "q": f"Which common issue can occur if {req.topic} is implemented incorrectly?",
+                "q": f"Which common issue can occur if {topic_label} is implemented incorrectly?",
                 "opts": {
                     "A": "Automatic data compression",
                     "B": "Faster response times",
-                    "C": f"Unexpected side-effects or logic failures in {req.topic}",
+                    "C": f"Unexpected side-effects or logic failures in {topic_label}",
                     "D": "Enhanced security encryption"
                 },
                 "ans": "C",
-                "exp": f"Incorrect implementation of {req.topic} can cause unexpected logic failures."
+                "exp": f"Incorrect implementation of {topic_label} can cause unexpected logic failures."
+            },
+            {
+                "q": f"When optimizing {topic_label} for higher efficiency, what is the most critical consideration?",
+                "opts": {
+                    "A": f"Balancing algorithmic complexity with memory overhead in {topic_label}",
+                    "B": "Removing all parameter constraints",
+                    "C": "Duplicating core routines across modules",
+                    "D": "Suppressing runtime execution telemetry"
+                },
+                "ans": "A",
+                "exp": f"Efficiency optimization requires balancing complexity and memory overhead in {topic_label}."
+            },
+            {
+                "q": f"How does {topic_label} maintain state consistency and data integrity within {req.subject}?",
+                "opts": {
+                    "A": "Relying on arbitrary timing delays",
+                    "B": f"Enforcing deterministic execution paths and validation checks in {topic_label}",
+                    "C": "Permitting uncontrolled global state mutations",
+                    "D": "Skipping boundary verification steps"
+                },
+                "ans": "B",
+                "exp": f"State consistency is preserved through deterministic paths and validation in {topic_label}."
+            },
+            {
+                "q": f"Which architectural pattern is best suited for structuring {topic_label} components?",
+                "opts": {
+                    "A": "Monolithic tightly-coupled scripting",
+                    "B": "Unstructured circular dependency graphs",
+                    "C": f"Layered separation of concerns tailored for {topic_label}",
+                    "D": "Randomized execution pipelines"
+                },
+                "ans": "C",
+                "exp": f"Layered separation of concerns maximizes modularity and maintainability for {topic_label}."
+            },
+            {
+                "q": f"What error-handling approach is most effective when working with {topic_label}?",
+                "opts": {
+                    "A": f"Graceful degradation with structured exception handling around {topic_label}",
+                    "B": "Silently swallowing all raised exceptions",
+                    "C": "Abruptly terminating the host process without diagnostics",
+                    "D": "Disabling return-code verification"
+                },
+                "ans": "A",
+                "exp": f"Structured exception handling and graceful recovery are essential for {topic_label}."
+            },
+            {
+                "q": f"During code review of a {topic_label} implementation, what is considered an antipattern?",
+                "opts": {
+                    "A": "Comprehensive unit testing coverage",
+                    "B": f"Tight coupling and hardcoded dependencies within {topic_label}",
+                    "C": "Documenting interface contracts clearly",
+                    "D": "Using immutable data representations"
+                },
+                "ans": "B",
+                "exp": f"Tight coupling limits testability and introduces brittleness into {topic_label}."
+            },
+            {
+                "q": f"How does proper lifecycle management benefit {topic_label} in {req.subject}?",
+                "opts": {
+                    "A": "Increases uncollected garbage collection cycles",
+                    "B": "Eliminates all runtime predictability",
+                    "C": f"Prevents resource leaks and ensures timely cleanup for {topic_label}",
+                    "D": "Causes intermittent connection timeouts"
+                },
+                "ans": "C",
+                "exp": f"Explicit lifecycle controls prevent resource exhaustion in {topic_label}."
+            },
+            {
+                "q": f"What security consideration is most essential when deploying {topic_label}?",
+                "opts": {
+                    "A": f"Rigorous input sanitization and least-privilege access for {topic_label}",
+                    "B": "Granting unrestricted administrative permissions",
+                    "C": "Exposing internal state variables globally",
+                    "D": "Disabling transport-layer encryption"
+                },
+                "ans": "A",
+                "exp": f"Input sanitization and least-privilege boundaries protect {topic_label} from exploit."
+            },
+            {
+                "q": f"Which metric provides the most accurate insight into {topic_label} runtime performance?",
+                "opts": {
+                    "A": "Total physical storage disk capacity",
+                    "B": f"Latency distribution and resource utilization during {topic_label} execution",
+                    "C": "Number of source code comment lines",
+                    "D": "Monitor refresh frequency"
+                },
+                "ans": "B",
+                "exp": f"Latency distributions and resource metrics identify performance bottlenecks in {topic_label}."
+            },
+            {
+                "q": f"When refactoring legacy logic into {topic_label}, what primary guideline should be followed?",
+                "opts": {
+                    "A": "Rewrite without verifying existing behavioral contracts",
+                    "B": "Introduce breaking changes to public APIs unconditionally",
+                    "C": f"Maintain backward compatibility while isolating {topic_label} responsibilities",
+                    "D": "Remove all regression test assertions"
+                },
+                "ans": "C",
+                "exp": f"Preserving API contracts while isolating concerns ensures safe refactoring into {topic_label}."
+            },
+            {
+                "q": f"How does {topic_label} handle edge cases and boundary condition constraints?",
+                "opts": {
+                    "A": f"Through explicit boundary validation and defensive assertions in {topic_label}",
+                    "B": "By assuming inputs always conform to standard bounds",
+                    "C": "Ignoring null or empty input payloads",
+                    "D": "Delegating validation to downstream consumers entirely"
+                },
+                "ans": "A",
+                "exp": f"Defensive boundary assertions prevent unexpected edge-case failures in {topic_label}."
+            },
+            {
+                "q": f"Under high concurrency, what strategy ensures thread safety for {topic_label}?",
+                "opts": {
+                    "A": "Unsynchronized shared memory mutations",
+                    "B": f"Using immutability or robust synchronization primitives for {topic_label}",
+                    "C": "Disabling concurrent thread scheduling",
+                    "D": "Permitting race conditions without coordination"
+                },
+                "ans": "B",
+                "exp": f"Synchronization primitives and immutable data structures prevent concurrency hazards in {topic_label}."
+            },
+            {
+                "q": f"What is the primary trade-off when configuring {topic_label} parameters?",
+                "opts": {
+                    "A": "Font rendering size versus screen brightness",
+                    "B": "Network cable speed versus wall voltage",
+                    "C": f"Throughput rate versus latency overhead in {topic_label}",
+                    "D": "Keyboard layout style versus disk sector format"
+                },
+                "ans": "C",
+                "exp": f"Tuning throughput against latency overhead represents the fundamental trade-off in {topic_label}."
+            },
+            {
+                "q": f"Which testing strategy offers the highest coverage for {topic_label} routines?",
+                "opts": {
+                    "A": f"Combining automated unit, integration, and property-based tests for {topic_label}",
+                    "B": "Manual ad-hoc testing exclusively before release",
+                    "C": "Testing only the happy path and skipping failure states",
+                    "D": "Relying solely on end-user bug reports in production"
+                },
+                "ans": "A",
+                "exp": f"Comprehensive test coverage across levels ensures robust correctness for {topic_label}."
+            },
+            {
+                "q": f"How does modular decoupling enhance the maintainability of {topic_label}?",
+                "opts": {
+                    "A": f"Enables independent updates and isolated testing of {topic_label}",
+                    "B": "Forces synchronous coupling across all system components",
+                    "C": "Increases blast radius of internal defects",
+                    "D": "Prevents code reuse across adjacent domains"
+                },
+                "ans": "A",
+                "exp": f"Modular decoupling confines changes and enables independent maintenance of {topic_label}."
+            },
+            {
+                "q": f"What standard convention governs modern implementations of {topic_label}?",
+                "opts": {
+                    "A": "Proprietary non-standard dialect overrides",
+                    "B": "Arbitrary variable naming and zero documentation",
+                    "C": f"Adherence to idiomatic standards, type safety, and clean code principles in {req.subject}",
+                    "D": "Deprecation of all interface contracts"
+                },
+                "ans": "C",
+                "exp": f"Modern systems rely on idiomatic standards and clean contracts for {topic_label}."
             }
         ]
 
+        prefixes = [
+            "",
+            "From an architectural design perspective, ",
+            "In high-availability production environments, ",
+            "Regarding systems engineering standards, ",
+            "From an operational reliability standpoint, "
+        ]
+
+        num_templates = len(base_templates)
         for i in range(req.number_of_questions):
-            tmpl = base_templates[i % len(base_templates)]
-            q_num_suffix = f" (Variant {i+1})" if i >= len(base_templates) else ""
+            tmpl = base_templates[i % num_templates]
+            cycle = i // num_templates
+            prefix = prefixes[cycle % len(prefixes)]
             
+            base_q = tmpl["q"]
+            if prefix:
+                q_text = f"{prefix}{base_q[0].lower()}{base_q[1:]}"
+            else:
+                q_text = base_q
+
             results.append({
-                "question": f"{tmpl['q']}{q_num_suffix}",
+                "question": q_text,
                 "options": tmpl["opts"].copy(),
                 "correct_answer": tmpl["ans"],
                 "explanation": f"{tmpl['exp']} ({diff_label} difficulty evaluation).",

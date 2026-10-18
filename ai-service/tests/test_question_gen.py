@@ -29,11 +29,25 @@ def test_generate_questions_valid():
         assert item["subject"] == "Python Programming"
         assert item["topic"] == "Object Oriented Programming"
 
+def test_generate_questions_valid_counts():
+    for count in [1, 20, 21, 50, 100]:
+        payload = {
+            "subject": "Python Programming",
+            "topic": "Loops",
+            "difficulty": "easy",
+            "number_of_questions": count
+        }
+        response = client.post("/api/v1/questions/generate", json=payload, headers=AUTH_HEADERS)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert len(data["questions"]) == count
+
 def test_generate_questions_invalid_number_high():
     payload = {
         "subject": "Python",
         "topic": "Loops",
-        "number_of_questions": 50
+        "number_of_questions": 101
     }
     response = client.post("/api/v1/questions/generate", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 422  # Unprocessable Entity (Pydantic validation error)
@@ -68,4 +82,21 @@ def test_generate_questions_empty_topic():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert len(data["questions"]) == 5
+    assert len(data["questions"]) == 5
+
+def test_generate_questions_no_variant_suffixes():
+    payload = {
+        "subject": "Grammar",
+        "topic": "Sentence Structure",
+        "difficulty": "hard",
+        "number_of_questions": 50
+    }
+    response = client.post("/api/v1/questions/generate", json=payload, headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert len(data["questions"]) == 50
+    for q_item in data["questions"]:
+        q_text = q_item["question"]
+        assert "variant" not in q_text.lower(), f"Unwanted variant suffix detected in: {q_text}"
+        assert q_text.strip().endswith(("?", ".", "!"))
