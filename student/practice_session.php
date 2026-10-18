@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $stmt_q = $conn->prepare("INSERT INTO ai_practice_answers (session_id, student_id, question_index, question_text, option_a, option_b, option_c, option_d, correct_option, explanation, subject, topic, difficulty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
         foreach ($questions as $idx => $q) {
-            $q_text = $q['question'];
+            $q_text = clean_question_title($q['question']);
             $opt_a = $q['options']['A'] ?? 'Option A';
             $opt_b = $q['options']['B'] ?? 'Option B';
             $opt_c = $q['options']['C'] ?? 'Option C';
@@ -273,7 +273,7 @@ function len($arr) { return count($arr); }
                     ?>
                     <div class="practice-card shadow-sm p-4 mb-4 <?= $card_class ?>">
                         <h6 class="fw-bold text-dark mb-3">Question <?= ($idx + 1) ?> of <?= count($questions_data) ?></h6>
-                        <p class="fw-semibold text-dark fs-5 mb-4"><?= htmlspecialchars($q['question_text']) ?></p>
+                        <p class="fw-semibold text-dark fs-5 mb-4"><?= htmlspecialchars(clean_question_title($q['question_text'])) ?></p>
 
                         <div class="row g-3">
                             <?php foreach (['A' => $q['option_a'], 'B' => $q['option_b'], 'C' => $q['option_c'], 'D' => $q['option_d']] as $opt_key => $opt_val): ?>

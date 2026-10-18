@@ -11,6 +11,11 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
 $user_id = (int)$_SESSION['user_id'];
 $exam_id = (int)($_GET['exam_id'] ?? 0);
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrf_token = $_SESSION['csrf_token'];
+
 if (!$exam_id) die("Invalid Exam");
 
 /* ===== PREVENT ATTEMPT IF ALREADY COMPLETED ===== */
@@ -122,6 +127,7 @@ onclick="showQuestion(<?= $i ?>)">
 <div class="exam-content">
 
 <form id="examForm" method="post" action="exam_summary.php">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
 
 <input type="hidden" name="exam_id" value="<?= $exam_id ?>">
 
@@ -131,7 +137,7 @@ onclick="showQuestion(<?= $i ?>)">
 id="q<?= $index ?>"
 style="<?= $index!==0?'display:none':'' ?>">
 
-<h2>Q<?= $index+1 ?>. <?= htmlspecialchars($q['question']) ?></h2>
+<h2>Q<?= $index+1 ?>. <?= htmlspecialchars(clean_question_title($q['question'])) ?></h2>
 
 <div class="options">
 
@@ -244,7 +250,7 @@ if(qid && optVal){
 fetch("save_answer.php",{
 method:"POST",
 headers:{"Content-Type":"application/x-www-form-urlencoded"},
-body:"exam_id=<?= $exam_id ?>&question_id="+encodeURIComponent(qid)+"&answer="+encodeURIComponent(optVal)
+body:"exam_id=<?= $exam_id ?>&csrf_token=<?= urlencode($csrf_token) ?>&question_id="+encodeURIComponent(qid)+"&answer="+encodeURIComponent(optVal)
 })
 .then(res => res.json())
 .then(data => {
@@ -337,7 +343,7 @@ warningCount++;
 fetch("report_violation.php",{
 method:"POST",
 headers:{"Content-Type":"application/x-www-form-urlencoded"},
-body:"exam_id=<?= $exam_id ?>"
+body:"exam_id=<?= $exam_id ?>&csrf_token=<?= urlencode($csrf_token) ?>"
 });
 
 }else{

@@ -1,107 +1,141 @@
 <?php
-session_start();
-require_once "../config/db.php";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once __DIR__ . "/../config/db.php";
 
 /* ================= ADMIN AUTH ================= */
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../index.php");
+    if (!headers_sent()) {
+        header("Location: ../index.php");
+    }
     exit;
 }
 
 /* ================= MODE ================= */
 $mode = $_GET['mode'] ?? 'manage';
 
+/* ================= CSRF TOKEN GENERATION ================= */
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrf_token = $_SESSION['csrf_token'];
+
 /* ================= FLASH MESSAGE ================= */
 $success = $_SESSION['success'] ?? '';
 $error   = $_SESSION['error'] ?? '';
 unset($_SESSION['success'], $_SESSION['error']);
 
-/* ================= DELETE QUESTION (NO CONFIRMATION) ================= */
+/* ================= REJECT DESTRUCTIVE GET ACTIONS ================= */
 if (isset($_GET['delete'])) {
-
-    $id = (int)$_GET['delete'];
-
-    $stmt = $conn->prepare("DELETE FROM questions WHERE id=?");
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-
-    $_SESSION['success'] = "Question deleted successfully";
-
-    header("Location: questions.php?mode=manage");
+    $_SESSION['error'] = "Question deletion must use POST with a valid CSRF security token.";
+    if (!headers_sent()) {
+        header("Location: questions.php?mode=manage");
+    }
     exit;
 }
 
-/* ================= ADD QUESTION ================= */
-if (isset($_POST['add_question'])) {
-
-    $exam_id  = (int)$_POST['exam_id'];
-    $question = trim($_POST['question']);
-    $a = trim($_POST['option_a']);
-    $b = trim($_POST['option_b']);
-    $c = trim($_POST['option_c']);
-    $d = trim($_POST['option_d']);
-    $correct = $_POST['correct_option'];
-
-    $stmt = $conn->prepare("
-        INSERT INTO questions
-        (exam_id, question, option_a, option_b, option_c, option_d, correct_option)
-        VALUES (?,?,?,?,?,?,?)
-    ");
-
-    $stmt->bind_param(
-        "issssss",
-        $exam_id,
-        $question,
-        $a,
-        $b,
-        $c,
-        $d,
-        $correct
-    );
-
-    if ($stmt->execute()) {
-        $_SESSION['success'] = "Question added successfully";
-    } else {
-        $_SESSION['error'] = "Failed to add question";
+/* ================= POST ACTIONS (WITH CSRF VALIDATION) ================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $post_token = $_POST['csrf_token'] ?? '';
+    if (!hash_equals($_SESSION['csrf_token'], $post_token)) {
+        $_SESSION['error'] = "Invalid CSRF security token.";
+        if (!headers_sent()) {
+            header("Location: questions.php?mode=" . urlencode($mode));
+        }
+        exit;
     }
 
-    header("Location: questions.php?mode=add");
-    exit;
-}
+    /* DELETE QUESTION */
+    if (isset($_POST['delete_question'])) {
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id > 0) {
+            $stmt = $conn->prepare("DELETE FROM questions WHERE id=?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $_SESSION['success'] = "Question deleted successfully";
+        }
+        if (!headers_sent()) {
+            header("Location: questions.php?mode=manage");
+        }
+        exit;
+    }
 
-/* ================= UPDATE QUESTION ================= */
-if (isset($_POST['update_question'])) {
+    /* ADD QUESTION */
+    if (isset($_POST['add_question'])) {
+        $exam_id  = (int)$_POST['exam_id'];
+        $question = clean_question_title(trim($_POST['question']));
+        $a = trim($_POST['option_a']);
+        $b = trim($_POST['option_b']);
+        $c = trim($_POST['option_c']);
+        $d = trim($_POST['option_d']);
+        $correct = $_POST['correct_option'];
 
-    $id = (int)$_POST['id'];
+        $stmt = $conn->prepare("
+            INSERT INTO questions
+            (exam_id, question, option_a, option_b, option_c, option_d, correct_option)
+            VALUES (?,?,?,?,?,?,?)
+        ");
 
-    $stmt = $conn->prepare("
-        UPDATE questions SET
-        question=?,
-        option_a=?,
-        option_b=?,
-        option_c=?,
-        option_d=?,
-        correct_option=?
-        WHERE id=?
-    ");
+        $stmt->bind_param(
+            "issssss",
+            $exam_id,
+            $question,
+            $a,
+            $b,
+            $c,
+            $d,
+            $correct
+        );
 
-    $stmt->bind_param(
-        "ssssssi",
-        $_POST['question'],
-        $_POST['option_a'],
-        $_POST['option_b'],
-        $_POST['option_c'],
-        $_POST['option_d'],
-        $_POST['correct_option'],
-        $id
-    );
+        if ($stmt->execute()) {
+            $_SESSION['success'] = "Question added successfully";
+        } else {
+            $_SESSION['error'] = "Failed to add question";
+        }
 
-    $stmt->execute();
+        if (!headers_sent()) {
+            header("Location: questions.php?mode=add");
+        }
+        exit;
+    }
 
-    $_SESSION['success'] = "Question updated successfully";
+    /* UPDATE QUESTION */
+    if (isset($_POST['update_question'])) {
+        $id = (int)$_POST['id'];
+        $cleanQuestion = clean_question_title(trim($_POST['question']));
 
-    header("Location: questions.php?mode=manage");
-    exit;
+        $stmt = $conn->prepare("
+            UPDATE questions SET
+            question=?,
+            option_a=?,
+            option_b=?,
+            option_c=?,
+            option_d=?,
+            correct_option=?
+            WHERE id=?
+        ");
+
+        $stmt->bind_param(
+            "ssssssi",
+            $cleanQuestion,
+            $_POST['option_a'],
+            $_POST['option_b'],
+            $_POST['option_c'],
+            $_POST['option_d'],
+            $_POST['correct_option'],
+            $id
+        );
+
+        $stmt->execute();
+
+        $_SESSION['success'] = "Question updated successfully";
+
+        if (!headers_sent()) {
+            header("Location: questions.php?mode=manage");
+        }
+        exit;
+    }
 }
 
 /* ================= EDIT FETCH ================= */
@@ -316,6 +350,7 @@ border-radius:4px;
 <?php if($mode!=='manage'): ?>
 
 <form method="post" class="question-form">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
 
 <?php if($edit): ?>
 <input type="hidden" name="id" value="<?= $edit['id'] ?>">
@@ -346,7 +381,7 @@ border-radius:4px;
 
 <div class="form-group">
 <label>Question</label>
-<textarea name="question" required><?= htmlspecialchars($edit['question']??'') ?></textarea>
+<textarea name="question" required><?= htmlspecialchars(clean_question_title($edit['question']??'')) ?></textarea>
 </div>
 
 
@@ -418,11 +453,15 @@ border-radius:4px;
 <tr>
 <td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle;"><?= $i++ ?></td>
 <td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; font-weight:600;"><?= htmlspecialchars($q['exam_title']) ?></td>
-<td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle;"><?= htmlspecialchars($q['question']) ?></td>
+<td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle;"><?= htmlspecialchars(clean_question_title($q['question'])) ?></td>
 <td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; text-align:center;"><span style="background:#e0e7ff; color:#3730a3; padding:4px 10px; border-radius:12px; font-weight:bold;"><?= htmlspecialchars($q['correct_option']) ?></span></td>
 <td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; text-align:center;" class="action-btns">
-<a href="questions.php?mode=edit&id=<?= $q['id'] ?>" class="edit-link" style="background:#22d3ee; color:#0f172a; padding:6px 12px; border-radius:6px; border:none; text-decoration:none; font-weight:600; font-size:13px; display:inline-block;">Edit</a>
-<a href="questions.php?delete=<?= $q['id'] ?>" class="delete-link" style="background:#dc3545; color:white; padding:6px 12px; border-radius:6px; border:none; text-decoration:none; font-weight:600; font-size:13px; display:inline-block;">Delete</a>
+<a href="questions.php?mode=edit&id=<?= $q['id'] ?>" class="edit-link" style="background:#22d3ee; color:#0f172a; padding:6px 12px; border-radius:6px; border:none; text-decoration:none; font-weight:600; font-size:13px; display:inline-block; vertical-align:middle;">Edit</a>
+<form method="post" action="questions.php?mode=manage" style="display:inline-block; margin:0; padding:0; vertical-align:middle;">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
+<input type="hidden" name="id" value="<?= $q['id'] ?>">
+<button type="submit" name="delete_question" class="delete-link" style="background:#dc3545; color:white; padding:6px 12px; border-radius:6px; border:none; text-decoration:none; font-weight:600; font-size:13px; display:inline-block; cursor:pointer;">Delete</button>
+</form>
 </td>
 </tr>
 <?php endwhile; ?>

@@ -291,7 +291,7 @@ while ($res && $row = $res->fetch_assoc()) {
                         <tr>
                             <td><?= $sl_no++ ?></td>
                             <td style="max-width: 280px; word-break: break-word;">
-                                <strong><?= htmlspecialchars($q['question']) ?></strong>
+                                <strong><?= htmlspecialchars(clean_question_title($q['question'])) ?></strong>
                             </td>
                             <td>
                                 <div><small><?= htmlspecialchars($q['exam_title']) ?></small></div>
