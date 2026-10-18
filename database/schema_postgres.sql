@@ -176,6 +176,9 @@ CREATE TABLE ai_documents (
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ingested', 'failed')),
     error_message TEXT DEFAULT NULL,
     uploaded_by INT NOT NULL DEFAULT 1 REFERENCES users(id) ON DELETE SET DEFAULT,
+    exam_id INT DEFAULT NULL REFERENCES exams(id) ON DELETE SET NULL,
+    source_question_ids TEXT DEFAULT NULL,
+    is_generated BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
