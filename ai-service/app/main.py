@@ -29,6 +29,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def warmup_services():
+    try:
+        logger.info("Pre-warming VectorStore and Embedding model on startup...")
+        vs = VectorStoreManager.get_instance()
+        vs.check_health()
+        from app.services.vector_store import EmbeddingModelManager
+        em = EmbeddingModelManager.get_instance()
+        em.embed_query("warmup")
+        logger.info("VectorStore and Embedding model pre-warmed successfully.")
+    except Exception as e:
+        logger.warning(f"VectorStore warm-up warning: {e}")
+
 # Structured Logging Middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):

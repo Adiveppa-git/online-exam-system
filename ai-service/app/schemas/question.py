@@ -6,7 +6,7 @@ class QuestionGenerationRequest(BaseModel):
     topic: Optional[str] = Field("", max_length=100, description="Specific topic (optional)")
     difficulty: Literal["easy", "medium", "hard"] = Field("medium", description="Difficulty level")
     question_type: str = Field("mcq", description="Question type (default mcq)")
-    number_of_questions: int = Field(5, ge=1, le=20, description="Number of questions to generate (1-20)")
+    number_of_questions: int = Field(5, ge=1, le=100, description="Number of questions to generate (1-100)")
     additional_context: Optional[str] = Field(None, max_length=1000, description="Optional background material/notes")
 
     @field_validator('subject')

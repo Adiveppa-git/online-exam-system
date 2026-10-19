@@ -75,7 +75,20 @@ if ($respHard['success'] && isset($respHard['data']['predicted_difficulty']) && 
 
 // Test 4: Admin Manual Update Safety (Preserves human oversight)
 echo "[Test 4] Verifying Admin Manual Difficulty Update... ";
+$isTempQuestion = false;
 $qSample = $conn->query("SELECT id, exam_id, difficulty FROM questions LIMIT 1")->fetch_assoc();
+if (!$qSample) {
+    $exSample = $conn->query("SELECT id FROM exams LIMIT 1")->fetch_assoc();
+    $tempExamId = (int)($exSample['id'] ?? 1);
+    $insTempQ = $conn->prepare("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option, difficulty) VALUES (?, 'Test ML Difficulty Question', 'A', 'B', 'C', 'D', 'A', 'medium')");
+    $insTempQ->bind_param("i", $tempExamId);
+    $insTempQ->execute();
+    $tempQId = $conn->insert_id;
+    $insTempQ->close();
+    $qSample = ['id' => $tempQId, 'exam_id' => $tempExamId, 'difficulty' => 'medium'];
+    $isTempQuestion = true;
+}
+
 $testQId = (int)($qSample['id'] ?? 1);
 $testExamId = (int)($qSample['exam_id'] ?? 27);
 $origDiff = $qSample['difficulty'] ?? 'medium';
@@ -84,7 +97,8 @@ $updStmt = $conn->prepare("UPDATE questions SET difficulty = 'hard' WHERE id = ?
 $updStmt->bind_param("i", $testQId);
 $updStmt->execute();
 
-$chkUpd = $conn->query("SELECT difficulty FROM questions WHERE id = $testQId")->fetch_assoc()['difficulty'];
+$resChk = $conn->query("SELECT difficulty FROM questions WHERE id = $testQId")->fetch_assoc();
+$chkUpd = $resChk['difficulty'] ?? null;
 if ($chkUpd === 'hard') {
     // Restore original difficulty
     $rstStmt = $conn->prepare("UPDATE questions SET difficulty = ? WHERE id = ?");
@@ -139,6 +153,10 @@ if ($qFetch && $qFetch->num_rows > 0) {
     $conn->query("DELETE FROM student_answers WHERE student_id = $testStudentId");
 } else {
     echo "SKIPPED (No question found for exam #$testExamId)\n";
+}
+
+if ($isTempQuestion && !empty($testQId)) {
+    $conn->query("DELETE FROM questions WHERE id = $testQId");
 }
 
 echo "\n----------------------------------------------------\n";

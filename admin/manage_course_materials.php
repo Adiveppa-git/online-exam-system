@@ -2,6 +2,7 @@
 session_start();
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/ai_client.php';
+require_once __DIR__ . '/../config/study_material_service.php';
 
 // Auth Guard - Admin Only
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
@@ -11,6 +12,7 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role
 
 $message = "";
 $message_type = "info";
+$selectedSubject = "";
 
 // CSRF Token Generation
 if (empty($_SESSION['csrf_token'])) {
@@ -25,110 +27,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $action = $_POST['action'] ?? '';
 
-        if ($action === 'upload_material') {
+        if ($action === 'generate_study_material') {
             $subject = trim($_POST['subject'] ?? '');
-            $topic = trim($_POST['topic'] ?? '');
+            $adminId = (int)($_SESSION['user_id'] ?? 1);
+            $selectedSubject = $subject;
 
-            if (empty($subject) || empty($topic)) {
-                $message = "Subject and Topic are required fields.";
-                $message_type = "danger";
-            } elseif (!isset($_FILES['material_file']) || $_FILES['material_file']['error'] !== UPLOAD_ERR_OK) {
-                $message = "Please select a valid course material file to upload.";
-                $message_type = "danger";
+            if (empty($subject)) {
+                $message = "Please select a Subject to generate study material.";
+                $message_type = "warning";
             } else {
-                $file = $_FILES['material_file'];
-                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                $allowed = ['pdf', 'txt', 'md'];
-
-                if (!in_array($ext, $allowed)) {
-                    $message = "Invalid file type. Only PDF, TXT, and MD files are supported.";
-                    $message_type = "danger";
+                $genRes = StudyMaterialService::generateSubjectStudyMaterial($conn, $subject, $adminId);
+                $message = $genRes['message'] ?? 'Study material processed.';
+                if (!empty($genRes['success'])) {
+                    $message_type = 'success';
+                } elseif (!empty($genRes['empty'])) {
+                    $message_type = 'warning';
                 } else {
-                    $supabaseUrl    = getenv('SUPABASE_URL');
-                    $supabaseKey    = getenv('SUPABASE_KEY');
-                    $supabaseBucket = getenv('SUPABASE_BUCKET') ?: 'course-materials';
-                    $targetPath     = '';
-                    $uploadedSuccessfully = false;
-
-                    if (!empty($supabaseUrl) && !empty($supabaseKey)) {
-                        // Cloud Mode: Upload to Supabase Storage Bucket
-                        $safeName = time() . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
-                        $objectPath = "materials/" . $safeName;
-                        $uploadUrl = rtrim($supabaseUrl, '/') . "/storage/v1/object/" . $supabaseBucket . "/" . $objectPath;
-                        $fileContent = file_get_contents($file['tmp_name']);
-
-                        $ch = curl_init($uploadUrl);
-                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
-                        curl_setopt($ch, CURLOPT_POSTFIELDS, $fileContent);
-                        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                            "Authorization: Bearer {$supabaseKey}",
-                            "apiKey: {$supabaseKey}",
-                            "Content-Type: " . ($file['type'] ?: 'application/octet-stream')
-                        ]);
-                        $supaRes = curl_exec($ch);
-                        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                        curl_close($ch);
-
-                        if ($httpCode >= 200 && $httpCode < 300) {
-                            $targetPath = rtrim($supabaseUrl, '/') . "/storage/v1/object/authenticated/" . $supabaseBucket . "/" . $objectPath;
-                            $uploadedSuccessfully = true;
-                        } else {
-                            $message = "Supabase Storage upload failed with HTTP status {$httpCode}.";
-                            $message_type = "danger";
-                        }
-                    } else {
-                        // Local Mode: Upload to local filesystem
-                        $uploadDir = __DIR__ . '/../uploads/course_materials/';
-                        if (!is_dir($uploadDir)) {
-                            mkdir($uploadDir, 0755, true);
-                        }
-                        $uniqueName = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file['name']);
-                        $targetPath = $uploadDir . $uniqueName;
-
-                        if (move_uploaded_file($file['tmp_name'], $targetPath)) {
-                            $uploadedSuccessfully = true;
-                        } else {
-                            $message = "Failed to save uploaded file on server filesystem.";
-                            $message_type = "danger";
-                        }
-                    }
-
-                    if ($uploadedSuccessfully) {
-                        // Insert document metadata row first
-                        $uploadedBy = (int)($_SESSION['user_id'] ?? 1);
-                        $fileSize   = (int)$file['size'];
-                        $insStmt = $conn->prepare("INSERT INTO ai_documents (filename, original_name, file_path, file_size, subject, topic, status, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)");
-                        $insStmt->bind_param("sssissi", $file['name'], $file['name'], $targetPath, $fileSize, $subject, $topic, $uploadedBy);
-                        $insStmt->execute();
-                        $docId = (int)$insStmt->insert_id;
-
-                        // Call AI Client RAG Ingestion API
-                        $aiClient = new AiClient();
-                        $ingestRes = $aiClient->ingestDocument($targetPath, $docId, $file['name'], $subject, $topic);
-
-                        if ($ingestRes['status'] === 'success') {
-                            $docData = $ingestRes['data'] ?? [];
-                            $pages = (int)($docData['total_pages'] ?? 1);
-                            $chunks = (int)($docData['total_chunks'] ?? 0);
-
-                            $updStmt = $conn->prepare("UPDATE ai_documents SET status = 'ingested', total_pages = ?, total_chunks = ? WHERE id = ?");
-                            $updStmt->bind_param("iii", $pages, $chunks, $docId);
-                            $updStmt->execute();
-
-                            $message = "Course material '{$file['name']}' uploaded and ingested successfully into RAG Vector Store! ({$chunks} text chunks generated across {$pages} pages)";
-                            $message_type = "success";
-                        } else {
-                            $errMsg = $ingestRes['message'] ?? 'RAG Ingestion Service failed.';
-                            $updStmt = $conn->prepare("UPDATE ai_documents SET status = 'failed', error_message = ? WHERE id = ?");
-                            $updStmt->bind_param("si", $errMsg, $docId);
-                            $updStmt->execute();
-
-                            $message = "File uploaded, but RAG Ingestion failed: " . htmlspecialchars($errMsg);
-                            $message_type = "warning";
-                        }
-                    }
+                    $message_type = 'danger';
                 }
+            }
+        } elseif ($action === 'retry_indexing') {
+            $docId = (int)($_POST['doc_id'] ?? 0);
+            $adminId = (int)($_SESSION['user_id'] ?? 1);
+            if ($docId > 0) {
+                $retryRes = StudyMaterialService::retryIngestion($conn, $docId, $adminId);
+                $message = $retryRes['message'] ?? 'Indexing processed.';
+                $message_type = !empty($retryRes['success']) ? 'success' : 'danger';
             }
         } elseif ($action === 'delete_material') {
             $docId = (int)($_POST['doc_id'] ?? 0);
@@ -175,9 +99,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch all uploaded documents
+// Fetch reference data and approved subjects
+StudyMaterialService::ensureSchema($conn);
+$approvedSubjects = StudyMaterialService::getSubjectsWithApprovedQuestions($conn);
+
 $documents = [];
-$res = $conn->query("SELECT * FROM ai_documents ORDER BY id DESC");
+$res = $conn->query("
+    SELECT d.*, e.title AS exam_title
+    FROM ai_documents d
+    LEFT JOIN exams e ON d.exam_id = e.id
+    ORDER BY d.id DESC
+");
 if ($res) {
     while ($row = $res->fetch_assoc()) {
         $documents[] = $row;
@@ -224,11 +156,14 @@ if ($res) {
     <?php include 'sidebar.php'; ?>
 
     <div class="main-admin-content flex-grow-1">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
             <div>
                 <h2 class="h3 fw-bold text-dark mb-1"><i class="fa-solid fa-book-open text-primary me-2"></i>Course Material Management (RAG)</h2>
-                <p class="text-muted small mb-0">Upload and manage approved study materials for the AI Student Assistant</p>
+                <p class="text-muted small mb-0">Generate and index approved study materials for the AI Student Assistant</p>
             </div>
+            <a href="review_ai_questions.php" class="btn btn-outline-primary btn-sm">
+                <i class="fa-solid fa-clipboard-check me-1"></i>Review Queue
+            </a>
         </div>
 
         <?php if ($message): ?>
@@ -238,73 +173,121 @@ if ($res) {
             </div>
         <?php endif; ?>
 
-        <!-- Manual Upload Card -->
-        <div class="card border-0 shadow-sm rounded-3 mb-4">
-            <div class="card-header bg-white py-3">
+        <!-- Generate Study Materials Section (Simplified Controls Only) -->
+        <div class="card border-0 shadow-sm rounded-3 mb-4" style="border-left: 5px solid #0d6efd !important;">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h5 class="card-title fw-bold text-dark mb-0">
-                    <i class="fa-solid fa-cloud-arrow-up text-primary me-2"></i>Upload My Own Material
+                    <i class="fa-solid fa-wand-magic-sparkles text-primary me-2"></i>Generate Study Materials from Approved AI Questions
                 </h5>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                    <i class="fa-solid fa-database me-1"></i>Approved Questions Only
+                </span>
             </div>
             <div class="card-body p-4">
-                <p class="text-muted small mb-3">Upload your own PDF, TXT, or MD course notes manually from your filesystem.</p>
-                <form method="POST" enctype="multipart/form-data" class="row g-3">
-                    <input type="hidden" name="action" value="upload_material">
-                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                <p class="text-muted small mb-3">
+                    Select a subject to automatically synthesize structured course study notes, key concepts, definitions, explanations, and practice points exclusively from approved AI questions.
+                </p>
 
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Subject / Course</label>
-                        <input type="text" name="subject" class="form-control" placeholder="e.g. Operating Systems" required>
+                <?php if (empty($approvedSubjects)): ?>
+                    <div class="alert alert-warning mb-0" role="alert">
+                        <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                        No approved AI-generated questions found in the question bank. Please generate and approve questions first in the <a href="review_ai_questions.php" class="alert-link">AI Question Review Queue</a>.
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Topic / Module</label>
-                        <input type="text" name="topic" class="form-control" placeholder="e.g. Process Management" required>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label fw-semibold">Course File (.pdf, .txt, .md)</label>
-                        <input type="file" name="material_file" class="form-control" accept=".pdf,.txt,.md" required>
-                    </div>
-                    <div class="col-12 mt-3">
-                        <button type="submit" class="btn btn-primary fw-semibold px-4 py-2">
-                            <i class="fa-solid fa-upload me-2"></i>Upload &amp; Index Material
-                        </button>
-                    </div>
-                </form>
+                <?php else: ?>
+                    <form method="POST" id="generateStudyMaterialForm">
+                        <input type="hidden" name="action" value="generate_study_material">
+                        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+
+                        <div class="row align-items-end g-3">
+                            <div class="col-md-7 col-lg-6">
+                                <label class="form-label fw-semibold" for="subjectSelect">Select Subject <span class="text-danger">*</span></label>
+                                <select name="subject" id="subjectSelect" class="form-select" required>
+                                    <option value="">-- Select Subject --</option>
+                                    <?php foreach ($approvedSubjects as $s): ?>
+                                        <option value="<?= htmlspecialchars($s['subject']) ?>" <?= ($selectedSubject === $s['subject']) ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($s['subject']) ?> (<?= $s['count'] ?> approved question<?= $s['count'] > 1 ? 's' : '' ?>)
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-md-5 col-lg-4">
+                                <button type="submit" class="btn btn-primary fw-semibold px-4 py-2 w-100" id="btnGenerate">
+                                    <i class="fa-solid fa-book-bookmark me-2"></i>Generate Study Materials
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Loading Indicator -->
+                        <div id="loadingIndicator" class="alert alert-info d-none mt-3 mb-0 d-flex align-items-center" role="status">
+                            <div class="spinner-border spinner-border-sm text-primary me-3" role="status" aria-hidden="true"></div>
+                            <div>
+                                <strong>Generating and Indexing Study Material...</strong>
+                                <div class="small text-muted">Retrieving approved questions, grouping detected topics, synthesizing notes, and indexing vectors into RAG. This may take a few moments.</div>
+                            </div>
+                        </div>
+                    </form>
+                <?php endif; ?>
             </div>
         </div>
 
-        <!-- Document List Table -->
+        <!-- Course Materials Table -->
         <div class="card border-0 shadow-sm rounded-3 w-100">
-            <div class="card-header bg-white py-3">
-                <h5 class="card-title fw-bold text-dark mb-0"><i class="fa-solid fa-list text-primary me-2"></i>Uploaded Course Materials</h5>
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="card-title fw-bold text-dark mb-0">
+                    <i class="fa-solid fa-list text-primary me-2"></i>Course Materials (RAG Vector Store)
+                </h5>
+                <span class="badge bg-secondary-subtle text-secondary-emphasis border">
+                    Total: <?= count($documents) ?> Document<?= count($documents) !== 1 ? 's' : '' ?>
+                </span>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive w-100">
                     <table class="table table-hover align-middle mb-0 w-100">
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 70px;">ID</th>
-                                <th style="min-width: 200px;">Document Name</th>
-                                <th style="min-width: 140px;">Subject</th>
-                                <th style="min-width: 140px;">Topic</th>
-                                <th style="width: 80px;">Pages</th>
-                                <th style="width: 80px;">Chunks</th>
+                                <th style="width: 60px;">SL No</th>
+                                <th style="width: 130px;">Exam ID</th>
+                                <th style="min-width: 220px;">Document Name</th>
+                                <th style="min-width: 120px;">Subject</th>
+                                <th style="min-width: 140px;">Topic(s)</th>
+                                <th style="width: 70px;">Pages</th>
+                                <th style="width: 70px;">Chunks</th>
                                 <th style="width: 110px;">Status</th>
-                                <th style="width: 150px;">Uploaded At</th>
-                                <th style="width: 100px;">Actions</th>
+                                <th style="width: 140px;">Generated At</th>
+                                <th style="width: 140px;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (empty($documents)): ?>
                                 <tr>
-                                    <td colspan="9" class="text-center text-muted py-4">No course materials uploaded yet.</td>
+                                    <td colspan="10" class="text-center text-muted py-4">No course materials indexed yet. Generate study materials above to populate the AI Student Assistant.</td>
                                 </tr>
                             <?php else: ?>
-                                <?php foreach ($documents as $doc): ?>
+                                <?php $slno = 1; foreach ($documents as $doc): ?>
                                     <tr>
-                                        <td>#<?= $doc['id'] ?></td>
+                                        <td class="fw-bold text-muted"><?= $slno++ ?></td>
+                                        <td>
+                                            <?php if (!empty($doc['exam_id'])): ?>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="<?= htmlspecialchars($doc['exam_title'] ?? ('Exam #' . $doc['exam_id'])) ?>">
+                                                    <i class="fa-solid fa-graduation-cap me-1"></i>Exam #<?= (int)$doc['exam_id'] ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="badge bg-secondary-subtle text-secondary-emphasis border" title="Covers entire subject; not tied to a single exam">
+                                                    <i class="fa-solid fa-book-bookmark me-1"></i>Subject-level
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
                                         <td>
                                             <div class="fw-semibold text-dark"><?= htmlspecialchars($doc['original_name']) ?></div>
-                                            <small class="text-muted"><?= round($doc['file_size'] / 1024, 1) ?> KB</small>
+                                            <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                                                <span class="badge bg-light text-muted border" style="font-size: 11px;">Doc #<?= $doc['id'] ?></span>
+                                                <small class="text-muted"><?= round($doc['file_size'] / 1024, 1) ?> KB</small>
+                                                <?php if (!empty($doc['is_generated']) || !empty($doc['source_question_ids'])): ?>
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 11px;"><i class="fa-solid fa-microchip me-1"></i>AI Question Bank</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary-subtle text-secondary-emphasis border" style="font-size: 11px;"><i class="fa-solid fa-file-arrow-up me-1"></i>Manual Upload</span>
+                                                <?php endif; ?>
+                                            </div>
                                         </td>
                                         <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($doc['subject']) ?></span></td>
                                         <td><span class="badge bg-light text-dark border"><?= htmlspecialchars($doc['topic']) ?></span></td>
@@ -314,21 +297,33 @@ if ($res) {
                                             <?php if ($doc['status'] === 'ingested'): ?>
                                                 <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>Ingested</span>
                                             <?php elseif ($doc['status'] === 'failed'): ?>
-                                                <span class="badge bg-danger" title="<?= htmlspecialchars($doc['error_message']) ?>"><i class="fa-solid fa-triangle-exclamation me-1"></i>Failed</span>
+                                                <span class="badge bg-danger" title="<?= htmlspecialchars($doc['error_message'] ?? '') ?>"><i class="fa-solid fa-triangle-exclamation me-1"></i>Failed</span>
                                             <?php else: ?>
                                                 <span class="badge bg-warning text-dark"><i class="fa-solid fa-spinner fa-spin me-1"></i>Pending</span>
                                             <?php endif; ?>
                                         </td>
                                         <td class="small text-muted"><?= date('M d, Y H:i', strtotime($doc['created_at'])) ?></td>
                                         <td>
-                                            <form method="POST">
-                                                <input type="hidden" name="action" value="delete_material">
-                                                <input type="hidden" name="doc_id" value="<?= $doc['id'] ?>">
-                                                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
-                                                <button type="submit" class="btn btn-outline-danger btn-sm">
-                                                    <i class="fa-solid fa-trash"></i> Delete
-                                                </button>
-                                            </form>
+                                            <div class="d-flex align-items-center gap-1">
+                                                <?php if ($doc['status'] === 'failed'): ?>
+                                                    <form method="POST" class="d-inline">
+                                                        <input type="hidden" name="action" value="retry_indexing">
+                                                        <input type="hidden" name="doc_id" value="<?= $doc['id'] ?>">
+                                                        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                                                        <button type="submit" class="btn btn-outline-warning btn-sm" title="Retry RAG Ingestion">
+                                                            <i class="fa-solid fa-rotate-right"></i> Retry
+                                                        </button>
+                                                    </form>
+                                                <?php endif; ?>
+                                                <form method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this course material and its vector embeddings?');">
+                                                    <input type="hidden" name="action" value="delete_material">
+                                                    <input type="hidden" name="doc_id" value="<?= $doc['id'] ?>">
+                                                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete Material">
+                                                        <i class="fa-solid fa-trash"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -342,6 +337,31 @@ if ($res) {
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('generateStudyMaterialForm');
+    const btn = document.getElementById('btnGenerate');
+    const select = document.getElementById('subjectSelect');
+    const loadingBox = document.getElementById('loadingIndicator');
+
+    if (form && btn && select) {
+        form.addEventListener('submit', function (e) {
+            if (!select.value) {
+                e.preventDefault();
+                select.focus();
+                return false;
+            }
+
+            // Show loading indicator & disable button to prevent double-submits
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Generating & Indexing...';
+            if (loadingBox) {
+                loadingBox.classList.remove('d-none');
+            }
+        });
+    }
+});
+</script>
 </body>
 </html>

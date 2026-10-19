@@ -4,6 +4,8 @@ from typing import List, Dict, Any
 from app.config import settings
 
 class TextChunker:
+    MAX_CHUNKS_PER_DOCUMENT = 500
+
     @classmethod
     def chunk_document_pages(
         cls,
@@ -26,6 +28,9 @@ class TextChunker:
         global_chunk_idx = 0
 
         for page_obj in pages:
+            if global_chunk_idx >= cls.MAX_CHUNKS_PER_DOCUMENT:
+                break
+
             page_num = page_obj.get("page_number", 1)
             raw_text = page_obj.get("text", "").strip()
             if not raw_text:
@@ -34,6 +39,9 @@ class TextChunker:
             page_chunks_text = cls._split_text_into_chunks(raw_text, chunk_size, chunk_overlap)
 
             for chunk_text in page_chunks_text:
+                if global_chunk_idx >= cls.MAX_CHUNKS_PER_DOCUMENT:
+                    break
+
                 chunk_text_clean = chunk_text.strip()
                 if not chunk_text_clean:
                     continue

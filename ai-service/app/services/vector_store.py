@@ -34,19 +34,33 @@ class EmbeddingModelManager:
         except Exception:
             try:
                 from sentence_transformers import SentenceTransformer
-                self._model = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
+                try:
+                    self._model = SentenceTransformer(settings.EMBEDDING_MODEL_NAME, local_files_only=True)
+                except Exception:
+                    self._model = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
                 self._backend = "sentence-transformers"
-            except Exception:
+            except Exception as e:
+                logger.error(f"Failed to load sentence_transformers: {e}")
                 self._model = None
+
+        # Warm SentenceTransformerEmbeddingFunction cache with the loaded model to prevent duplicate model loads
+        if self._model is not None and self._backend == "sentence-transformers":
+            try:
+                from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+                SentenceTransformerEmbeddingFunction.models[settings.EMBEDDING_MODEL_NAME] = self._model
+                SentenceTransformerEmbeddingFunction.models["sentence-transformers/all-MiniLM-L6-v2"] = self._model
+                SentenceTransformerEmbeddingFunction.models["all-MiniLM-L6-v2"] = self._model
+            except Exception:
+                pass
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
         if not texts:
             return []
         if self._backend == "fastembed" and self._model is not None:
-            embeddings = list(self._model.embed(texts))
+            embeddings = list(self._model.embed(texts, batch_size=64))
             return [e.tolist() for e in embeddings]
         elif self._model is not None:
-            embeddings = self._model.encode(texts, convert_to_numpy=True)
+            embeddings = self._model.encode(texts, batch_size=64, show_progress_bar=False, convert_to_numpy=True)
             return embeddings.tolist()
         else:
             return [[0.0] * settings.EMBEDDING_DIMENSION for _ in texts]
@@ -71,6 +85,9 @@ class ChromaVectorStoreManager:
     def __init__(self):
         os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)
         self.client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
+
+        # Ensure shared embedding model is loaded once
+        EmbeddingModelManager.get_instance()
 
         self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name=settings.EMBEDDING_MODEL_NAME
@@ -129,11 +146,24 @@ class ChromaVectorStoreManager:
             for c in chunks
         ]
 
-        self.collection.upsert(
-            ids=ids,
-            documents=documents,
-            metadatas=metadatas
-        )
+        # Compute embeddings in vectorized batches using EmbeddingModelManager
+        em = EmbeddingModelManager.get_instance()
+        embeddings = em.embed_texts(documents)
+
+        # Batch upsert in chunks of 100 to optimize SQLite / HNSW indexing
+        batch_size = 100
+        for i in range(0, len(chunks), batch_size):
+            b_ids = ids[i:i + batch_size]
+            b_emb = embeddings[i:i + batch_size]
+            b_doc = documents[i:i + batch_size]
+            b_meta = metadatas[i:i + batch_size]
+            self.collection.upsert(
+                ids=b_ids,
+                embeddings=b_emb,
+                documents=b_doc,
+                metadatas=b_meta
+            )
+
         return len(chunks)
 
     def delete_document_chunks(self, document_id: int) -> int:
@@ -169,9 +199,12 @@ class ChromaVectorStoreManager:
         else:
             filter_arg = {"$and": [{k: v} for k, v in where_filter.items()]}
 
+        em = EmbeddingModelManager.get_instance()
+        query_emb = em.embed_query(query)
+
         try:
             results = self.collection.query(
-                query_texts=[query],
+                query_embeddings=[query_emb],
                 n_results=top_k,
                 where=filter_arg
             )

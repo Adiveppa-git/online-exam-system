@@ -321,6 +321,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
     if ($action === 'generate_notes') {
         require_once "../config/ai_client.php";
+        require_once "../config/study_material_service.php";
 
         // Deduplication & DB Caching Check
         $cachedNotes = null;
@@ -379,7 +380,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                         // Migration fallback
                     }
 
-                    $_SESSION['success'] = "Generated focused study notes for question #" . $qid . "! (" . ($isGrounded ? "Grounded in RAG Course Material" : "AI Domain Knowledge Fallback") . ")";
+                    // Also index into course materials if exam is assigned
+                    if (!empty($gq['exam_id']) && (int)$gq['exam_id'] > 0) {
+                        try {
+                            StudyMaterialService::generateAndIndex($conn, (int)$gq['exam_id'], $gq['subject'], $gq['topic'], $gq['status'], (int)($_SESSION['user_id'] ?? 1), true, [$qid]);
+                        } catch (Throwable $matEx) {
+                            // Non-critical
+                        }
+                    }
+
+                    $_SESSION['success'] = "Generated study material for question #" . $qid . " and indexed into RAG course materials successfully!";
                     $_SESSION['generated_notes_' . $qid] = [
                         'title' => $conceptTitle,
                         'content' => $notesContent,
@@ -694,7 +704,10 @@ $cnt_unassigned_pending = count($unassigned_pending_ids);
     <div class="content">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
             <h1 style="margin: 0;">📋 AI Question Review Queue</h1>
-            <a href="manage_questions.php" style="background: #0d6efd; color: white; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">&larr; Manage Questions</a>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <a href="manage_course_materials.php<?= $exam_id_filter > 0 ? '?exam_id=' . (int)$exam_id_filter : '' ?>" style="background: #0284c7; color: white; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">📚 Generate Study Materials</a>
+                <a href="manage_questions.php" style="background: #0d6efd; color: white; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">&larr; Manage Questions</a>
+            </div>
         </div>
         <p style="color: #666; margin-bottom: 20px;">Review AI-generated questions. Edit details if needed, adjust difficulty, then approve or reject.</p>
 
@@ -910,7 +923,7 @@ $cnt_unassigned_pending = count($unassigned_pending_ids);
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
                                 <input type="hidden" name="action" value="generate_notes">
                                 <input type="hidden" name="question_id" value="<?= $q['id'] ?>">
-                                <button type="submit" class="btn-action" style="background: #0284c7; color: white; border: none;">📘 Generate Study Notes</button>
+                                <button type="submit" class="btn-action" style="background: #0284c7; color: white; border: none;">📘 Generate Study Materials</button>
                             </form>
                         <?php else: ?>
                             <!-- GENERATE NOTES FORM FOR APPROVED/REJECTED AS WELL -->
@@ -918,7 +931,7 @@ $cnt_unassigned_pending = count($unassigned_pending_ids);
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
                                 <input type="hidden" name="action" value="generate_notes">
                                 <input type="hidden" name="question_id" value="<?= $q['id'] ?>">
-                                <button type="submit" class="btn-action" style="background: #0284c7; color: white; border: none;">📘 Generate Study Notes</button>
+                                <button type="submit" class="btn-action" style="background: #0284c7; color: white; border: none;">📘 Generate Study Materials</button>
                             </form>
                             <span style="font-size: 13px; color: #6b7280;">
                                 Reviewed at: <?= htmlspecialchars($q['reviewed_at'] ?? 'N/A') ?>

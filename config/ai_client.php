@@ -42,6 +42,10 @@ class AiClient {
         return $this->request('GET', '/health', null, $customTimeout);
     }
 
+    public function checkReadiness(int $customTimeout = 10): array {
+        return $this->request('GET', '/readiness', null, $customTimeout);
+    }
+
     public function generateQuestions($arg1, string $topic = '', string $difficulty = 'medium', int $numQuestions = 3, string $additionalContext = ''): array {
         if (is_array($arg1)) {
             $payload = $arg1;
@@ -96,7 +100,7 @@ class AiClient {
 
     // --- Phase G: RAG Methods ---
 
-    public function ingestDocument(string $filePath, int $docId, string $filename, string $subject = 'General', string $topic = 'General'): array {
+    public function ingestDocument(string $filePath, int $docId, string $filename, string $subject = 'General', string $topic = 'General', int $timeout = 120): array {
         $payload = [
             'document_id' => $docId,
             'filename' => $filename,
@@ -117,7 +121,7 @@ class AiClient {
             $payload['file_path'] = $filePath;
         }
 
-        return $this->request('POST', '/api/v1/rag/ingest', $payload);
+        return $this->request('POST', '/api/v1/rag/ingest', $payload, $timeout);
     }
 
     public function searchRAG(string $query, ?int $topK = null, ?string $subject = null, ?string $topic = null, ?float $threshold = null): array {
@@ -241,6 +245,7 @@ class AiClient {
 
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, min(10, $timeoutToUse));
         curl_setopt($ch, CURLOPT_TIMEOUT, $timeoutToUse);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
@@ -260,13 +265,17 @@ class AiClient {
         curl_close($ch);
 
         if ($response === false) {
-            if ($retryCount < 2 && in_array($curlErrno, [28, 52], true)) {
+            if ($retryCount < 1 && $curlErrno === 52 && $timeoutToUse < 60) {
                 sleep(2);
                 return $this->request($method, $endpoint, $payload, $overrideTimeout, $retryCount + 1);
             }
-            $errMsg = ($curlErrno === 7)
-                ? "AI Service connection error (7): Failed to connect to {$this->baseUrl}. The AI service is currently offline or unreachable. Please verify that the FastAPI service is running."
-                : "AI Service connection error ({$curlErrno}): {$curlError}";
+            if ($curlErrno === 28) {
+                $errMsg = "AI Service connection error (28): Operation timed out after " . ($timeoutToUse * 1000) . " milliseconds with 0 bytes received";
+            } elseif ($curlErrno === 7) {
+                $errMsg = "AI Service connection error (7): Failed to connect to {$this->baseUrl}. The AI service is currently offline or unreachable. Please verify that the FastAPI service is running.";
+            } else {
+                $errMsg = "AI Service connection error ({$curlErrno}): {$curlError}";
+            }
             return [
                 'success' => false,
                 'online' => false,

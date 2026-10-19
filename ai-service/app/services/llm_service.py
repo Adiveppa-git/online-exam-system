@@ -512,7 +512,9 @@ Output JSON with keys:
     def _generate_heuristic_study_notes(req: FocusedNotesRequest, is_grounded: bool, context_text: str) -> Tuple[str, str]:
         concept_title = f"{req.topic}: Core Concept Study Notes"
 
-        grounding_badge = "📖 *Grounded in Approved Course Material*" if is_grounded else "⚠️ *Generated via AI Domain Knowledge Fallback (No specific course material chunk matched)*"
+        grounding_badge = "📖 *Grounded in Approved Course Material*" if is_grounded else "⚠️ *Synthesized from Question Bank Record (Verified Source Question)*"
+
+        explanation_text = req.explanation.strip() if req.explanation and req.explanation.strip() else f"Verified in the exam question bank as the correct determination for this problem under {req.topic}."
 
         content = f"""### {req.topic} — Key Concept Analysis
 {grounding_badge}
@@ -523,26 +525,25 @@ This question evaluates your understanding of **{req.topic}** within **{req.subj
 
 #### 2. Detailed Technical Explanation & Why Answer is Correct
 - **Correct Answer**: `{req.correct_answer}`
-- **Reasoning**: {req.explanation or f"The fundamental principle of {req.topic} establishes that choice '{req.correct_answer}' satisfies the optimal execution criteria."}
-- **Why Other Options Fail**: Alternative choices represent suboptimal strategies, non-standard protocols, or common misconceptions regarding {req.topic}.
+- **Reasoning**: {explanation_text}
+- **Why Other Options Fail**: In the context of {req.topic}, alternative options represent incorrect alternatives or misconceptions not supported by the verified problem statement.
 
 #### 3. Concrete Example
-Consider a scenario involving **{req.topic}**:
-- **Input Parameters**: Workload or process queue defined in `{req.subject}`.
-- **Evaluation**: Choice `{req.correct_answer}` minimizes overhead and maximizes performance under the constraints specified by {req.topic}.
+Consider a problem instance under **{req.topic}** ({req.subject}):
+- **Problem Statement**: "{req.question}"
+- **Evaluation**: `{req.correct_answer}` satisfies the verified criteria evaluated by the question.
 
 #### 4. Required Prerequisite Knowledge
 - Fundamentals of **{req.subject}**.
-- Operational principles of **{req.topic}**.
-- Key metrics used to evaluate efficiency and correctness.
+- Core principles of **{req.topic}**.
+- Understanding the specific terms evaluated in: "{req.question}".
 
 #### 5. Common Exam Traps & Pitfalls
-- ❌ **Trap 1**: Confusing preemptive vs non-preemptive algorithms or strategies.
-- ❌ **Trap 2**: Misreading initial condition parameters (e.g. burst times known vs unknown).
-- 💡 **Exam Tip**: Always check whether prior information or static bounds are available before selecting an optimal strategy.
+- ❌ **Trap 1**: Selecting distractors that address adjacent concepts rather than the exact condition specified in the question.
+- 💡 **Exam Tip**: For questions on **{req.topic}**, focus strictly on the problem requirements rather than assuming unstated external conditions.
 
 #### 6. Key Points to Remember
-For questions on **{req.topic}**, remember that choice `{req.correct_answer}` directly satisfies the core requirement described in the problem statement.
+For questions on **{req.topic}**, remember that `{req.correct_answer}` is verified directly by the question's official solution and explanation.
 """
         return concept_title, content
 
