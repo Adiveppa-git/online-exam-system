@@ -48,25 +48,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         /* DELETE EXAM */
         if (isset($_POST['delete_exam'])) {
             $exam_id = (int)($_POST['exam_id'] ?? 0);
-            if ($exam_id > 0) {
-                // Automatically clean up associated course materials, vector embeddings, chunks, and storage files
-                require_once __DIR__ . "/../config/study_material_service.php";
-                StudyMaterialService::deleteMaterialsForExam($conn, $exam_id);
+            if ($exam_id <= 0) {
+                $message = "Invalid exam ID specified.";
+            } else {
+                // Verify exam exists first
+                $checkStmt = $conn->prepare("SELECT id, title FROM exams WHERE id = ?");
+                $checkStmt->bind_param("i", $exam_id);
+                $checkStmt->execute();
+                $examExists = $checkStmt->get_result()->fetch_assoc();
+                $checkStmt->close();
 
-                $conn->query("DELETE FROM student_answers WHERE exam_id=$exam_id");
-                $conn->query("DELETE FROM results WHERE exam_id=$exam_id");
-                $conn->query("DELETE FROM violations WHERE exam_id=$exam_id");
-                $conn->query("DELETE FROM violation_report WHERE exam_id=$exam_id");
-                $conn->query("DELETE FROM exam_violations WHERE exam_id=$exam_id");
-                $conn->query("DELETE FROM questions WHERE exam_id=$exam_id");
-                $conn->query("DELETE FROM ai_generated_questions WHERE exam_id=$exam_id");
-                $conn->query("DELETE FROM ai_generation_requests WHERE exam_id=$exam_id");
-                $conn->query("DELETE FROM exams WHERE id=$exam_id");
+                if (!$examExists) {
+                    $message = "Exam not found or already deleted.";
+                } else {
+                    // Automatically clean up associated course materials, vector embeddings, chunks, and storage files
+                    require_once __DIR__ . "/../config/study_material_service.php";
+                    StudyMaterialService::deleteMaterialsForExam($conn, $exam_id);
 
-                if (!headers_sent()) {
-                    header("Location: exams.php?msg=deleted");
+                    // Begin transaction for persistent, atomic deletion
+                    $conn->begin_transaction();
+                    try {
+                        // Preserve historical student results by setting exam_id = NULL (respecting foreign key ON DELETE RESTRICT)
+                        $stmtResults = $conn->prepare("UPDATE results SET exam_id = NULL WHERE exam_id = ?");
+                        $stmtResults->bind_param("i", $exam_id);
+                        $stmtResults->execute();
+                        $stmtResults->close();
+
+                        // Clean up dependent child records
+                        $delQueries = [
+                            "DELETE FROM student_answers WHERE exam_id = ?",
+                            "DELETE FROM violations WHERE exam_id = ?",
+                            "DELETE FROM violation_report WHERE exam_id = ?",
+                            "DELETE FROM exam_violations WHERE exam_id = ?",
+                            "DELETE FROM questions WHERE exam_id = ?",
+                            "DELETE FROM ai_generated_questions WHERE exam_id = ?",
+                            "DELETE FROM ai_generation_requests WHERE exam_id = ?"
+                        ];
+                        foreach ($delQueries as $query) {
+                            $stmtDel = $conn->prepare($query);
+                            $stmtDel->bind_param("i", $exam_id);
+                            $stmtDel->execute();
+                            $stmtDel->close();
+                        }
+
+                        // Delete the exam itself
+                        $stmtExam = $conn->prepare("DELETE FROM exams WHERE id = ?");
+                        $stmtExam->bind_param("i", $exam_id);
+                        $stmtExam->execute();
+                        $affected = $stmtExam->affected_rows;
+                        $stmtExam->close();
+
+                        if ($affected <= 0) {
+                            throw new Exception("Exam deletion did not affect any rows.");
+                        }
+
+                        $conn->commit();
+
+                        if (!headers_sent()) {
+                            header("Location: exams.php?msg=deleted");
+                        }
+                        exit;
+                    } catch (Throwable $e) {
+                        $conn->rollback();
+                        $message = "Failed to delete exam: " . $e->getMessage();
+                    }
                 }
-                exit;
             }
         }
 
@@ -259,6 +305,9 @@ margin-bottom:10px;
 
 <?php if($message): ?>
 <p class="error"><?= htmlspecialchars($message) ?></p>
+<?php endif; ?>
+<?php if(!empty($_GET['err'])): ?>
+<p class="error"><?= htmlspecialchars($_GET['err']) ?></p>
 <?php endif; ?>
 
 <form method="post" class="exam-form">

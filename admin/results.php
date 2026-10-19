@@ -1,10 +1,14 @@
 <?php
-session_start();
-require_once "../config/db.php";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once __DIR__ . "/../config/db.php";
 
 /* ADMIN AUTH */
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../index.php");
+    if (!headers_sent()) {
+        header("Location: ../index.php");
+    }
     exit;
 }
 
@@ -54,7 +58,7 @@ $results = $conn->query($sql);
 
 <div class="wrapper">
 
-<?php include "sidebar.php"; ?>
+<?php include __DIR__ . "/sidebar.php"; ?>
 
 <div class="content">
 

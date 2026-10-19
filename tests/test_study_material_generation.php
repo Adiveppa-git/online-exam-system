@@ -32,15 +32,25 @@ $createdFiles = [];
 // Ensure database schema is up-to-date
 StudyMaterialService::ensureSchema($conn);
 
-// Setup test fixtures: Ensure English exam and approved questions exist for test suite
-$conn->query("INSERT INTO exams (id, title, duration, marks_per_question, total_marks) VALUES (126, 'English', 30, 1, 30) ON DUPLICATE KEY UPDATE title = 'English'");
+// Clean up any stale test fixtures before test execution
+$conn->query("DELETE FROM ai_generated_questions WHERE request_id IN ('req_test_eng', 'req_test') OR subject = 'TestEnglish'");
+$conn->query("DELETE FROM exams WHERE id = 126 OR title LIKE 'Test English Fixture%'");
 
-$checkEng = (int)$conn->query("SELECT COUNT(*) as cnt FROM ai_generated_questions WHERE subject = 'English' AND status = 'approved'")->fetch_assoc()['cnt'];
-if ($checkEng < 10) {
-    for ($i = $checkEng + 1; $i <= 10; $i++) {
-        $conn->query("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_test_eng', 1, 126, 'English', 'Grammar', 'English Grammar Question {$i}', 'Noun', 'Verb', 'Adjective', 'Adverb', 'A', 'Nouns identify people, places, or things.', 'easy', 'approved')");
-    }
+// Setup temporary test fixture exam with dynamic ID
+$stmtFixture = $conn->prepare("INSERT INTO exams (title, duration, marks_per_question, total_marks) VALUES ('Test English Fixture Exam', 30, 1, 30)");
+$stmtFixture->execute();
+$testExamId = (int)$conn->insert_id;
+$stmtFixture->close();
+
+for ($i = 1; $i <= 10; $i++) {
+    $stmtQ = $conn->prepare("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_test_eng', 1, ?, 'English', 'Grammar', ?, 'Noun', 'Verb', 'Adjective', 'Adverb', 'A', 'Nouns identify people, places, or things.', 'easy', 'approved')");
+    $qText = "English Grammar Question {$i}";
+    $stmtQ->bind_param("is", $testExamId, $qText);
+    $stmtQ->execute();
+    $stmtQ->close();
 }
+
+try {
 
 // --------------------------------------------------------------------------
 // TEST 1: Dynamic subjects dropdown reflects only subjects with approved questions
@@ -175,16 +185,16 @@ try {
 
     // Insert a temporary rejected AI question for English
     $tempRejectedText = "TEMPORARY_REJECTED_ENGLISH_Q_" . uniqid();
-    $stmt = $conn->prepare("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_test', 1, 126, 'English', 'Grammar', ?, 'A', 'B', 'C', 'D', 'A', 'Explanation', 'easy', 'rejected')");
-    $stmt->bind_param("s", $tempRejectedText);
+    $stmt = $conn->prepare("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_test', 1, ?, 'English', 'Grammar', ?, 'A', 'B', 'C', 'D', 'A', 'Explanation', 'easy', 'rejected')");
+    $stmt->bind_param("is", $testExamId, $tempRejectedText);
     $stmt->execute();
     $tempId = $stmt->insert_id;
     $stmt->close();
 
     // Insert a temporary pending AI question for English
     $tempPendingText = "TEMPORARY_PENDING_ENGLISH_Q_" . uniqid();
-    $stmt2 = $conn->prepare("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_test', 1, 126, 'English', 'Grammar', ?, 'A', 'B', 'C', 'D', 'A', 'Explanation', 'easy', 'pending')");
-    $stmt2->bind_param("s", $tempPendingText);
+    $stmt2 = $conn->prepare("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_test', 1, ?, 'English', 'Grammar', ?, 'A', 'B', 'C', 'D', 'A', 'Explanation', 'easy', 'pending')");
+    $stmt2->bind_param("is", $testExamId, $tempPendingText);
     $stmt2->execute();
     $tempPendingId = $stmt2->insert_id;
     $stmt2->close();
@@ -335,15 +345,15 @@ try {
     $docId = (int)$engDoc['id'];
     $examId = (int)$engDoc['exam_id'];
 
-    // English exam in exams table has ID 126, while Document ID is 137
+    // Verify document correctly maps to the test fixture exam ID
     $isDistinct = ($docId !== $examId);
-    $isExam126 = ($examId === 126);
+    $isExamMapped = ($examId === $testExamId);
 
-    if ($isDistinct && $isExam126) {
+    if ($isDistinct && $isExamMapped) {
         echo "PASSED (Document #{$docId} correctly mapped to Exam #{$examId}, distinct and verified)\n";
         $passed++;
     } else {
-        echo "FAILED (Expected docId != examId and examId == 126, got docId={$docId}, examId={$examId})\n";
+        echo "FAILED (Expected docId != examId and examId == {$testExamId}, got docId={$docId}, examId={$examId})\n";
         $failed++;
     }
 } catch (Exception $e) {
@@ -419,18 +429,28 @@ try {
     $failed++;
 }
 
-// --------------------------------------------------------------------------
-// Clean up test documents and files
-// --------------------------------------------------------------------------
-
-foreach ($createdDocIds as $dId) {
-    $del = $conn->prepare("DELETE FROM ai_documents WHERE id = ?");
-    $del->bind_param("i", $dId);
-    $del->execute();
-}
-foreach ($createdFiles as $fPath) {
-    if (file_exists($fPath)) {
-        @unlink($fPath);
+} finally {
+    // --------------------------------------------------------------------------
+    // Guaranteed cleanup: Remove all temporary test fixtures, exams, and files
+    // --------------------------------------------------------------------------
+    if (!empty($testExamId)) {
+        StudyMaterialService::deleteMaterialsForExam($conn, $testExamId);
+        $conn->query("DELETE FROM ai_generated_questions WHERE exam_id = {$testExamId}");
+        $conn->query("DELETE FROM exams WHERE id = {$testExamId}");
+    }
+    // Clean up any other test docs and files
+    $conn->query("DELETE FROM ai_generated_questions WHERE request_id IN ('req_test_eng', 'req_test')");
+    $conn->query("DELETE FROM exams WHERE id = 126");
+    foreach ($createdDocIds as $dId) {
+        $del = $conn->prepare("DELETE FROM ai_documents WHERE id = ?");
+        $del->bind_param("i", $dId);
+        $del->execute();
+        $del->close();
+    }
+    foreach ($createdFiles as $fPath) {
+        if (file_exists($fPath)) {
+            @unlink($fPath);
+        }
     }
 }
 

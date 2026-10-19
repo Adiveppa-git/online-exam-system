@@ -25,7 +25,7 @@ $available_exams = $conn->query("
 SELECT COUNT(*) AS total
 FROM exams
 WHERE id NOT IN (
-    SELECT exam_id FROM results WHERE user_id = $user_id
+    SELECT exam_id FROM results WHERE user_id = $user_id AND exam_id IS NOT NULL
 )
 ")->fetch_assoc()['total'];
 
