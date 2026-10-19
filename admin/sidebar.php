@@ -121,7 +121,7 @@ $mode = $_GET['mode'] ?? '';
     </a>
 
     <a href="manage_course_materials.php"
-       class="<?= $current_page === 'manage_course_materials.php' ? 'active' : '' ?>">
+       class="<?= in_array($current_page, ['manage_course_materials.php', 'view_course_material.php']) ? 'active' : '' ?>">
         Course Materials (RAG)
     </a>
 

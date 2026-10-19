@@ -132,6 +132,10 @@ if ($res) {
         .card {
             width: 100%;
         }
+        .material-title-link:hover {
+            text-decoration: underline !important;
+            color: #0a58ca !important;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -262,7 +266,11 @@ if ($res) {
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <div class="fw-semibold text-dark"><?= htmlspecialchars($doc['original_name']) ?></div>
+                                            <div>
+                                                <a href="view_course_material.php?id=<?= (int)$doc['id'] ?>" target="_blank" class="fw-semibold text-primary text-decoration-none material-title-link" title="Click to open study notes in a new tab">
+                                                    <i class="fa-solid fa-book-open me-1"></i><?= htmlspecialchars($doc['original_name']) ?>
+                                                </a>
+                                            </div>
                                             <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
                                                 <span class="badge bg-light text-muted border" style="font-size: 11px;">Doc #<?= $doc['id'] ?></span>
                                                 <small class="text-muted"><?= round($doc['file_size'] / 1024, 1) ?> KB</small>
@@ -289,6 +297,9 @@ if ($res) {
                                         <td class="small text-muted"><?= date('M d, Y H:i', strtotime($doc['created_at'])) ?></td>
                                         <td>
                                             <div class="d-flex align-items-center gap-1">
+                                                <a href="view_course_material.php?id=<?= (int)$doc['id'] ?>" target="_blank" class="btn btn-outline-primary btn-sm" title="View Study Material">
+                                                    <i class="fa-solid fa-eye"></i> View
+                                                </a>
                                                 <?php if ($doc['status'] === 'failed'): ?>
                                                     <form method="POST" class="d-inline">
                                                         <input type="hidden" name="action" value="retry_indexing">
