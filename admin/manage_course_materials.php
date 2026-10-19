@@ -57,42 +57,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'delete_material') {
             $docId = (int)($_POST['doc_id'] ?? 0);
             if ($docId > 0) {
-                $stmt = $conn->prepare("SELECT file_path, subject, topic FROM ai_documents WHERE id = ?");
-                $stmt->bind_param("i", $docId);
-                $stmt->execute();
-                $res = $stmt->get_result()->fetch_assoc();
-
-                if ($res) {
-                    $aiClient = new AiClient();
-                    $delRes = $aiClient->deleteDocument($docId);
-
-                    // If Supabase Storage URL, send HTTP DELETE to Supabase API
-                    $supabaseUrl    = getenv('SUPABASE_URL');
-                    $supabaseKey    = getenv('SUPABASE_KEY');
-                    $supabaseBucket = getenv('SUPABASE_BUCKET') ?: 'course-materials';
-
-                    if (str_contains($res['file_path'], '/storage/v1/object/') && !empty($supabaseKey)) {
-                        $objKey = preg_replace('#^.*/storage/v1/object/(public|authenticated)/' . preg_quote($supabaseBucket, '#') . '/#', '', $res['file_path']);
-                        $delUrl = rtrim($supabaseUrl, '/') . "/storage/v1/object/" . $supabaseBucket . "/" . $objKey;
-                        $ch = curl_init($delUrl);
-                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
-                        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                            "Authorization: Bearer {$supabaseKey}",
-                            "apiKey: {$supabaseKey}"
-                        ]);
-                        curl_exec($ch);
-                        curl_close($ch);
-                    } elseif (file_exists($res['file_path'])) {
-                        @unlink($res['file_path']);
+                $delRes = StudyMaterialService::deleteMaterial($conn, $docId);
+                if (!empty($delRes['success'])) {
+                    if (!empty($delRes['vector_deleted'])) {
+                        $message = "Course material #{$docId} and its associated vector embeddings deleted successfully.";
+                    } else {
+                        $message = "Course material #{$docId} deleted from database, but vector store cleanup failed: " . htmlspecialchars($delRes['vector_error'] ?? 'Service unavailable') . ". Queued for retry.";
                     }
-
-                    $delStmt = $conn->prepare("DELETE FROM ai_documents WHERE id = ?");
-                    $delStmt->bind_param("i", $docId);
-                    $delStmt->execute();
-
-                    $message = "Course material #{$docId} and its associated vector embeddings deleted successfully.";
                     $message_type = "success";
+                } else {
+                    $message = $delRes['message'] ?? "Course material not found or already deleted.";
+                    $message_type = "warning";
                 }
             }
         }
@@ -315,7 +290,7 @@ if ($res) {
                                                         </button>
                                                     </form>
                                                 <?php endif; ?>
-                                                <form method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this course material and its vector embeddings?');">
+                                                <form method="POST" class="d-inline">
                                                     <input type="hidden" name="action" value="delete_material">
                                                     <input type="hidden" name="doc_id" value="<?= $doc['id'] ?>">
                                                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">

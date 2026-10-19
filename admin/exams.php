@@ -49,6 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($_POST['delete_exam'])) {
             $exam_id = (int)($_POST['exam_id'] ?? 0);
             if ($exam_id > 0) {
+                // Automatically clean up associated course materials, vector embeddings, chunks, and storage files
+                require_once __DIR__ . "/../config/study_material_service.php";
+                StudyMaterialService::deleteMaterialsForExam($conn, $exam_id);
+
                 $conn->query("DELETE FROM student_answers WHERE exam_id=$exam_id");
                 $conn->query("DELETE FROM results WHERE exam_id=$exam_id");
                 $conn->query("DELETE FROM violations WHERE exam_id=$exam_id");
