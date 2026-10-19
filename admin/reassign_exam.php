@@ -1,17 +1,32 @@
 <?php
-session_start();
-require_once "../config/db.php";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once __DIR__ . "/../config/db.php";
 
 /* ADMIN CHECK */
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../index.php");
+    if (!headers_sent()) {
+        header("Location: ../index.php");
+    }
     exit;
 }
 
-$exam_id = (int)($_GET['exam_id'] ?? 0);
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    die("Destructive action requires POST request.");
+}
+
+$post_token = $_POST['csrf_token'] ?? '';
+if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $post_token)) {
+    die("Invalid CSRF security token.");
+}
+
+$exam_id = (int)($_POST['exam_id'] ?? 0);
 
 if (!$exam_id) {
-    header("Location: exams.php");
+    if (!headers_sent()) {
+        header("Location: exams.php");
+    }
     exit;
 }
 
@@ -44,6 +59,8 @@ $conn->query("
 ");
 
 /* SUCCESS */
-header("Location: exams.php?msg=reassigned");
+if (!headers_sent()) {
+    header("Location: exams.php?msg=reassigned");
+}
 exit;
 ?>

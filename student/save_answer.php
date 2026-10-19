@@ -1,6 +1,8 @@
 <?php
-session_start();
-require_once "../config/db.php";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once __DIR__ . "/../config/db.php";
 
 header("Content-Type: application/json");
 
@@ -9,6 +11,16 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
     echo json_encode([
         "status" => "error",
         "msg" => "Unauthorized access"
+    ]);
+    exit;
+}
+
+/* ===== CSRF VALIDATION ===== */
+$post_token = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $post_token)) {
+    echo json_encode([
+        "status" => "error",
+        "msg" => "Invalid CSRF security token"
     ]);
     exit;
 }

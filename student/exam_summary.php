@@ -1,14 +1,24 @@
 <?php
-session_start();
-require_once "../config/db.php";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once __DIR__ . "/../config/db.php";
 
 /* ===== AUTH ===== */
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
-    header("Location: ../index.php");
+    if (!headers_sent()) {
+        header("Location: ../index.php");
+    }
     exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') die("Invalid request");
+
+/* ===== CSRF VALIDATION ===== */
+$post_token = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $post_token)) {
+    die("Invalid CSRF security token");
+}
 
 $user_id = $_SESSION['user_id'];
 $exam_id = (int)($_POST['exam_id'] ?? 0);
@@ -22,7 +32,9 @@ $chk->bind_param("ii",$user_id,$exam_id);
 $chk->execute();
 $resChk = $chk->get_result();
 if ($resChk->num_rows > 0) {
-    header("Location: result.php");
+    if (!headers_sent()) {
+        header("Location: result.php");
+    }
     exit;
 }
 
@@ -64,5 +76,7 @@ $ins->bind_param("iii",$user_id,$exam_id,$score);
 $ins->execute();
 
 /* REDIRECT */
-header("Location: result.php");
+if (!headers_sent()) {
+    header("Location: result.php");
+}
 exit;

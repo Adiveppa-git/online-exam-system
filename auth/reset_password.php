@@ -1,36 +1,49 @@
 <?php
-session_start();
-require_once "../config/db.php";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once __DIR__ . "/../config/db.php";
 
 $msg = "";
 
 if (!isset($_SESSION['reset_email'])) {
-    header("Location: forgot_password.php");
+    if (!headers_sent()) {
+        header("Location: forgot_password.php");
+    }
     exit;
 }
 
 if (isset($_POST['reset'])) {
 
-    if (time() - $_SESSION['otp_time'] > 600) {
+    if (!isset($conn) || !$conn) {
+        $msg = "Database service is temporarily unavailable. Please try again later.";
+    } elseif (time() - ($_SESSION['otp_time'] ?? 0) > 600) {
         die("OTP expired");
-    }
-
-    if ($_POST['otp'] != $_SESSION['reset_otp']) {
+    } elseif (($_POST['otp'] ?? '') != ($_SESSION['reset_otp'] ?? '')) {
         $msg = "Invalid OTP";
     } else {
 
-        $new = $_POST['password'];
+        $new = $_POST['password'] ?? '';
         $hash = password_hash($new, PASSWORD_DEFAULT);
 
-        $stmt = $conn->prepare(
-            "UPDATE users SET password=? WHERE email=?"
-        );
-        $stmt->bind_param("ss", $hash, $_SESSION['reset_email']);
-        $stmt->execute();
+        try {
+            $stmt = $conn->prepare(
+                "UPDATE users SET password=? WHERE email=?"
+            );
+            if ($stmt) {
+                $stmt->bind_param("ss", $hash, $_SESSION['reset_email']);
+                $stmt->execute();
+            }
 
-        session_destroy();
-        header("Location: login.php");
-        exit;
+            session_destroy();
+            if (!headers_sent()) {
+                header("Location: login.php");
+            }
+            exit;
+        } catch (Throwable $e) {
+            error_log("[SECURITY] reset_password error: " . $e->getMessage());
+            $msg = "An error occurred while processing your request. Please try again later.";
+        }
     }
 }
 ?>

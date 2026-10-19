@@ -1,6 +1,8 @@
 <?php
-session_start();
-require_once "../config/db.php";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once __DIR__ . "/../config/db.php";
 
 $error = "";
 
@@ -25,6 +27,7 @@ if (isset($_POST['login']))
 
         if (password_verify($password, $user['password']))
         {
+            session_regenerate_id(true);
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['role']    = $user['role'];
             $_SESSION['name']    = $user['name'];
@@ -41,12 +44,12 @@ if (isset($_POST['login']))
         }
         else
         {
-            $error = "Invalid password";
+            $error = "Invalid email or password";
         }
     }
     else
     {
-        $error = "Email not registered";
+        $error = "Invalid email or password";
     }
 }
 ?>

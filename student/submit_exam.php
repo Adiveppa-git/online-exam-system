@@ -1,16 +1,26 @@
 <?php
-session_start();
-require_once "../config/db.php";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once __DIR__ . "/../config/db.php";
 
 /* ================= STUDENT AUTH CHECK ================= */
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
-    header("Location: ../index.php");
+    if (!headers_sent()) {
+        header("Location: ../index.php");
+    }
     exit;
 }
 
 /* ================= POST ONLY ================= */
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     die("Invalid request");
+}
+
+/* ================= CSRF VALIDATION ================= */
+$post_token = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $post_token)) {
+    die("Invalid CSRF security token");
 }
 
 $student_id = (int)$_SESSION['user_id'];
@@ -29,7 +39,9 @@ $check->execute();
 $checkRes = $check->get_result();
 
 if ($checkRes->num_rows > 0) {
-    header("Location: result.php");
+    if (!headers_sent()) {
+        header("Location: result.php");
+    }
     exit;
 }
 
@@ -85,5 +97,7 @@ $insert->execute();
 unset($_SESSION['exam_id']);
 
 /* ================= REDIRECT TO RESULTS ================= */
-header("Location: result.php");
+if (!headers_sent()) {
+    header("Location: result.php");
+}
 exit;

@@ -1,10 +1,15 @@
 <?php
-session_start();
-require_once "send_mail.php";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once __DIR__ . "/../config/db.php";
+require_once __DIR__ . "/send_mail.php";
 
 /* ===== AUTH CHECK ===== */
 if (!isset($_SESSION['reset_email'])) {
-    header("Location: forgot_password.php");
+    if (!headers_sent()) {
+        header("Location: forgot_password.php");
+    }
     exit;
 }
 
@@ -15,58 +20,79 @@ if (!isset($_SESSION[$attemptKey])) {
 }
 $msg = "";
 
+/* ===== DB CONNECTION CHECK ===== */
+if (!isset($conn) || !$conn) {
+    $msg = "Database service is temporarily unavailable. Please try again later.";
+}
+
 /* ===== VERIFY OTP ===== */
 if (isset($_POST['verify'])) {
 
-    $otp     = trim($_POST['otp']);
-    $newPass = $_POST['password'];
+    $otp     = trim($_POST['otp'] ?? '');
+    $newPass = $_POST['password'] ?? '';
 
-    if ((int)$_SESSION[$attemptKey] >= OTP_MAX_VERIFICATION_ATTEMPTS) {
+    if (!isset($conn) || !$conn) {
+        $msg = "Database service is temporarily unavailable. Please try again later.";
+    } elseif ((int)$_SESSION[$attemptKey] >= OTP_MAX_VERIFICATION_ATTEMPTS) {
         $msg = "Too many failed verification attempts. Please request a new OTP.";
     } elseif (strlen($newPass) < 8 || strlen($newPass) > 15) {
         $msg = "Password must be 8 to 15 characters";
     } else {
-
-        $stmt = $conn->prepare("
-            SELECT reset_otp, otp_expiry 
-            FROM users 
-            WHERE email=?
-        ");
-        $stmt->bind_param("s", $email);
-        $stmt->execute();
-        $res = $stmt->get_result()->fetch_assoc();
-
-        if (!$res || empty($res['reset_otp'])) {
-            $msg = "Verification code has expired. Please request a new one.";
-        } elseif ($res['reset_otp'] !== $otp) {
-            $_SESSION[$attemptKey] = (int)$_SESSION[$attemptKey] + 1;
-            if ($_SESSION[$attemptKey] >= OTP_MAX_VERIFICATION_ATTEMPTS) {
-                // Invalidate current OTP upon reaching attempt limit
-                $clearStmt = $conn->prepare("UPDATE users SET reset_otp=NULL, otp_expiry=NULL WHERE email=?");
-                $clearStmt->bind_param("s", $email);
-                $clearStmt->execute();
-                $msg = "Too many failed verification attempts. Please request a new OTP.";
-            } else {
-                $msg = "Invalid verification code.";
-            }
-        } elseif (strtotime($res['otp_expiry']) < time()) {
-            $msg = "Verification code has expired. Please request a new one.";
-        } else {
-
-            $hashed = password_hash($newPass, PASSWORD_DEFAULT);
-
-            $update = $conn->prepare("
-                UPDATE users 
-                SET password=?, reset_otp=NULL, otp_expiry=NULL 
+        try {
+            $stmt = $conn->prepare("
+                SELECT reset_otp, otp_expiry
+                FROM users
                 WHERE email=?
             ");
-            $update->bind_param("ss", $hashed, $email);
-            $update->execute();
+            if (!$stmt) {
+                throw new Exception("Failed to prepare statement");
+            }
+            $stmt->bind_param("s", $email);
+            $stmt->execute();
+            $res = $stmt->get_result()->fetch_assoc();
 
-            unset($_SESSION[$attemptKey]);
-            unset($_SESSION['reset_email']);
-            header("Location: login.php");
-            exit;
+            if (!$res || empty($res['reset_otp'])) {
+                $msg = "Verification code has expired. Please request a new one.";
+            } elseif ($res['reset_otp'] !== $otp) {
+                $_SESSION[$attemptKey] = (int)$_SESSION[$attemptKey] + 1;
+                if ($_SESSION[$attemptKey] >= OTP_MAX_VERIFICATION_ATTEMPTS) {
+                    // Invalidate current OTP upon reaching attempt limit
+                    $clearStmt = $conn->prepare("UPDATE users SET reset_otp=NULL, otp_expiry=NULL WHERE email=?");
+                    if ($clearStmt) {
+                        $clearStmt->bind_param("s", $email);
+                        $clearStmt->execute();
+                    }
+                    $msg = "Too many failed verification attempts. Please request a new OTP.";
+                } else {
+                    $msg = "Invalid verification code.";
+                }
+            } elseif (strtotime($res['otp_expiry']) < time()) {
+                $msg = "Verification code has expired. Please request a new one.";
+            } else {
+
+                $hashed = password_hash($newPass, PASSWORD_DEFAULT);
+
+                $update = $conn->prepare("
+                    UPDATE users
+                    SET password=?, reset_otp=NULL, otp_expiry=NULL
+                    WHERE email=?
+                ");
+                if (!$update) {
+                    throw new Exception("Failed to prepare update statement");
+                }
+                $update->bind_param("ss", $hashed, $email);
+                $update->execute();
+
+                unset($_SESSION[$attemptKey]);
+                unset($_SESSION['reset_email']);
+                if (!headers_sent()) {
+                    header("Location: login.php");
+                }
+                exit;
+            }
+        } catch (Throwable $e) {
+            error_log("[SECURITY] verify_reset_otp error: " . $e->getMessage());
+            $msg = "An error occurred while processing your request. Please try again later.";
         }
     }
 }

@@ -1,7 +1,9 @@
 <?php
-session_start();
-require_once "../config/db.php";
-require_once "send_mail.php";
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once __DIR__ . "/../config/db.php";
+require_once __DIR__ . "/send_mail.php";
 
 $msg = "";
 
@@ -16,6 +18,8 @@ if (isset($_POST['send_otp'])) {
 
         $msg = "❌ Invalid email address";
 
+    } elseif (!isset($conn) || !$conn) {
+        $msg = "❌ Database service is temporarily unavailable. Please try again later.";
     } else {
 
         /* CHECK EMAIL EXISTS */
@@ -49,7 +53,9 @@ if (isset($_POST['send_otp'])) {
                     $_SESSION[$lastSendKey] = time();
                     $_SESSION['otp_attempts_' . md5($email)] = 0; // Reset verification attempt counter
 
-                    header("Location: verify_reset_otp.php");
+                    if (!headers_sent()) {
+                        header("Location: verify_reset_otp.php");
+                    }
                     exit;
                 } else {
                     $err = getUserFacingMailError() ?: "Email service is temporarily unavailable. Please try again later.";

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/env_loader.php';
+require_once __DIR__ . '/text_helpers.php';
 
 /**
  * Database Connection & Abstraction Module
