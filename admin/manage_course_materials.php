@@ -36,14 +36,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = "Please select a Subject to generate study material.";
                 $message_type = "warning";
             } else {
-                $genRes = StudyMaterialService::generateSubjectStudyMaterial($conn, $subject, $adminId);
-                $message = $genRes['message'] ?? 'Study material processed.';
-                if (!empty($genRes['success'])) {
-                    $message_type = 'success';
-                } elseif (!empty($genRes['empty'])) {
-                    $message_type = 'warning';
+                // Server-side validation: ensure subject is linked to an existing valid exam with approved questions
+                $validSubjects = StudyMaterialService::getSubjectsWithApprovedQuestions($conn);
+                $validSubjectNames = array_column($validSubjects, 'subject');
+
+                if (!in_array($subject, $validSubjectNames, true)) {
+                    $message = "The selected subject '{$subject}' does not have approved questions linked to an active exam. Generation aborted.";
+                    $message_type = "warning";
                 } else {
-                    $message_type = 'danger';
+                    $genRes = StudyMaterialService::generateSubjectStudyMaterial($conn, $subject, $adminId);
+                    $message = $genRes['message'] ?? 'Study material processed.';
+                    if (!empty($genRes['success'])) {
+                        $message_type = 'success';
+                    } elseif (!empty($genRes['empty'])) {
+                        $message_type = 'warning';
+                    } else {
+                        $message_type = 'danger';
+                    }
                 }
             }
         } elseif ($action === 'retry_indexing') {

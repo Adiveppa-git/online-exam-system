@@ -87,11 +87,14 @@ class StudyMaterialService {
      */
     public static function getSubjects($conn, ?int $examId = null): array {
         $subjects = [];
-        $sql = "SELECT DISTINCT subject FROM ai_generated_questions WHERE subject IS NOT NULL AND TRIM(subject) != ''";
+        $sql = "SELECT DISTINCT q.subject"
+             . " FROM ai_generated_questions q"
+             . " INNER JOIN exams e ON q.exam_id = e.id"
+             . " WHERE q.subject IS NOT NULL AND TRIM(q.subject) != ''";
         if ($examId !== null && $examId > 0) {
-            $sql .= " AND exam_id = " . (int)$examId;
+            $sql .= " AND q.exam_id = " . (int)$examId;
         }
-        $sql .= " ORDER BY subject ASC";
+        $sql .= " ORDER BY q.subject ASC";
         $res = $conn->query($sql);
         if ($res) {
             while ($row = $res->fetch_assoc()) {
@@ -109,15 +112,19 @@ class StudyMaterialService {
      */
     public static function getTopics($conn, ?int $examId = null, ?string $subject = null): array {
         $topics = [];
-        $where = ["topic IS NOT NULL AND TRIM(topic) != ''"];
+        $where = ["q.topic IS NOT NULL AND TRIM(q.topic) != ''"];
         if ($examId !== null && $examId > 0) {
-            $where[] = "exam_id = " . (int)$examId;
+            $where[] = "q.exam_id = " . (int)$examId;
         }
         if (!empty($subject)) {
             $safeSubj = $conn->real_escape_string($subject);
-            $where[] = "subject = '{$safeSubj}'";
+            $where[] = "q.subject = '{$safeSubj}'";
         }
-        $sql = "SELECT DISTINCT topic FROM ai_generated_questions WHERE " . implode(' AND ', $where) . " ORDER BY topic ASC";
+        $sql = "SELECT DISTINCT q.topic"
+             . " FROM ai_generated_questions q"
+             . " INNER JOIN exams e ON q.exam_id = e.id"
+             . " WHERE " . implode(' AND ', $where)
+             . " ORDER BY q.topic ASC";
         $res = $conn->query($sql);
         if ($res) {
             while ($row = $res->fetch_assoc()) {
@@ -554,11 +561,14 @@ class StudyMaterialService {
      */
     public static function getSubjectsWithApprovedQuestions($conn): array {
         $subjects = [];
-        $sql = "SELECT subject, COUNT(*) as count 
-                FROM ai_generated_questions 
-                WHERE status = 'approved' AND subject IS NOT NULL AND TRIM(subject) != ''
-                GROUP BY subject 
-                ORDER BY subject ASC";
+        $sql = "SELECT q.subject, COUNT(*) as count"
+             . " FROM ai_generated_questions q"
+             . " INNER JOIN exams e ON q.exam_id = e.id"
+             . " WHERE q.status = 'approved'"
+             . " AND q.subject IS NOT NULL"
+             . " AND TRIM(q.subject) != ''"
+             . " GROUP BY q.subject"
+             . " ORDER BY q.subject ASC";
         $res = $conn->query($sql);
         if ($res) {
             while ($row = $res->fetch_assoc()) {
@@ -576,7 +586,7 @@ class StudyMaterialService {
      * pending and rejected questions, and excluding questions from other subjects.
      */
     public static function getApprovedQuestionsForSubject($conn, string $subject, ?array $questionIds = null): array {
-        $where = ["status = 'approved'", "subject = ?"];
+        $where = ["q.status = 'approved'", "q.subject = ?"];
         $params = [$subject];
         $types = "s";
 
@@ -584,7 +594,7 @@ class StudyMaterialService {
             $intIds = array_values(array_filter(array_map('intval', $questionIds)));
             if (!empty($intIds)) {
                 $placeholders = implode(',', array_fill(0, count($intIds), '?'));
-                $where[] = "id IN ({$placeholders})";
+                $where[] = "q.id IN ({$placeholders})";
                 foreach ($intIds as $qId) {
                     $params[] = $qId;
                     $types .= "i";
@@ -592,10 +602,13 @@ class StudyMaterialService {
             }
         }
 
-        $sql = "SELECT id, exam_id, subject, topic, difficulty, question, option_a, option_b, option_c, option_d, correct_option, explanation, status 
-                FROM ai_generated_questions 
-                WHERE " . implode(" AND ", $where) . " 
-                ORDER BY topic ASC, id ASC";
+        $sql = "SELECT q.id, q.exam_id, q.subject, q.topic, q.difficulty, q.question,"
+             . " q.option_a, q.option_b, q.option_c, q.option_d, q.correct_option,"
+             . " q.explanation, q.status"
+             . " FROM ai_generated_questions q"
+             . " INNER JOIN exams e ON q.exam_id = e.id"
+             . " WHERE " . implode(" AND ", $where)
+             . " ORDER BY q.topic ASC, q.id ASC";
 
         $stmt = $conn->prepare($sql);
         if (!$stmt) {
@@ -816,7 +829,7 @@ class StudyMaterialService {
                 'empty' => true,
                 'count' => 0,
                 'subject' => $subject,
-                'message' => "No approved AI-generated questions found for Subject '{$subject}'. Study material generation aborted."
+                'message' => "No approved AI-generated questions found linked to valid exams for Subject '{$subject}'. Study material generation aborted."
             ];
         }
 

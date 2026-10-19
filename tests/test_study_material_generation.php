@@ -32,6 +32,16 @@ $createdFiles = [];
 // Ensure database schema is up-to-date
 StudyMaterialService::ensureSchema($conn);
 
+// Setup test fixtures: Ensure English exam and approved questions exist for test suite
+$conn->query("INSERT INTO exams (id, title, duration, marks_per_question, total_marks) VALUES (126, 'English', 30, 1, 30) ON DUPLICATE KEY UPDATE title = 'English'");
+
+$checkEng = (int)$conn->query("SELECT COUNT(*) as cnt FROM ai_generated_questions WHERE subject = 'English' AND status = 'approved'")->fetch_assoc()['cnt'];
+if ($checkEng < 10) {
+    for ($i = $checkEng + 1; $i <= 10; $i++) {
+        $conn->query("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_test_eng', 1, 126, 'English', 'Grammar', 'English Grammar Question {$i}', 'Noun', 'Verb', 'Adjective', 'Adverb', 'A', 'Nouns identify people, places, or things.', 'easy', 'approved')");
+    }
+}
+
 // --------------------------------------------------------------------------
 // TEST 1: Dynamic subjects dropdown reflects only subjects with approved questions
 // --------------------------------------------------------------------------
@@ -41,12 +51,13 @@ try {
 
     $subjectNames = array_column($approvedSubjects, 'subject');
     $hasEnglish = in_array('English', $subjectNames, true);
-    $hasMaths = in_array('Maths', $subjectNames, true);
+    $hasPython = in_array('Python', $subjectNames, true);
+    $noOrphanMaths = !in_array('Maths', $subjectNames, true);
 
     // Check that counts match database approved counts
     $countsValid = true;
     foreach ($approvedSubjects as $s) {
-        $checkStmt = $conn->prepare("SELECT COUNT(*) as cnt FROM ai_generated_questions WHERE status = 'approved' AND subject = ?");
+        $checkStmt = $conn->prepare("SELECT COUNT(*) as cnt FROM ai_generated_questions q INNER JOIN exams e ON q.exam_id = e.id WHERE q.status = 'approved' AND q.subject = ?");
         $checkStmt->bind_param("s", $s['subject']);
         $checkStmt->execute();
         $dbCount = (int)$checkStmt->get_result()->fetch_assoc()['cnt'];
@@ -57,8 +68,8 @@ try {
         }
     }
 
-    if ($hasEnglish && $hasMaths && $countsValid) {
-        echo "PASSED (Dynamic subjects: " . implode(', ', $subjectNames) . " with accurate counts)\n";
+    if ($hasEnglish && $hasPython && $noOrphanMaths && $countsValid) {
+        echo "PASSED (Dynamic subjects: " . implode(', ', $subjectNames) . " with accurate counts, orphan Maths excluded)\n";
         $passed++;
     } else {
         echo "FAILED (Unexpected approved subjects list or count mismatch)\n";
@@ -122,8 +133,8 @@ try {
 try {
     echo "[TEST 3] Testing cross-subject question isolation... ";
 
-    // Retrieve approved Maths questions
-    $mathsQuestions = StudyMaterialService::getApprovedQuestionsForSubject($conn, 'Maths');
+    // Retrieve approved Python questions
+    $pythonQuestions = StudyMaterialService::getApprovedQuestionsForSubject($conn, 'Python');
 
     // Retrieve generated English notes file
     $docId = $englishDocId ?? 137;
@@ -135,20 +146,20 @@ try {
 
     $englishNotes = file_exists($doc['file_path']) ? file_get_contents($doc['file_path']) : '';
 
-    $noMathsLeaked = true;
-    foreach ($mathsQuestions as $mq) {
-        $cleanQ = clean_question_title($mq['question']);
+    $noPythonLeaked = true;
+    foreach ($pythonQuestions as $pq) {
+        $cleanQ = clean_question_title($pq['question']);
         if (str_contains($englishNotes, $cleanQ)) {
-            $noMathsLeaked = false;
+            $noPythonLeaked = false;
             break;
         }
     }
 
-    if ($noMathsLeaked && !empty($mathsQuestions)) {
-        echo "PASSED (Zero Maths questions found in English study material)\n";
+    if ($noPythonLeaked && !empty($pythonQuestions)) {
+        echo "PASSED (Zero Python questions found in English study material)\n";
         $passed++;
     } else {
-        echo "FAILED (Maths questions leaked into English study material)\n";
+        echo "FAILED (Python questions leaked into English study material)\n";
         $failed++;
     }
 } catch (Exception $e) {
