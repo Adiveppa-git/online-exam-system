@@ -1,5 +1,5 @@
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 class SubjectDetector:
     """
@@ -7,6 +7,15 @@ class SubjectDetector:
     """
 
     SUBJECT_PATTERNS = {
+        "Java": [
+            r"\b(java|jvm|jre|jdk|spring|hibernate|servlet|jsp|javadoc)\b"
+        ],
+        "Python": [
+            r"\b(python|pytest|django|flask|numpy|pandas|scipy|pip|py)\b"
+        ],
+        "C++": [
+            r"\b(c\+\+|cpp|stl|clang)\b"
+        ],
         "GK": [
             r"\b(gk|general knowledge)\b"
         ],
@@ -19,11 +28,11 @@ class SubjectDetector:
         "Operating Systems": [
             r"\b(operating systems|operating system|os|process management|process scheduling|cpu scheduling|memory management|paging|deadlock|concurrency)\b"
         ],
-        "Computer Science": [
-            r"\b(computer science|cs|programming|data structures|binary search tree|binary tree|bst|python|java|c\+\+|algo|algorithm|networking|tcp/ip)\b"
-        ],
         "Database": [
             r"\b(database|dbms|sql|relational database|rdbms|tables|queries)\b"
+        ],
+        "Computer Science": [
+            r"\b(computer science|cs|data structures|binary search tree|binary tree|bst|algo|algorithm|networking|tcp/ip)\b"
         ]
     }
 
@@ -33,7 +42,8 @@ class SubjectDetector:
         "Integration": [r"\b(integration|integrals)\b"],
         "Binary Search Trees": [r"\b(binary search tree|binary search trees|bst|binary tree)\b"],
         "Process Management": [r"\b(process management|process scheduling|cpu scheduling)\b"],
-        "TCP/IP": [r"\b(tcp/ip|networking|tcp|ip)\b"]
+        "TCP/IP": [r"\b(tcp/ip|networking|tcp|ip)\b"],
+        "Core Principles": [r"\b(core principles|core concepts|oop|object oriented|classes and objects)\b"]
     }
 
     TOPIC_TO_SUBJECT_MAP = {
@@ -42,10 +52,16 @@ class SubjectDetector:
         "Integration": "Maths",
         "Binary Search Trees": "Computer Science",
         "Process Management": "Operating Systems",
-        "TCP/IP": "Computer Science"
+        "TCP/IP": "Computer Science",
+        "Core Principles": "Java"
     }
 
     SUBJECT_NORMALIZATION_MAP = {
+        "java": "Java",
+        "python": "Python",
+        "py": "Python",
+        "c++": "C++",
+        "cpp": "C++",
         "gk": "GK",
         "general knowledge": "GK",
         "math": "Maths",
@@ -65,8 +81,56 @@ class SubjectDetector:
     def normalize_subject(cls, subject_str: Optional[str]) -> Optional[str]:
         if not subject_str:
             return None
-        cleaned = subject_str.strip().lower()
-        return cls.SUBJECT_NORMALIZATION_MAP.get(cleaned, subject_str.strip())
+        cleaned = subject_str.strip()
+        lowered = cleaned.lower()
+        if lowered in cls.SUBJECT_NORMALIZATION_MAP:
+            return cls.SUBJECT_NORMALIZATION_MAP[lowered]
+        # Preserve existing casing or title-case if lowercase
+        return cleaned if any(c.isupper() for c in cleaned) else cleaned.title()
+
+    @classmethod
+    def detect_all(cls, query: str) -> List[str]:
+        """
+        Detects all distinct subjects explicitly referenced in the user query.
+        """
+        q_lower = query.lower()
+        matched = []
+
+        # 1. Check Topic Patterns
+        for topic_name, patterns in cls.TOPIC_PATTERNS.items():
+            for pat in patterns:
+                if re.search(pat, q_lower):
+                    if topic_name in cls.TOPIC_TO_SUBJECT_MAP:
+                        s_name = cls.TOPIC_TO_SUBJECT_MAP[topic_name]
+                        if s_name not in matched:
+                            matched.append(s_name)
+                    break
+
+        # 2. Check Subject Patterns
+        for subj_name, patterns in cls.SUBJECT_PATTERNS.items():
+            for pat in patterns:
+                if re.search(pat, q_lower):
+                    if subj_name not in matched:
+                        matched.append(subj_name)
+                    break
+
+        # If a specific programming language or discipline is matched,
+        # do not treat general "Computer Science" as an ambiguous secondary subject
+        # unless "computer science" or "cs" was explicitly typed.
+        if len(matched) > 1 and "Computer Science" in matched:
+            specific_subs = [s for s in matched if s in ("Java", "Python", "C++", "Database", "Operating Systems")]
+            if specific_subs and not re.search(r"\b(computer science|cs)\b", q_lower):
+                matched.remove("Computer Science")
+
+        return matched
+
+    @classmethod
+    def detect_ambiguity(cls, query: str) -> List[str]:
+        """
+        Returns list of matched subjects if multiple distinct subjects are mentioned.
+        """
+        all_matched = cls.detect_all(query)
+        return all_matched if len(all_matched) > 1 else []
 
     @classmethod
     def detect(cls, query: str) -> Tuple[Optional[str], Optional[str]]:

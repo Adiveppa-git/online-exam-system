@@ -137,6 +137,26 @@ class RAGService:
         target_subject = SubjectDetector.normalize_subject(subject) or detected_subj
         target_topic = topic or detected_top
 
+        # Check for ambiguous subjects when subject was not explicitly specified
+        if not subject:
+            ambiguous_subjects = SubjectDetector.detect_ambiguity(question)
+            if len(ambiguous_subjects) > 1:
+                subjs_text = " and ".join(ambiguous_subjects)
+                subjs_or = " or ".join(ambiguous_subjects)
+                return {
+                    "question": question,
+                    "answer": (
+                        f"It looks like your question mentions multiple subjects ({subjs_text}). "
+                        f"Which subject would you like help with? Please specify either {subjs_or} "
+                        "so I can provide the right exam questions, performance insights, and course materials."
+                    ),
+                    "has_sufficient_context": False,
+                    "sources": [],
+                    "retrieved_chunks": [],
+                    "intent": "clarification",
+                    "is_conversational": True
+                }
+
         intent, direct_response = IntentClassifier.classify(question)
 
         # 1. Casual / Conversational / Assistant Identity intents (No RAG)
@@ -232,18 +252,33 @@ class RAGService:
         # 5. Student Performance Intent
         if intent == "performance":
             if target_subject:
+                subj_summary = (user_context or {}).get("subject_summary", {})
+                attempts_count = subj_summary.get("student_attempts_count", 0)
+
                 # Mode A: Subject-Specific performance query
                 subj_history = [
                     h for h in (history or [])
-                    if SubjectDetector.normalize_subject(h.get("subject")) == target_subject
+                    if SubjectDetector.normalize_subject(h.get("subject", "")).lower() == target_subject.lower()
                 ]
-                if not subj_history:
+                if attempts_count == 0 and len(subj_history) == 0:
                     ans = f"You haven't completed any exam attempts in {target_subject} yet."
                 else:
-                    tot = len(subj_history)
-                    corr = sum(1 for h in subj_history if h.get("is_correct") or h.get("correct"))
-                    acc = round((corr / tot) * 100, 1)
-                    ans = f"Based on your exam records in {target_subject}, you have attempted {tot} questions with an accuracy of {acc}%."
+                    marks_obtained = subj_summary.get("marks_obtained")
+                    total_marks = subj_summary.get("total_marks")
+                    pct = subj_summary.get("percentage")
+
+                    if marks_obtained is not None and total_marks is not None and pct is not None:
+                        disp_obtained = int(marks_obtained) if float(marks_obtained).is_integer() else marks_obtained
+                        disp_total = int(total_marks) if float(total_marks).is_integer() else total_marks
+                        disp_pct = int(pct) if float(pct).is_integer() else pct
+                        has_topics = subj_summary.get("has_topic_evidence", False)
+                        topic_str = "" if has_topics else " Specific topic-level breakdown is not available for this exam's questions."
+                        ans = f"Based on your exam records in **{target_subject}**, you scored **{disp_obtained} out of {disp_total} marks ({disp_pct}% percentage)**.{topic_str}"
+                    else:
+                        tot = len(subj_history)
+                        corr = sum(1 for h in subj_history if h.get("is_correct") or h.get("correct"))
+                        acc = round((corr / tot) * 100, 1) if tot > 0 else 0.0
+                        ans = f"Based on your exam records in {target_subject}, you have attempted {tot} questions with an accuracy of {acc}%."
             else:
                 # Mode B: General performance query
                 if not history or len(history) == 0:
@@ -279,7 +314,7 @@ class RAGService:
 
         # 7. Personalized Recommendation Intent
         if intent == "recommendation":
-            perf_response, identified_topics = cls._generate_personalized_recommendation(question, history, target_subject)
+            perf_response, identified_topics = cls._generate_personalized_recommendation(question, history, target_subject, user_context)
 
             # Execute Subject-Isolated RAG Search
             search_res = cls.search_context(
@@ -306,10 +341,17 @@ class RAGService:
 
             # No grounded course material available for target_subject
             if target_subject:
-                missing_msg = (
-                    f"I don't have enough information about {target_subject} in the uploaded course materials yet. "
-                    f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
-                )
+                subj_sum = (user_context or {}).get("subject_summary", {})
+                if subj_sum.get("exists") or subj_sum.get("total_exam_questions", 0) > 0:
+                    missing_msg = (
+                        f"I couldn't find matching indexed course materials for {target_subject} in the study repository. "
+                        f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
+                    )
+                else:
+                    missing_msg = (
+                        f"I don't have enough information about {target_subject} in the uploaded course materials yet. "
+                        f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
+                    )
                 full_answer = f"{perf_response}\n\n⚠️ {missing_msg}" if perf_response else missing_msg
             else:
                 full_answer = perf_response
@@ -335,10 +377,17 @@ class RAGService:
 
         if not search_res["has_sufficient_context"]:
             if target_subject:
-                missing_msg = (
-                    f"I don't have enough information about {target_subject} in the uploaded course materials yet. "
-                    f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
-                )
+                subj_sum = (user_context or {}).get("subject_summary", {})
+                if subj_sum.get("exists") or subj_sum.get("total_exam_questions", 0) > 0:
+                    missing_msg = (
+                        f"I couldn't find matching indexed course materials for {target_subject} in the study repository. "
+                        f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
+                    )
+                else:
+                    missing_msg = (
+                        f"I don't have enough information about {target_subject} in the uploaded course materials yet. "
+                        f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
+                    )
             else:
                 missing_msg = "I couldn't find enough information about this in the uploaded course materials."
 
@@ -394,29 +443,108 @@ class RAGService:
         cls,
         question: str,
         history: Optional[List[Dict[str, Any]]],
-        target_subject: Optional[str] = None
+        target_subject: Optional[str] = None,
+        user_context: Optional[Dict[str, Any]] = None
     ) -> Tuple[str, List[str]]:
         """
         Analyzes real student performance history with strict subject isolation in Mode A.
         """
         norm_target_subject = SubjectDetector.normalize_subject(target_subject)
+        subj_summary = (user_context or {}).get("subject_summary", {})
+        attempts_count = subj_summary.get("student_attempts_count", 0)
 
-        if not history or len(history) == 0:
-            subj_label = f" for {norm_target_subject}" if norm_target_subject else ""
-            return (
-                f"I don't have enough performance data yet{subj_label} to identify your weakest topics. "
-                "Complete a few exams or practice sessions, and I'll be able to give you more personalized recommendations.",
-                []
-            )
+        subj_history = [
+            h for h in (history or [])
+            if SubjectDetector.normalize_subject(h.get("subject", "")).lower() == norm_target_subject.lower()
+        ] if norm_target_subject else []
+
+        # 1. No attempts at all for target_subject (or empty history when no target subject)
+        if norm_target_subject:
+            if attempts_count == 0 and len(subj_history) == 0:
+                avail_topics = subj_summary.get("available_topics", [])
+                total_qs = subj_summary.get("total_exam_questions", 0)
+                approved_ai = subj_summary.get("approved_ai_questions", 0)
+
+                topic_info = f" The exam covers key topics including: {', '.join(avail_topics[:4])}." if avail_topics else ""
+                q_info = f" There are {total_qs} exam questions and {approved_ai} approved practice questions available in the question bank." if (total_qs or approved_ai) else ""
+
+                return (
+                    f"You haven't completed any exam attempts in {norm_target_subject} yet, so personalized performance metrics are not available at this time.{topic_info}{q_info} "
+                    f"Review the course notes below and take a practice attempt to evaluate your baseline.",
+                    []
+                )
+        else:
+            if not history:
+                return (
+                    "I don't have enough performance data yet to identify your weakest topics. "
+                    "Complete a few exams or practice sessions, and I'll be able to give you more personalized recommendations.",
+                    []
+                )
+
+        # 2. When authoritative exam score metrics are provided in user_context
+        if norm_target_subject and attempts_count > 0 and subj_summary.get("total_marks", 0) > 0:
+            marks_obtained = subj_summary.get("marks_obtained", 0)
+            total_marks = subj_summary.get("total_marks", 0)
+            pct = subj_summary.get("percentage", 0.0)
+            has_topics = subj_summary.get("has_topic_evidence", False)
+            topic_breakdown = subj_summary.get("topic_breakdown", {})
+
+            disp_obtained = int(marks_obtained) if float(marks_obtained).is_integer() else marks_obtained
+            disp_total = int(total_marks) if float(total_marks).is_integer() else total_marks
+            disp_pct = int(pct) if float(pct).is_integer() else pct
+
+            score_statement = f"Based on your exam records in **{norm_target_subject}**, your current score is **{disp_obtained} out of {disp_total} marks ({disp_pct}% percentage)**."
+
+            if not has_topics or not topic_breakdown:
+                if disp_pct < 40:
+                    advice = (
+                        f"{score_statement} Specific topic-level breakdown is not available for this exam's questions. "
+                        f"Because your score is below the 40% passing standard, I recommend thoroughly reviewing the approved {norm_target_subject} "
+                        f"study materials below to strengthen your conceptual understanding, followed by taking practice questions from the question bank."
+                    )
+                else:
+                    advice = (
+                        f"{score_statement} Specific topic-level breakdown is not available for this exam's questions. "
+                        f"Continue reviewing the approved {norm_target_subject} course materials below and practicing to maintain and build upon your score!"
+                    )
+                return (advice, [])
+
+            # Topic breakdown is available
+            weak_topics = []
+            for t_name, t_stat in topic_breakdown.items():
+                tot = t_stat["total"]
+                corr = t_stat["correct"]
+                acc = round((corr / tot) * 100, 1) if tot > 0 else 0.0
+                weak_topics.append((t_name, acc, tot))
+
+            weak_topics.sort(key=lambda x: x[1])
+            top_weak = weak_topics[0]
+            weak_name = top_weak[0]
+            weak_acc = top_weak[1]
+
+            if weak_acc < 60.0:
+                advice = (
+                    f"{score_statement} Your lowest scoring area is **{weak_name}** ({weak_acc}% accuracy). "
+                    f"I recommend reviewing the {weak_name} course notes below first and practicing targeted questions on this topic."
+                )
+            else:
+                advice = (
+                    f"{score_statement} Your lowest scoring area is **{weak_name}** ({weak_acc}% accuracy). "
+                    f"Continue reviewing your course notes below to maintain your performance!"
+                )
+            return (advice, [weak_name])
 
         topic_stats = {}
         for item in history:
-            t = item.get("topic", "General")
-            s = item.get("subject", "General")
+            t = (item.get("topic") or "").strip()
+            s = (item.get("subject") or "General").strip()
             norm_s = SubjectDetector.normalize_subject(s) or s
             is_corr = bool(item.get("is_correct", False) or item.get("correct", False))
 
             if norm_target_subject and norm_s.lower() != norm_target_subject.lower():
+                continue
+
+            if not t:
                 continue
 
             if t not in topic_stats:
@@ -427,9 +555,17 @@ class RAGService:
 
         if not topic_stats:
             if norm_target_subject:
+                subj_summary = (user_context or {}).get("subject_summary", {})
+                avail_topics = subj_summary.get("available_topics", [])
+                total_qs = subj_summary.get("total_exam_questions", 0)
+                approved_ai = subj_summary.get("approved_ai_questions", 0)
+
+                topic_info = f" The exam covers key topics including: {', '.join(avail_topics[:4])}." if avail_topics else ""
+                q_info = f" There are {total_qs} exam questions and {approved_ai} approved practice questions available in the question bank." if (total_qs or approved_ai) else ""
+
                 return (
-                    f"I don't have performance data for {norm_target_subject} yet. "
-                    f"Complete a few {norm_target_subject} exams or practice sessions to get personalized performance insights.",
+                    f"You haven't completed any exam attempts in {norm_target_subject} yet, so personalized performance metrics are not available at this time.{topic_info}{q_info} "
+                    f"Review the course notes below and take a practice attempt to evaluate your baseline.",
                     []
                 )
             return (
@@ -507,7 +643,7 @@ class RAGService:
         for c in chunks:
             if norm_target:
                 c_subj = SubjectDetector.normalize_subject(c.get("subject"))
-                if c_subj != norm_target:
+                if c_subj.lower() != norm_target.lower():
                     logger.warning(f"Rejecting cross-subject chunk filename={c.get('filename')} subject={c.get('subject')} for target={norm_target}")
                     continue
             valid_chunks.append(c)

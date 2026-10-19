@@ -83,3 +83,68 @@ def test_8_focused_study_notes_english_grammar():
     for src in notes_res.get("rag_sources", []):
         if "subject" in src:
             assert SubjectDetector.normalize_subject(src["subject"]) == "English"
+
+def test_9_java_query_subject_and_rag_isolation():
+    query = "How can I improve my marks in Java?"
+    subj, top = SubjectDetector.detect(query)
+    assert subj == "Java"
+    assert subj != "Computer Science"
+
+    history = [
+        {"subject": "Java", "topic": "Core Principles", "is_correct": False},
+        {"subject": "Python", "topic": "codes", "is_correct": True}
+    ]
+    res = RAGService.answer_question(question=query, subject="Java", history=history)
+    ans = res["answer"]
+    assert "Computer Science" not in ans
+    assert "Java" in ans
+    assert "Python" not in ans
+
+def test_10_python_query_subject_and_rag_isolation():
+    query = "How can I improve my marks in Python?"
+    subj, top = SubjectDetector.detect(query)
+    assert subj == "Python"
+    assert subj != "Computer Science"
+
+    history = [
+        {"subject": "Java", "topic": "Core Principles", "is_correct": False},
+        {"subject": "Python", "topic": "codes", "is_correct": False}
+    ]
+    res = RAGService.answer_question(question=query, subject="Python", history=history)
+    ans = res["answer"]
+    assert "Computer Science" not in ans
+    assert "Python" in ans
+    assert "Java" not in ans
+
+def test_11_ambiguous_subject_clarification():
+    query = "Compare Java and Python"
+    ambig = SubjectDetector.detect_ambiguity(query)
+    assert len(ambig) > 1
+    assert "Java" in ambig
+    assert "Python" in ambig
+
+    res = RAGService.answer_question(question=query)
+    assert res["intent"] == "clarification"
+    assert "multiple subjects" in res["answer"].lower()
+    assert res["sources"] == []
+
+def test_12_zero_performance_study_guidance():
+    # Student with 0 attempts in Java should receive guidance and clear explanation
+    user_context = {
+        "subject_summary": {
+            "exists": True,
+            "total_exam_questions": 50,
+            "approved_ai_questions": 50,
+            "available_topics": ["Core Principles"]
+        }
+    }
+    res = RAGService.answer_question(
+        question="How can I prepare for Java exam?",
+        subject="Java",
+        history=[],
+        user_context=user_context
+    )
+    ans = res["answer"]
+    assert "Computer Science" not in ans
+    assert "Java" in ans
+    assert "haven't completed any exam attempts in Java" in ans

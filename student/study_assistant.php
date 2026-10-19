@@ -6,7 +6,9 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/text_helpers.php';
 require_once __DIR__ . '/../config/ai_client.php';
+require_once __DIR__ . '/../config/subject_resolver.php';
 
 $user_id = (int)$_SESSION['user_id'];
 $user_role = $_SESSION['role'] ?? 'student';
@@ -69,7 +71,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'clear_chat') {
 $history = [];
 
 // 1. Official exam answers
-$sql_exams = "SELECT sa.question_id, sa.answer AS student_answer, q.subject, q.topic, q.difficulty, q.correct_option,
+$sql_exams = "SELECT sa.question_id, sa.answer AS student_answer, q.subject,
+                     COALESCE(NULLIF(TRIM(q.topic), ''), 'Core Principles') AS topic, q.difficulty,
                      (TRIM(sa.answer) = TRIM(q.correct_option)) AS is_correct, r.taken_at AS attempt_time
               FROM student_answers sa
               JOIN questions q ON sa.question_id = q.id
@@ -95,7 +98,8 @@ if ($stmt) {
 }
 
 // 2. Practice session answers
-$sql_practice = "SELECT pa.subject, pa.topic, pa.difficulty, pa.is_correct, pa.created_at AS attempt_time
+$sql_practice = "SELECT pa.subject,
+                     COALESCE(NULLIF(TRIM(pa.topic), ''), 'Core Principles') AS topic, pa.difficulty, pa.is_correct, pa.created_at AS attempt_time
                 FROM ai_practice_answers pa
                 JOIN ai_practice_sessions ps ON pa.session_id = ps.id
                 WHERE pa.student_id = ? AND ps.status = 'completed'
@@ -124,34 +128,66 @@ $error_message = "";
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['question'])) {
     $question_input = trim($_POST['question']);
 
-    $aiClient = new AiClient();
-    $res = $aiClient->askRAG(
-        question: $question_input,
-        subject: null,
-        topic: null,
-        topK: null,
-        threshold: null,
-        studentId: $user_id,
-        history: $history,
-        userContext: $user_context,
-        systemStats: $system_stats,
-        otherUsersInfo: $other_users_info
-    );
+    // Authoritative dynamic subject resolution from database exams, titles, aliases, or query
+    $resolution = SubjectResolver::resolve($conn, $question_input);
 
-    if ($res['status'] === 'success') {
-        $rag_data = $res['data'] ?? [];
+    if ($resolution['status'] === 'ambiguous') {
+        // Short clarification prompt instead of retrieving unrelated content
+        $subjs = $resolution['subjects'];
+        $subjsText = implode(' and ', $subjs);
+        $subjsOr = implode(' or ', $subjs);
+        $clarificationMsg = "It looks like your question mentions multiple subjects ({$subjsText}). Which subject would you like help with? Please specify either {$subjsOr} so I can provide the right exam questions, performance insights, and course materials.";
+
         $_SESSION['study_assistant_history'][] = [
             'question' => $question_input,
-            'answer' => $rag_data['answer'] ?? "I couldn't process an answer at this time.",
-            'sources' => $rag_data['sources'] ?? [],
-            'has_sufficient_context' => $rag_data['has_sufficient_context'] ?? false,
-            'is_conversational' => $rag_data['is_conversational'] ?? false,
-            'intent' => $rag_data['intent'] ?? 'academic_question',
+            'answer' => $clarificationMsg,
+            'sources' => [],
+            'has_sufficient_context' => false,
+            'is_conversational' => true,
+            'intent' => 'clarification',
             'time' => date('h:i A')
         ];
         $question_input = "";
     } else {
-        $error_message = $res['message'] ?? "The AI Assistant is currently unavailable. Please check that the AI service is running.";
+        $resolvedSubject = $resolution['subject'] ?? null;
+        $topic = null;
+
+        // Enrich user_context with subject-specific exam question counts & student stats
+        $callUserContext = $user_context;
+        if ($resolvedSubject !== null) {
+            $subjSummary = SubjectResolver::getSubjectSummary($conn, $resolvedSubject, $user_id);
+            $callUserContext['subject_summary'] = $subjSummary;
+        }
+
+        $aiClient = new AiClient();
+        $res = $aiClient->askRAG(
+            question: $question_input,
+            subject: $resolvedSubject,
+            topic: $topic,
+            topK: 5,
+            threshold: 0.65,
+            studentId: $user_id,
+            history: $history,
+            userContext: $callUserContext,
+            systemStats: $system_stats,
+            otherUsersInfo: $other_users_info
+        );
+
+        if ($res['status'] === 'success') {
+            $rag_data = $res['data'] ?? [];
+            $_SESSION['study_assistant_history'][] = [
+                'question' => $question_input,
+                'answer' => $rag_data['answer'] ?? "I couldn't process an answer at this time.",
+                'sources' => $rag_data['sources'] ?? [],
+                'has_sufficient_context' => $rag_data['has_sufficient_context'] ?? false,
+                'is_conversational' => $rag_data['is_conversational'] ?? false,
+                'intent' => $rag_data['intent'] ?? 'academic_question',
+                'time' => date('h:i A')
+            ];
+            $question_input = "";
+        } else {
+            $error_message = $res['message'] ?? "The AI Assistant is currently unavailable. Please check that the AI service is running.";
+        }
     }
 }
 ?>
@@ -279,8 +315,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['question'])) {
                                 <span class="fw-bold text-dark small"><i class="fa-solid fa-robot text-primary me-2"></i>🤖 AI Assistant</span>
                                 <small class="text-muted" style="font-size: 0.75rem;"><?= htmlspecialchars($msg['time']) ?></small>
                             </div>
-                            <div class="text-dark lh-base" style="white-space: pre-line;">
-                                <?= htmlspecialchars($msg['answer']) ?>
+                            <div class="text-dark lh-base">
+                                <?= render_chat_markdown($msg['answer']) ?>
                             </div>
 
                             <!-- Source Citations -->

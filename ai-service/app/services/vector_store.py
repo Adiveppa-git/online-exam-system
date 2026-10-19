@@ -188,9 +188,25 @@ class ChromaVectorStoreManager:
 
         where_filter = {}
         if subject and subject.strip() and subject.lower() != "all":
-            where_filter["subject"] = subject.strip()
+            clean_subj = subject.strip()
+            variants = list(dict.fromkeys([
+                clean_subj,
+                clean_subj.lower(),
+                clean_subj.upper(),
+                clean_subj.title(),
+                clean_subj.capitalize()
+            ]))
+            where_filter["subject"] = {"$in": variants}
         if topic and topic.strip() and topic.lower() != "all":
-            where_filter["topic"] = topic.strip()
+            clean_top = topic.strip()
+            top_variants = list(dict.fromkeys([
+                clean_top,
+                clean_top.lower(),
+                clean_top.upper(),
+                clean_top.title(),
+                clean_top.capitalize()
+            ]))
+            where_filter["topic"] = {"$in": top_variants}
 
         if len(where_filter) == 0:
             filter_arg = None
@@ -208,8 +224,27 @@ class ChromaVectorStoreManager:
                 n_results=top_k,
                 where=filter_arg
             )
-        except Exception:
-            results = None
+        except Exception as e:
+            logger.warning(f"Chroma query with filter {filter_arg} failed: {e}. Retrying with simple filter fallback...")
+            try:
+                simple_filter = {}
+                if subject and subject.strip() and subject.lower() != "all":
+                    simple_filter["subject"] = subject.strip()
+                if topic and topic.strip() and topic.lower() != "all":
+                    simple_filter["topic"] = topic.strip()
+                fallback_arg = None
+                if len(simple_filter) == 1:
+                    fallback_arg = simple_filter
+                elif len(simple_filter) > 1:
+                    fallback_arg = {"$and": [{k: v} for k, v in simple_filter.items()]}
+                results = self.collection.query(
+                    query_embeddings=[query_emb],
+                    n_results=top_k,
+                    where=fallback_arg
+                )
+            except Exception as e2:
+                logger.error(f"Fallback Chroma query also failed: {e2}")
+                results = None
 
         output_chunks: List[Dict[str, Any]] = []
 
@@ -366,11 +401,11 @@ class PgVectorStoreManager:
         params = [vec_str]
 
         if subject and subject.strip() and subject.lower() != "all":
-            where_conditions.append("d.subject = %s")
+            where_conditions.append("LOWER(TRIM(d.subject)) = LOWER(%s)")
             params.append(subject.strip())
 
         if topic and topic.strip() and topic.lower() != "all":
-            where_conditions.append("d.topic = %s")
+            where_conditions.append("LOWER(TRIM(d.topic)) = LOWER(%s)")
             params.append(topic.strip())
 
         where_clause = ""

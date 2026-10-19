@@ -119,3 +119,78 @@ if (!function_exists('is_question_duplicate')) {
     }
 }
 
+if (!function_exists('render_chat_markdown')) {
+    /**
+     * Renders Markdown text safely in the AI chat window.
+     * All raw text is HTML-escaped to prevent XSS.
+     * Supports bold (**text**), italic (*text*), inline code (`code`),
+     * bullet lists (- or *), and clean line/paragraph breaks.
+     *
+     * @param string|null $text
+     * @return string
+     */
+    function render_chat_markdown(?string $text): string {
+        if ($text === null || trim($text) === '') {
+            return '';
+        }
+
+        $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", $text));
+        $html = [];
+        $inList = false;
+
+        $formatInline = function(string $str): string {
+            $str = htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
+            // Inline code: `code`
+            $str = preg_replace('/`([^`]+)`/', '<code class="bg-light text-danger px-1 rounded border" style="font-size:0.9em;">$1</code>', $str);
+            // Bold: **text**
+            $str = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $str);
+            // Italic: *text*
+            $str = preg_replace('/(?<!\*)\*([^*]+)\*(?!\*)/', '<em>$1</em>', $str);
+            return $str;
+        };
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+
+            if ($trimmed === '') {
+                if ($inList) {
+                    $html[] = '</ul>';
+                    $inList = false;
+                }
+                $html[] = '<div class="my-2"></div>';
+                continue;
+            }
+
+            // Bullet list: starts with "- " or "* "
+            if (preg_match('/^[-*]\s+(.*)$/', $trimmed, $m)) {
+                if (!$inList) {
+                    $html[] = '<ul class="mb-2 ps-3">';
+                    $inList = true;
+                }
+                $html[] = '<li class="mb-1">' . $formatInline($m[1]) . '</li>';
+                continue;
+            }
+
+            // End list if a non-bullet line is encountered
+            if ($inList) {
+                $html[] = '</ul>';
+                $inList = false;
+            }
+
+            // Header line: ### or ##
+            if (preg_match('/^#{1,3}\s+(.*)$/', $trimmed, $m)) {
+                $html[] = '<div class="fw-bold text-dark mt-2 mb-1">' . $formatInline($m[1]) . '</div>';
+                continue;
+            }
+
+            $html[] = '<div>' . $formatInline($trimmed) . '</div>';
+        }
+
+        if ($inList) {
+            $html[] = '</ul>';
+        }
+
+        return implode("\n", $html);
+    }
+}
+
