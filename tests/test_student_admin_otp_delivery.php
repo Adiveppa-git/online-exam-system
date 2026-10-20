@@ -434,6 +434,74 @@ assertCondition(
     "Admin password remains intact after student operations"
 );
 
+// 21. 'Request new OTP' on verify_reset_otp.php dispatches actual email to registered account
+$resReqNew = runScriptIsolated('auth/verify_reset_otp.php', [
+    'reset_email' => $studentEmail,
+    'reset_account' => $stAccount,
+    'otp_attempts_' . md5(strtolower($studentEmail)) => 3,
+    'last_otp_time_' . md5(strtolower($studentEmail)) => time() - 100 // past cooldown
+], [
+    'resend_otp' => '1'
+], true, true);
+
+$capturedResendTo = $resReqNew['mail']['to'] ?? null;
+$chkResendDb = $conn->query("SELECT reset_otp, otp_expiry FROM users WHERE id = {$studentUserId}")->fetch_assoc();
+assertCondition(
+    "21. 'Request new OTP' action sends fresh OTP directly to student's registered email",
+    $capturedResendTo === $studentEmail && !empty($chkResendDb['reset_otp']) && strlen($chkResendDb['reset_otp']) === 6,
+    "New OTP delivered to: {$capturedResendTo}"
+);
+
+// 22. 'Request new OTP' respects cooldown rate limit
+$resReqCooldown = runScriptIsolated('auth/verify_reset_otp.php', [
+    'reset_email' => $studentEmail,
+    'reset_account' => $stAccount,
+    'last_otp_time_' . md5(strtolower($studentEmail)) => time() - 10 // only 10s ago
+], [
+    'resend_otp' => '1'
+], true, true);
+
+assertCondition(
+    "22. 'Request new OTP' action enforces cooldown rate limit",
+    strpos($resReqCooldown['stdout'], "Please wait") !== false,
+    "Cooldown message displayed to prevent email spam"
+);
+
+// 23. Ambiguity / Duplicate Email Detection
+$duplicateTestEmail = "duplicate_detect_" . uniqid() . "@example.com";
+$conn->query("CREATE TABLE IF NOT EXISTS tbl_admin (id INT AUTO_INCREMENT PRIMARY KEY, admin_email VARCHAR(100), password VARCHAR(255), reset_otp VARCHAR(6), otp_expiry DATETIME)");
+$conn->query("INSERT INTO tbl_admin (admin_email, password) VALUES ('{$duplicateTestEmail}', 'passAdmin')");
+
+$conn->query("INSERT INTO users (name, email, password, role) VALUES ('Dup Student 1', '{$duplicateTestEmail}', 'pass1', 'student')");
+$dupId1 = $conn->insert_id;
+
+getDatabaseTables($conn, true); // force refresh tables cache
+getTableColumns($conn, 'tbl_admin', true);
+
+$ambigAccount = findAccountForPasswordReset($conn, $duplicateTestEmail);
+assertCondition(
+    "23. Duplicate emails across account types detected as ambiguous and safely halted",
+    $ambigAccount !== null && !empty($ambigAccount['ambiguous']),
+    "Ambiguity flag prevents resetting the wrong account"
+);
+$conn->query("DELETE FROM users WHERE id = {$dupId1}");
+$conn->query("DROP TABLE IF EXISTS tbl_admin");
+getDatabaseTables($conn, true);
+
+// 24. Verify CSS & Markup Standards on auth/verify_reset_otp.php
+$verifyHtml = file_get_contents(__DIR__ . '/../auth/verify_reset_otp.php');
+$hasAccessibleFocus = strpos($verifyHtml, 'outline: none !important') !== false && strpos($verifyHtml, 'box-shadow:') !== false;
+$hasUnifiedInputHeight = strpos($verifyHtml, 'height: 46px') !== false;
+$hasFullWidthButton = strpos($verifyHtml, 'width: 100%') !== false;
+$hasAlignedEye = strpos($verifyHtml, 'transform: translateY(-50%)') !== false && strpos($verifyHtml, 'toggle-eye') !== false;
+$hasResponsiveBox = strpos($verifyHtml, '@media (max-width: 480px)') !== false;
+
+assertCondition(
+    "24. auth/verify_reset_otp.php CSS satisfies accessibility, alignment, and responsiveness standards",
+    $hasAccessibleFocus && $hasUnifiedInputHeight && $hasFullWidthButton && $hasAlignedEye && $hasResponsiveBox,
+    "Accessible focus outline, unified 46px inputs, aligned eye icon, and responsive card verified"
+);
+
 // Clean up fixtures
 cleanupUserByEmail($conn, $studentEmail);
 cleanupUserByEmail($conn, $adminEmail);

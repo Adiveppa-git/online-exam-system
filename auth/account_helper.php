@@ -19,9 +19,9 @@ if (!defined('OTP_MAX_VERIFICATION_ATTEMPTS')) {
  * @param mysqli|object $conn
  * @return array List of lowercase table names
  */
-function getDatabaseTables($conn): array {
+function getDatabaseTables($conn, bool $forceRefresh = false): array {
     static $cachedTables = null;
-    if ($cachedTables !== null) {
+    if ($cachedTables !== null && !$forceRefresh) {
         return $cachedTables;
     }
 
@@ -48,12 +48,13 @@ function getDatabaseTables($conn): array {
  *
  * @param mysqli|object $conn
  * @param string $tableName
+ * @param bool $forceRefresh
  * @return array Map of lowercase column name => actual column name
  */
-function getTableColumns($conn, string $tableName): array {
+function getTableColumns($conn, string $tableName, bool $forceRefresh = false): array {
     static $cache = [];
     $tLower = strtolower($tableName);
-    if (isset($cache[$tLower])) {
+    if (isset($cache[$tLower]) && !$forceRefresh) {
         return $cache[$tLower];
     }
 
@@ -95,21 +96,22 @@ function findAccountForPasswordReset($conn, string $email): ?array {
     }
 
     $tables = getDatabaseTables($conn);
+    $matches = [];
 
     // 1. Unified users table (primary schema for Online Examination System)
     if (in_array('users', $tables, true)) {
         $cols = getTableColumns($conn, 'users');
         $emailCol = $cols['email'] ?? null;
         if ($emailCol) {
-            $stmt = $conn->prepare("SELECT * FROM users WHERE LOWER(TRIM({$emailCol})) = ? LIMIT 1");
+            $stmt = $conn->prepare("SELECT * FROM users WHERE LOWER(TRIM({$emailCol})) = ?");
             if ($stmt) {
                 $stmt->bind_param("s", $cleanEmail);
                 $stmt->execute();
                 $res = $stmt->get_result();
-                if ($res && $row = $res->fetch_assoc()) {
+                while ($res && $row = $res->fetch_assoc()) {
                     $rawRole = strtolower(trim($row['role'] ?? 'student'));
                     $role = ($rawRole === 'admin') ? 'admin' : 'student';
-                    return [
+                    $matches[] = [
                         'found' => true,
                         'table' => 'users',
                         'id' => (int)$row['id'],
@@ -134,13 +136,13 @@ function findAccountForPasswordReset($conn, string $email): ?array {
             $cols = getTableColumns($conn, $at);
             $emailCol = $cols['email'] ?? ($cols['admin_email'] ?? null);
             if ($emailCol) {
-                $stmt = $conn->prepare("SELECT * FROM `{$at}` WHERE LOWER(TRIM({$emailCol})) = ? LIMIT 1");
+                $stmt = $conn->prepare("SELECT * FROM `{$at}` WHERE LOWER(TRIM({$emailCol})) = ?");
                 if ($stmt) {
                     $stmt->bind_param("s", $cleanEmail);
                     $stmt->execute();
                     $res = $stmt->get_result();
-                    if ($res && $row = $res->fetch_assoc()) {
-                        return [
+                    while ($res && $row = $res->fetch_assoc()) {
+                        $matches[] = [
                             'found' => true,
                             'table' => $at,
                             'id' => (int)($row['id'] ?? $row['admin_id'] ?? 0),
@@ -166,13 +168,13 @@ function findAccountForPasswordReset($conn, string $email): ?array {
             $cols = getTableColumns($conn, $st);
             $emailCol = $cols['email'] ?? ($cols['student_email'] ?? null);
             if ($emailCol) {
-                $stmt = $conn->prepare("SELECT * FROM `{$st}` WHERE LOWER(TRIM({$emailCol})) = ? LIMIT 1");
+                $stmt = $conn->prepare("SELECT * FROM `{$st}` WHERE LOWER(TRIM({$emailCol})) = ?");
                 if ($stmt) {
                     $stmt->bind_param("s", $cleanEmail);
                     $stmt->execute();
                     $res = $stmt->get_result();
-                    if ($res && $row = $res->fetch_assoc()) {
-                        return [
+                    while ($res && $row = $res->fetch_assoc()) {
+                        $matches[] = [
                             'found' => true,
                             'table' => $st,
                             'id' => (int)($row['id'] ?? $row['student_id'] ?? 0),
@@ -191,7 +193,27 @@ function findAccountForPasswordReset($conn, string $email): ?array {
         }
     }
 
-    return null;
+    if (empty($matches)) {
+        return null;
+    }
+
+    // Check for duplicate accounts or ambiguity across roles / tables
+    if (count($matches) > 1) {
+        $distinctRoles = array_unique(array_column($matches, 'role'));
+        $distinctTables = array_unique(array_column($matches, 'table'));
+        $distinctIds = array_unique(array_column($matches, 'id'));
+
+        if (count($distinctRoles) > 1 || count($distinctTables) > 1 || count($distinctIds) > 1) {
+            error_log("[SECURITY ALERT] Ambiguous account lookup: multiple distinct accounts matched email " . substr($cleanEmail, 0, 3) . "***");
+            return [
+                'found' => false,
+                'ambiguous' => true,
+                'error' => 'Multiple conflicting accounts found for this email address. Please contact an administrator.'
+            ];
+        }
+    }
+
+    return $matches[0];
 }
 
 /**

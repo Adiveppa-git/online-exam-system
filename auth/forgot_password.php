@@ -35,7 +35,9 @@ if (isset($_POST['send_otp'])) {
         /* DYNAMIC ACCOUNT LOOKUP (STUDENT OR ADMIN) */
         $account = findAccountForPasswordReset($conn, $email);
 
-        if ($account && !empty($account['email'])) {
+        if ($account && !empty($account['ambiguous'])) {
+            $msg = "❌ " . ($account['error'] ?? "Multiple conflicting accounts found. Please contact administrator.");
+        } elseif ($account && !empty($account['email'])) {
             $registeredEmail = $account['email'];
             $lastSendKey = 'last_otp_time_' . md5($registeredEmail);
 
@@ -96,13 +98,84 @@ if (isset($_POST['send_otp'])) {
 <link rel="stylesheet" href="../assets/css/style.css">
 
 <style>
-
-/* CENTER LARGE SCREEN */
-
-.login-box{
-    width:500px;
+/* Responsive layout & center container */
+.center-screen {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px 15px;
+    box-sizing: border-box;
+    background: #f4f6f9;
 }
 
+.login-box {
+    width: 100%;
+    max-width: 480px;
+    background: #ffffff;
+    padding: 35px 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+    box-sizing: border-box;
+}
+
+.login-box input[type="email"] {
+    width: 100%;
+    height: 46px;
+    padding: 11px 14px;
+    margin-top: 6px;
+    margin-bottom: 16px;
+    font-size: 15px;
+    font-family: inherit;
+    color: #212529;
+    background-color: #ffffff;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.login-box input[type="email"]:focus {
+    outline: none !important;
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.login-box button[name="send_otp"] {
+    width: 100%;
+    height: 46px;
+    background-color: #0d6efd;
+    color: #ffffff;
+    border: 1px solid #0d6efd;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 6px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.login-box button[name="send_otp"]:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+.login-box button[name="send_otp"]:focus {
+    outline: none !important;
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.35);
+}
+
+@media (max-width: 480px) {
+    .login-box {
+        padding: 26px 18px;
+    }
+}
 </style>
 
 </head>
