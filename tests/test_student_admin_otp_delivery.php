@@ -496,18 +496,22 @@ $hasFullWidthButton = strpos($verifyHtml, 'width: 100%') !== false;
 $hasAlignedEye = strpos($verifyHtml, 'transform: translateY(-50%)') !== false && strpos($verifyHtml, 'toggle-eye') !== false;
 $hasResponsiveBox = strpos($verifyHtml, '@media (max-width: 480px)') !== false;
 
-// Task 2 footer layout checks:
+// Task 2 footer layout & hover styling checks:
 $hasFlexFooter = strpos($verifyHtml, 'display: flex') !== false && strpos($verifyHtml, 'justify-content: space-between') !== false;
 $hasLeftAlignedResend = strpos($verifyHtml, '.nav-left') !== false && strpos($verifyHtml, 'justify-content: flex-start') !== false;
 $hasRightAlignedLogin = strpos($verifyHtml, '.nav-right') !== false && strpos($verifyHtml, 'justify-content: flex-end') !== false;
 $hasCenteredBullet = strpos($verifyHtml, '&bull;') !== false && strpos($verifyHtml, '.divider') !== false;
 $hasClickableFooterLinks = strpos($verifyHtml, 'id="btnResendOtp"') !== false && strpos($verifyHtml, 'href="login.php"') !== false;
+$hasTransparentHover = strpos($verifyHtml, 'background: transparent !important') !== false;
+$hasHoverTextColor = strpos($verifyHtml, 'color: #0a58ca !important') !== false;
+$hasActiveStyle = strpos($verifyHtml, '.link-button:active') !== false;
 
 assertCondition(
-    "24. auth/verify_reset_otp.php CSS satisfies accessibility, alignment, responsive footer, and markup standards",
+    "24. auth/verify_reset_otp.php CSS satisfies accessibility, alignment, responsive footer, transparent hover, and markup standards",
     $hasAccessibleFocus && $hasUnifiedInputHeight && $hasFullWidthButton && $hasAlignedEye && $hasResponsiveBox &&
-    $hasFlexFooter && $hasLeftAlignedResend && $hasRightAlignedLogin && $hasCenteredBullet && $hasClickableFooterLinks,
-    "Footer layout (left 'Request new OTP' • right 'Back to Login'), accessible focus, 46px inputs, aligned eye icon verified"
+    $hasFlexFooter && $hasLeftAlignedResend && $hasRightAlignedLogin && $hasCenteredBullet && $hasClickableFooterLinks &&
+    $hasTransparentHover && $hasHoverTextColor && $hasActiveStyle,
+    "Footer layout, transparent hover without blue background box, accessible focus, 46px inputs, aligned eye icon verified"
 );
 
 // Clean up fixtures

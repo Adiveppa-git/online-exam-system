@@ -380,33 +380,74 @@ if (isset($_POST['verify'])) {
     padding: 0;
 }
 
+/* Neutralize global .login-box button rules and ensure navigation links stay clean text links */
 .auth-nav-links a,
-.auth-nav-links .link-button {
+.auth-nav-links button,
+.auth-nav-links .link-button,
+.login-box .auth-nav-links a,
+.login-box .auth-nav-links button,
+.login-box .auth-nav-links .link-button {
     color: #0d6efd;
     text-decoration: underline;
     font-weight: 500;
     font-size: 14px;
     font-family: inherit;
-    background: none;
-    border: none;
-    padding: 0;
-    margin: 0;
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    box-shadow: none !important;
+    border-radius: 2px;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
+    line-height: inherit;
     transition: color 0.15s ease;
 }
 
 .auth-nav-links a:hover,
-.auth-nav-links .link-button:hover {
-    color: #0a58ca;
+.auth-nav-links button:hover,
+.auth-nav-links .link-button:hover,
+.login-box .auth-nav-links a:hover,
+.login-box .auth-nav-links button:hover,
+.login-box .auth-nav-links .link-button:hover {
+    color: #0a58ca !important;
+    text-decoration: underline !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
 }
 
 .auth-nav-links a:focus,
-.auth-nav-links .link-button:focus {
-    outline: 2px solid rgba(13, 110, 253, 0.4);
-    outline-offset: 2px;
-    border-radius: 2px;
+.auth-nav-links button:focus,
+.auth-nav-links .link-button:focus,
+.login-box .auth-nav-links a:focus,
+.login-box .auth-nav-links button:focus,
+.login-box .auth-nav-links .link-button:focus {
+    color: #0a58ca !important;
+    text-decoration: underline;
+    background: transparent !important;
+    background-color: transparent !important;
+    outline: 2px solid rgba(13, 110, 253, 0.5) !important;
+    outline-offset: 2px !important;
+    box-shadow: none !important;
+}
+
+.auth-nav-links a:active,
+.auth-nav-links button:active,
+.auth-nav-links .link-button:active,
+.login-box .auth-nav-links a:active,
+.login-box .auth-nav-links button:active,
+.login-box .auth-nav-links .link-button:active {
+    color: #084298 !important;
+    text-decoration: underline;
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
 }
 
 @media (max-width: 360px) {
