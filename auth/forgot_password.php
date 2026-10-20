@@ -4,6 +4,11 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 require_once __DIR__ . "/../config/db.php";
 require_once __DIR__ . "/send_mail.php";
+require_once __DIR__ . "/account_helper.php";
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
 $msg = "";
 
@@ -11,59 +16,70 @@ $msg = "";
 
 if (isset($_POST['send_otp'])) {
 
-    $email = trim($_POST['email']);
+    // CSRF verification if submitted with token from protected browser form
+    if (!empty($_POST['csrf_token'])) {
+        if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+            $msg = "❌ Invalid CSRF security token.";
+        }
+    }
+
+    $email = trim($_POST['email'] ?? '');
 
     /* VALIDATE EMAIL */
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-
+    if (!$msg && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $msg = "❌ Invalid email address";
-
-    } elseif (!isset($conn) || !$conn) {
+    } elseif (!$msg && (!isset($conn) || !$conn)) {
         $msg = "❌ Database service is temporarily unavailable. Please try again later.";
-    } else {
+    } elseif (!$msg) {
 
-        /* CHECK EMAIL EXISTS */
-        $stmt = $conn->prepare("SELECT id FROM users WHERE email=?");
-        $stmt->bind_param("s", $email);
-        $stmt->execute();
-        $res = $stmt->get_result();
+        /* DYNAMIC ACCOUNT LOOKUP (STUDENT OR ADMIN) */
+        $account = findAccountForPasswordReset($conn, $email);
 
-        if ($res->num_rows === 1) {
-            $lastSendKey = 'last_otp_time_' . md5($email);
+        if ($account && !empty($account['email'])) {
+            $registeredEmail = $account['email'];
+            $lastSendKey = 'last_otp_time_' . md5($registeredEmail);
+
             if (isset($_SESSION[$lastSendKey]) && (time() - (int)$_SESSION[$lastSendKey]) < OTP_REQUEST_COOLDOWN_SECONDS) {
                 $msg = "❌ Please wait before requesting another verification code.";
             } else {
-                /* GENERATE OTP */
-                $otp = rand(100000, 999999);
+                /* GENERATE CRYPTOGRAPHICALLY SECURE OTP */
+                $otp = (string)random_int(100000, 999999);
                 $expiry = date("Y-m-d H:i:s", strtotime("+10 minutes"));
 
-                /* SAVE OTP */
-                $stmt = $conn->prepare(
-                    "UPDATE users SET reset_otp=?, otp_expiry=? WHERE email=?"
-                );
+                /* SAVE OTP TO SPECIFIC ACCOUNT RECORD */
+                saveAccountResetOtp($conn, $account, $otp, $expiry);
 
-                $stmt->bind_param("sss", $otp, $expiry, $email);
-                $stmt->execute();
+                /* SEND MAIL TO REGISTERED RECIPIENT */
+                $roleLabel = ($account['role'] === 'admin') ? "Administrator Password Reset" : "Password Reset";
+                $body = buildOtpEmailHtml($roleLabel, $otp, 10);
+                $subject = "Password Reset OTP - Online Examination System";
 
-                /* SEND MAIL */
-                $body = buildOtpEmailHtml("Password Reset", $otp, 10);
-
-                if (sendMail($email, "Password Reset OTP - Online Examination System", $body)) {
-                    $_SESSION['reset_email'] = $email;
+                // Explicitly send to the verified registered account email (never default to admin)
+                if (sendMail($registeredEmail, $subject, $body)) {
+                    $_SESSION['reset_email'] = $registeredEmail;
+                    $_SESSION['reset_account'] = $account;
+                    $_SESSION['mail_sent_success'] = true;
+                    $_SESSION['mail_flash_success'] = true;
                     $_SESSION[$lastSendKey] = time();
-                    $_SESSION['otp_attempts_' . md5($email)] = 0; // Reset verification attempt counter
+                    $_SESSION['otp_attempts_' . md5(strtolower($registeredEmail))] = 0; // Reset verification attempt counter
 
                     if (!headers_sent()) {
                         header("Location: verify_reset_otp.php");
                     }
                     exit;
                 } else {
+                    unset($_SESSION['reset_email']);
+                    unset($_SESSION['reset_account']);
+                    unset($_SESSION['mail_sent_mode']);
+                    unset($_SESSION['mail_sent_success']);
+                    unset($_SESSION['mail_flash_success']);
                     $err = getUserFacingMailError() ?: "Email service is temporarily unavailable. Please try again later.";
                     $msg = "❌ " . $err;
                 }
             }
         } else {
-            $msg = "❌ Email not registered";
+            // Safe response for unknown email address (OWASP User Enumeration Defense)
+            $msg = "ℹ️ If that email address is registered, a password reset verification code has been sent.";
         }
     }
 }
@@ -100,12 +116,13 @@ if (isset($_POST['send_otp'])) {
 <h2>Forgot Password</h2>
 
 <?php if($msg): ?>
-<p style="color:red;font-weight:bold">
-<?= $msg ?>
+<p style="color:<?= (strpos($msg, '❌') !== false) ? 'red' : ((strpos($msg, 'ℹ️') !== false) ? '#0d6efd' : 'green') ?>;font-weight:bold;text-align:center">
+<?= htmlspecialchars($msg) ?>
 </p>
 <?php endif; ?>
 
 <form method="post">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
 
 <input
 type="email"

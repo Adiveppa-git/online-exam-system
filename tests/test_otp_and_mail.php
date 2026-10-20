@@ -518,9 +518,88 @@ runTest("17. New OTP Generation Resets Failed Attempt Counter", function() {
     return true;
 });
 
+// Test 18: Dynamic Account Lookup for Both Student and Admin
+runTest("18. Dynamic Account Lookup for Both Student and Admin", function() use ($conn) {
+    require_once __DIR__ . '/../auth/account_helper.php';
+
+    // Verify existing admin lookup
+    $admin = findAccountForPasswordReset($conn, "mailproject112@gmail.com");
+    if (!$admin || $admin['role'] !== 'admin') {
+        return "Failed to resolve admin account dynamically";
+    }
+
+    // Verify student lookup
+    $student = findAccountForPasswordReset($conn, "admtemp67@gmail.com");
+    if (!$student || $student['role'] !== 'student') {
+        return "Failed to resolve student account dynamically";
+    }
+
+    return true;
+});
+
+// Test 19: Student Password Reset OTP Recipient is Never Admin Email
+runTest("19. Student Password Reset OTP Recipient is Never Admin Email", function() {
+    putenv("MAIL_DRIVER=smtp");
+    putenv("SMTP_HOST=smtp.gmail.com");
+    putenv("SMTP_USERNAME=mailproject112@gmail.com");
+    putenv("SMTP_PASSWORD=mock_pass");
+
+    $studentTarget = "student_specific_mailbox@university.edu";
+    $capturedRecipient = null;
+
+    setSmtpHandler(function($to) use (&$capturedRecipient) {
+        $capturedRecipient = $to;
+        return true;
+    });
+
+    $otp = rand(100000, 999999);
+    $body = buildOtpEmailHtml("Password Reset", $otp, 10);
+    $sent = sendMail($studentTarget, "Password Reset OTP - Online Examination System", $body);
+    setSmtpHandler(null);
+
+    if (!$sent) return "sendMail failed for student recipient";
+    if ($capturedRecipient === "mailproject112@gmail.com") {
+        return "Security Failure: Student OTP was incorrectly routed to admin email";
+    }
+    if ($capturedRecipient !== $studentTarget) {
+        return "Expected student recipient {$studentTarget} but got {$capturedRecipient}";
+    }
+
+    return true;
+});
+
+// Test 20: Admin Password Reset OTP Recipient is Admin Registered Email
+runTest("20. Admin Password Reset OTP Recipient is Admin Registered Email", function() {
+    putenv("MAIL_DRIVER=smtp");
+    putenv("SMTP_HOST=smtp.gmail.com");
+    putenv("SMTP_USERNAME=mailproject112@gmail.com");
+    putenv("SMTP_PASSWORD=mock_pass");
+
+    $adminTarget = "admin_director@institution.org";
+    $capturedRecipient = null;
+
+    setSmtpHandler(function($to) use (&$capturedRecipient) {
+        $capturedRecipient = $to;
+        return true;
+    });
+
+    $otp = rand(100000, 999999);
+    $body = buildOtpEmailHtml("Administrator Password Reset", $otp, 10);
+    $sent = sendMail($adminTarget, "Password Reset OTP - Online Examination System", $body);
+    setSmtpHandler(null);
+
+    if (!$sent) return "sendMail failed for admin recipient";
+    if ($capturedRecipient !== $adminTarget) {
+        return "Expected admin recipient {$adminTarget} but got {$capturedRecipient}";
+    }
+
+    return true;
+});
+
 echo "\n----------------------------------------------------\n";
 echo "Summary: $passed Passed, $failed Failed\n";
 echo "====================================================\n";
 
 if ($failed > 0) exit(1);
+
 

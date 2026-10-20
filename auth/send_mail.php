@@ -124,7 +124,25 @@ function buildOtpEmailHtml($purpose, $otp, $expiryMinutes = 10)
  */
 function sendMail($to, $subject, $body)
 {
+    $to = trim((string)$to);
     $GLOBALS['last_mail_error'] = null;
+
+    if (session_status() === PHP_SESSION_ACTIVE || (session_status() === PHP_SESSION_NONE && !headers_sent())) {
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+            @session_start();
+        }
+        if (isset($_SESSION)) {
+            unset($_SESSION['mail_sent_mode']);
+            unset($_SESSION['mail_sent_success']);
+        }
+    }
+
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        $GLOBALS['last_mail_error'] = "Invalid recipient email address.";
+        error_log("[MAIL ERROR] Invalid recipient email address: " . substr($to, 0, 50));
+        return false;
+    }
+
     $driver = strtolower(getenv('MAIL_DRIVER') ?: 'auto');
     $appEnv = strtolower(getenv('APP_ENV') ?: 'development');
 
@@ -235,8 +253,13 @@ function sendBrevoMail($to, $subject, $body)
                 $_SESSION = [];
             }
             $_SESSION['mail_sent_mode'] = 'real';
+            $_SESSION['mail_sent_success'] = true;
             return true;
         } else {
+            if (isset($_SESSION)) {
+                unset($_SESSION['mail_sent_mode']);
+                unset($_SESSION['mail_sent_success']);
+            }
             $GLOBALS['last_mail_error'] = "Brevo API delivery failed with HTTP status code: " . $httpCode;
             error_log("[MAIL ERROR] Brevo API delivery failed with HTTP status code: " . $httpCode);
             return false;
@@ -254,6 +277,10 @@ function sendBrevoMail($to, $subject, $body)
     $response = curl_exec($ch);
 
     if (curl_errno($ch)) {
+        if (isset($_SESSION)) {
+            unset($_SESSION['mail_sent_mode']);
+            unset($_SESSION['mail_sent_success']);
+        }
         $GLOBALS['last_mail_error'] = "Brevo cURL network error: " . curl_error($ch);
         error_log("[MAIL ERROR] Brevo cURL network error: " . curl_error($ch));
         curl_close($ch);
@@ -271,8 +298,13 @@ function sendBrevoMail($to, $subject, $body)
             $_SESSION = [];
         }
         $_SESSION['mail_sent_mode'] = 'real';
+        $_SESSION['mail_sent_success'] = true;
         return true;
     } else {
+        if (isset($_SESSION)) {
+            unset($_SESSION['mail_sent_mode']);
+            unset($_SESSION['mail_sent_success']);
+        }
         $sanitizedResponse = substr(strip_tags($response ?? ''), 0, 200);
         $GLOBALS['last_mail_error'] = "Brevo API delivery failed (HTTP " . $httpCode . "): " . $sanitizedResponse;
         error_log("[MAIL ERROR] Brevo API delivery failed with HTTP status code: " . $httpCode . " Summary: " . $sanitizedResponse);
@@ -339,7 +371,12 @@ function sendSmtpMail($to, $subject, $body)
                     $_SESSION = [];
                 }
                 $_SESSION['mail_sent_mode'] = 'real';
+                $_SESSION['mail_sent_success'] = true;
                 return true;
+            }
+            if (isset($_SESSION)) {
+                unset($_SESSION['mail_sent_mode']);
+                unset($_SESSION['mail_sent_success']);
             }
             $GLOBALS['last_mail_error'] = "SMTP mock delivery returned false.";
             return false;
@@ -354,7 +391,12 @@ function sendSmtpMail($to, $subject, $body)
                     $_SESSION = [];
                 }
                 $_SESSION['mail_sent_mode'] = 'real';
+                $_SESSION['mail_sent_success'] = true;
                 return true;
+            }
+            if (isset($_SESSION)) {
+                unset($_SESSION['mail_sent_mode']);
+                unset($_SESSION['mail_sent_success']);
             }
             if (!empty($mockRes['error'])) {
                 $GLOBALS['last_mail_error'] = "SMTP mock error: " . $mockRes['error'];
@@ -362,10 +404,18 @@ function sendSmtpMail($to, $subject, $body)
             }
             return false;
         }
+        if (isset($_SESSION)) {
+            unset($_SESSION['mail_sent_mode']);
+            unset($_SESSION['mail_sent_success']);
+        }
         return false;
     }
 
     if (!class_exists('PHPMailer\PHPMailer\PHPMailer')) {
+        if (isset($_SESSION)) {
+            unset($_SESSION['mail_sent_mode']);
+            unset($_SESSION['mail_sent_success']);
+        }
         $GLOBALS['last_mail_error'] = "PHPMailer class unavailable on server.";
         error_log("[MAIL ERROR] PHPMailer class unavailable.");
         return false;
@@ -411,14 +461,23 @@ function sendSmtpMail($to, $subject, $body)
             $_SESSION = [];
         }
         $_SESSION['mail_sent_mode'] = 'real';
+        $_SESSION['mail_sent_success'] = true;
         return true;
     } catch (\PHPMailer\PHPMailer\Exception $e) {
+        if (isset($_SESSION)) {
+            unset($_SESSION['mail_sent_mode']);
+            unset($_SESSION['mail_sent_success']);
+        }
         $cleanError = str_replace([$password, $username], ['***', '***'], $e->getMessage());
         $cleanError = substr(strip_tags($cleanError), 0, 200);
         $GLOBALS['last_mail_error'] = "Gmail SMTP delivery failed: " . $cleanError;
         error_log("[MAIL ERROR] PHPMailer SMTP delivery failed: " . $cleanError);
         return false;
     } catch (Throwable $e) {
+        if (isset($_SESSION)) {
+            unset($_SESSION['mail_sent_mode']);
+            unset($_SESSION['mail_sent_success']);
+        }
         $cleanError = str_replace([$password, $username], ['***', '***'], $e->getMessage());
         $cleanError = substr(strip_tags($cleanError), 0, 200);
         $GLOBALS['last_mail_error'] = "Unexpected SMTP delivery failure: " . $cleanError;
@@ -460,6 +519,7 @@ function sendDevLogMail($to, $subject, $body)
         if (session_status() === PHP_SESSION_ACTIVE) {
             $_SESSION['dev_last_otp'] = $otp;
             $_SESSION['mail_sent_mode'] = 'log';
+            $_SESSION['mail_sent_success'] = true;
         }
     }
 

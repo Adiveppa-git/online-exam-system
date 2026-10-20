@@ -4,6 +4,11 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 require_once __DIR__ . "/../config/db.php";
 require_once __DIR__ . "/send_mail.php";
+require_once __DIR__ . "/account_helper.php";
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
 /* ===== AUTH CHECK ===== */
 if (!isset($_SESSION['reset_email'])) {
@@ -28,10 +33,19 @@ if (!isset($conn) || !$conn) {
 /* ===== VERIFY OTP ===== */
 if (isset($_POST['verify'])) {
 
+    // CSRF verification if submitted with token from protected browser form
+    if (!empty($_POST['csrf_token'])) {
+        if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+            $msg = "Invalid CSRF security token.";
+        }
+    }
+
     $otp     = trim($_POST['otp'] ?? '');
     $newPass = $_POST['password'] ?? '';
 
-    if (!isset($conn) || !$conn) {
+    if ($msg) {
+        // CSRF validation error already captured
+    } elseif (!isset($conn) || !$conn) {
         $msg = "Database service is temporarily unavailable. Please try again later.";
     } elseif ((int)$_SESSION[$attemptKey] >= OTP_MAX_VERIFICATION_ATTEMPTS) {
         $msg = "Too many failed verification attempts. Please request a new OTP.";
@@ -39,28 +53,39 @@ if (isset($_POST['verify'])) {
         $msg = "Password must be 8 to 15 characters";
     } else {
         try {
-            $stmt = $conn->prepare("
-                SELECT reset_otp, otp_expiry
-                FROM users
-                WHERE email=?
-            ");
-            if (!$stmt) {
-                throw new Exception("Failed to prepare statement");
+            $account = isset($_SESSION['reset_account']) ? $_SESSION['reset_account'] : findAccountForPasswordReset($conn, $email);
+
+            $res = null;
+            if ($account) {
+                $res = getAccountResetOtp($conn, $account);
+            } else {
+                $stmt = $conn->prepare("
+                    SELECT reset_otp, otp_expiry
+                    FROM users
+                    WHERE email=?
+                ");
+                if (!$stmt) {
+                    throw new Exception("Failed to prepare statement");
+                }
+                $stmt->bind_param("s", $email);
+                $stmt->execute();
+                $res = $stmt->get_result()->fetch_assoc();
             }
-            $stmt->bind_param("s", $email);
-            $stmt->execute();
-            $res = $stmt->get_result()->fetch_assoc();
 
             if (!$res || empty($res['reset_otp'])) {
                 $msg = "Verification code has expired. Please request a new one.";
             } elseif ($res['reset_otp'] !== $otp) {
                 $_SESSION[$attemptKey] = (int)$_SESSION[$attemptKey] + 1;
                 if ($_SESSION[$attemptKey] >= OTP_MAX_VERIFICATION_ATTEMPTS) {
-                    // Invalidate current OTP upon reaching attempt limit
-                    $clearStmt = $conn->prepare("UPDATE users SET reset_otp=NULL, otp_expiry=NULL WHERE email=?");
-                    if ($clearStmt) {
-                        $clearStmt->bind_param("s", $email);
-                        $clearStmt->execute();
+                    // Invalidate current OTP upon reaching attempt limit (lockout)
+                    if ($account) {
+                        clearAccountResetOtp($conn, $account);
+                    } else {
+                        $clearStmt = $conn->prepare("UPDATE users SET reset_otp=NULL, otp_expiry=NULL WHERE email=?");
+                        if ($clearStmt) {
+                            $clearStmt->bind_param("s", $email);
+                            $clearStmt->execute();
+                        }
                     }
                     $msg = "Too many failed verification attempts. Please request a new OTP.";
                 } else {
@@ -72,19 +97,32 @@ if (isset($_POST['verify'])) {
 
                 $hashed = password_hash($newPass, PASSWORD_DEFAULT);
 
-                $update = $conn->prepare("
-                    UPDATE users
-                    SET password=?, reset_otp=NULL, otp_expiry=NULL
-                    WHERE email=?
-                ");
-                if (!$update) {
-                    throw new Exception("Failed to prepare update statement");
+                $updated = false;
+                if ($account) {
+                    $updated = resetAccountPassword($conn, $account, $hashed);
+                } else {
+                    $update = $conn->prepare("
+                        UPDATE users
+                        SET password=?, reset_otp=NULL, otp_expiry=NULL
+                        WHERE email=?
+                    ");
+                    if (!$update) {
+                        throw new Exception("Failed to prepare update statement");
+                    }
+                    $update->bind_param("ss", $hashed, $email);
+                    $updated = $update->execute();
                 }
-                $update->bind_param("ss", $hashed, $email);
-                $update->execute();
+
+                if (!$updated) {
+                    throw new Exception("Failed to execute password update statement");
+                }
 
                 unset($_SESSION[$attemptKey]);
                 unset($_SESSION['reset_email']);
+                unset($_SESSION['reset_account']);
+                unset($_SESSION['mail_sent_mode']);
+                unset($_SESSION['mail_sent_success']);
+                unset($_SESSION['mail_flash_success']);
                 if (!headers_sent()) {
                     header("Location: login.php");
                 }
@@ -140,17 +178,18 @@ strong{color:green;}
 <p style="color:red;font-weight:bold"><?= $msg ?></p>
 <?php endif; ?>
 
-<?php if (isset($_SESSION['mail_sent_mode']) && $_SESSION['mail_sent_mode'] === 'real'): ?>
+<?php if (!empty($_SESSION['mail_sent_success']) && isset($_SESSION['mail_sent_mode']) && $_SESSION['mail_sent_mode'] === 'real'): ?>
 <p style="font-size:13px;color:green;text-align:center;margin-bottom:12px">
     <i class="fa-solid fa-paper-plane"></i> OTP sent successfully to your email address.
 </p>
-<?php elseif (isset($_SESSION['mail_sent_mode']) && $_SESSION['mail_sent_mode'] === 'log'): ?>
+<?php elseif (!empty($_SESSION['mail_sent_success']) && isset($_SESSION['mail_sent_mode']) && $_SESSION['mail_sent_mode'] === 'log'): ?>
 <p style="font-size:12px;color:#666;text-align:center;margin-bottom:12px">
     <i class="fa-solid fa-bug"></i> <strong>Dev Mode Notice:</strong> OTP has been logged to <code>logs/mail.log</code>
 </p>
 <?php endif; ?>
 
 <form method="post">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
 
 <input type="text"
 name="otp"
@@ -184,6 +223,11 @@ Reset Password
 </button>
 
 </form>
+
+<p style="text-align:center;margin-top:15px">
+<a href="forgot_password.php" style="color:#0d6efd;font-size:14px">Request new OTP</a> &bull;
+<a href="login.php" style="color:#0d6efd;font-size:14px">Back to Login</a>
+</p>
 
 </div>
 
