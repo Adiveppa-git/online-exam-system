@@ -5,6 +5,10 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/text_helpers.php';
 require_once __DIR__ . '/../config/ai_client.php';
@@ -72,7 +76,7 @@ $history = [];
 
 // 1. Official exam answers
 $sql_exams = "SELECT sa.question_id, sa.answer AS student_answer, q.subject,
-                     COALESCE(NULLIF(TRIM(q.topic), ''), 'Core Principles') AS topic, q.difficulty,
+                     TRIM(q.topic) AS topic, q.difficulty,
                      (TRIM(sa.answer) = TRIM(q.correct_option)) AS is_correct, r.taken_at AS attempt_time
               FROM student_answers sa
               JOIN questions q ON sa.question_id = q.id
@@ -88,7 +92,7 @@ if ($stmt) {
     while ($row = $res1->fetch_assoc()) {
         $history[] = [
             'subject' => $row['subject'] ?? 'General',
-            'topic' => $row['topic'] ?? 'General',
+            'topic' => $row['topic'] ?? '',
             'difficulty' => $row['difficulty'] ?? 'medium',
             'is_correct' => (bool)$row['is_correct'],
             'correct' => (bool)$row['is_correct'],
@@ -99,7 +103,7 @@ if ($stmt) {
 
 // 2. Practice session answers
 $sql_practice = "SELECT pa.subject,
-                     COALESCE(NULLIF(TRIM(pa.topic), ''), 'Core Principles') AS topic, pa.difficulty, pa.is_correct, pa.created_at AS attempt_time
+                     TRIM(pa.topic) AS topic, pa.difficulty, pa.is_correct, pa.created_at AS attempt_time
                 FROM ai_practice_answers pa
                 JOIN ai_practice_sessions ps ON pa.session_id = ps.id
                 WHERE pa.student_id = ? AND ps.status = 'completed'
@@ -113,7 +117,7 @@ if ($stmt_p) {
     while ($row = $res2->fetch_assoc()) {
         $history[] = [
             'subject' => $row['subject'] ?? 'General',
-            'topic' => $row['topic'] ?? 'General',
+            'topic' => $row['topic'] ?? '',
             'difficulty' => $row['difficulty'] ?? 'medium',
             'is_correct' => (bool)$row['is_correct'],
             'correct' => (bool)$row['is_correct'],
@@ -125,8 +129,12 @@ if ($stmt_p) {
 $question_input = "";
 $error_message = "";
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['question'])) {
-    $question_input = trim($_POST['question']);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $submitted_token = $_POST['csrf_token'] ?? '';
+    if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $submitted_token)) {
+        $error_message = "Invalid CSRF security token.";
+    } elseif (!empty($_POST['question'])) {
+        $question_input = trim($_POST['question']);
 
     // Authoritative dynamic subject resolution from database exams, titles, aliases, or query
     $resolution = SubjectResolver::resolve($conn, $question_input);
@@ -165,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['question'])) {
             subject: $resolvedSubject,
             topic: $topic,
             topK: 5,
-            threshold: 0.65,
+            threshold: null,
             studentId: $user_id,
             history: $history,
             userContext: $callUserContext,
@@ -189,6 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['question'])) {
             $error_message = $res['message'] ?? "The AI Assistant is currently unavailable. Please check that the AI service is running.";
         }
     }
+}
 }
 ?>
 <!DOCTYPE html>
@@ -342,6 +351,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['question'])) {
         <!-- Question Input Card -->
         <div class="chat-card shadow-sm p-4">
             <form method="POST" action="">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                 <div class="mb-3">
                     <label class="form-label fw-semibold text-dark">Your Message</label>
                     <textarea name="question" class="form-control" rows="3" placeholder="Ask me anything about your exams, performance, studies, or the examination system..." required><?= htmlspecialchars($question_input) ?></textarea>

@@ -144,7 +144,7 @@ class SubjectResolver {
     }
 
     /**
-     * Retrieves all authoritative subjects assigned in the system from questions, ai_documents, and ai_generated_questions.
+     * Retrieves all authoritative subjects assigned in the system from questions, ai_documents, ai_generated_questions, and exams.
      */
     public static function getAuthoritativeSubjects(mysqli $conn): array {
         $subjects = [];
@@ -152,7 +152,9 @@ class SubjectResolver {
                 UNION
                 SELECT DISTINCT subject FROM ai_documents WHERE subject IS NOT NULL AND TRIM(subject) != ''
                 UNION
-                SELECT DISTINCT subject FROM ai_generated_questions WHERE status = 'approved' AND subject IS NOT NULL AND TRIM(subject) != ''";
+                SELECT DISTINCT subject FROM ai_generated_questions WHERE status = 'approved' AND subject IS NOT NULL AND TRIM(subject) != ''
+                UNION
+                SELECT DISTINCT title AS subject FROM exams WHERE title IS NOT NULL AND TRIM(title) != ''";
 
         $res = $conn->query($sql);
         if ($res) {
@@ -167,11 +169,11 @@ class SubjectResolver {
     }
 
     /**
-     * Retrieves active exams and their assigned subjects derived from questions and documents.
+     * Retrieves active exams and their assigned subjects derived from questions, documents, and exam titles.
      */
     public static function getActiveExams(mysqli $conn): array {
         $exams = [];
-        $sql = "SELECT e.id, e.title, COALESCE(q.subject, d.subject, g.subject) AS subject
+        $sql = "SELECT e.id, e.title, COALESCE(q.subject, d.subject, g.subject, e.title) AS subject
                 FROM exams e
                 LEFT JOIN (
                     SELECT exam_id, subject FROM questions WHERE subject IS NOT NULL AND TRIM(subject) != '' GROUP BY exam_id
@@ -182,7 +184,6 @@ class SubjectResolver {
                 LEFT JOIN (
                     SELECT exam_id, subject FROM ai_generated_questions WHERE status = 'approved' AND subject IS NOT NULL AND TRIM(subject) != '' GROUP BY exam_id
                 ) g ON e.id = g.exam_id
-                WHERE COALESCE(q.subject, d.subject, g.subject) IS NOT NULL
                 ORDER BY e.id ASC";
 
         $res = $conn->query($sql);
@@ -200,6 +201,8 @@ class SubjectResolver {
 
     /**
      * Retrieves aggregated subject summary and student performance without exposing answer keys.
+     * Evaluates exact figures from the database using a clearly defined policy (latest completed attempt).
+     * Calculates marks percentage and question accuracy separately without conflation.
      */
     public static function getSubjectSummary(mysqli $conn, string $subject, int $studentId): array {
         $cleanSubj = trim($subject);
@@ -207,13 +210,14 @@ class SubjectResolver {
         // 1. Count exams associated with this subject
         $stmt_ex = $conn->prepare("SELECT COUNT(DISTINCT e.id) AS cnt
                                     FROM exams e
-                                    JOIN (
+                                    LEFT JOIN (
                                         SELECT exam_id, subject FROM questions WHERE subject IS NOT NULL AND TRIM(subject) != ''
                                         UNION
                                         SELECT exam_id, subject FROM ai_documents WHERE subject IS NOT NULL AND TRIM(subject) != ''
                                     ) s ON e.id = s.exam_id
-                                    WHERE LOWER(TRIM(s.subject)) = LOWER(?)");
-        $stmt_ex->bind_param("s", $cleanSubj);
+                                    WHERE LOWER(TRIM(COALESCE(s.subject, ''))) = LOWER(?)
+                                       OR LOWER(TRIM(e.title)) = LOWER(?)");
+        $stmt_ex->bind_param("ss", $cleanSubj, $cleanSubj);
         $stmt_ex->execute();
         $examCount = (int)($stmt_ex->get_result()->fetch_assoc()['cnt'] ?? 0);
 
@@ -229,9 +233,9 @@ class SubjectResolver {
         $stmt_ai->execute();
         $approvedAiQuestions = (int)($stmt_ai->get_result()->fetch_assoc()['cnt'] ?? 0);
 
-        // 4. Distinct topics in subject
+        // 4. Distinct topics in subject (only real, non-empty topics; never fabricate placeholders)
         $topics = [];
-        $stmt_top = $conn->prepare("SELECT DISTINCT COALESCE(NULLIF(TRIM(topic), ''), 'Core Principles') AS top FROM questions WHERE LOWER(TRIM(subject)) = LOWER(?)");
+        $stmt_top = $conn->prepare("SELECT DISTINCT TRIM(topic) AS top FROM questions WHERE LOWER(TRIM(subject)) = LOWER(?) AND topic IS NOT NULL AND TRIM(topic) != ''");
         $stmt_top->bind_param("s", $cleanSubj);
         $stmt_top->execute();
         $res_top = $stmt_top->get_result();
@@ -241,17 +245,44 @@ class SubjectResolver {
             }
         }
 
-        // 5. Check indexed course materials
-        $stmt_doc = $conn->prepare("SELECT id, filename, original_name FROM ai_documents WHERE LOWER(TRIM(subject)) = LOWER(?)");
-        $stmt_doc->bind_param("s", $cleanSubj);
+        // 5. Check course materials in database with complete status and chunk metadata
+        $stmt_doc = $conn->prepare("
+            SELECT d.id, d.filename, d.original_name, d.subject, d.topic, d.status, d.error_message, d.total_chunks, d.exam_id, d.created_at
+            FROM ai_documents d
+            LEFT JOIN exams e ON d.exam_id = e.id
+            WHERE LOWER(TRIM(d.subject)) = LOWER(?)
+               OR (d.exam_id IS NOT NULL AND LOWER(TRIM(e.title)) = LOWER(?))
+            ORDER BY d.id DESC
+        ");
+        $stmt_doc->bind_param("ss", $cleanSubj, $cleanSubj);
         $stmt_doc->execute();
         $res_doc = $stmt_doc->get_result();
         $courseMaterials = [];
+        $hasIngestedMaterial = false;
+        $hasFailedMaterial = false;
+        $failedErrors = [];
+
         while ($row = $res_doc->fetch_assoc()) {
+            $docStatus = $row['status'] ?? 'pending';
+            if ($docStatus === 'ingested') {
+                $hasIngestedMaterial = true;
+            } elseif ($docStatus === 'failed') {
+                $hasFailedMaterial = true;
+                if (!empty($row['error_message'])) {
+                    $failedErrors[] = $row['error_message'];
+                }
+            }
             $courseMaterials[] = [
                 'id' => (int)$row['id'],
                 'filename' => $row['filename'],
-                'original_name' => $row['original_name']
+                'original_name' => $row['original_name'],
+                'subject' => $row['subject'],
+                'topic' => $row['topic'],
+                'status' => $docStatus,
+                'error_message' => $row['error_message'],
+                'total_chunks' => (int)($row['total_chunks'] ?? 0),
+                'exam_id' => $row['exam_id'] ? (int)$row['exam_id'] : null,
+                'created_at' => $row['created_at']
             ];
         }
 
@@ -260,73 +291,118 @@ class SubjectResolver {
         // total_marks = total_questions * marks_per_question
         // marks_obtained = correct_answers * marks_per_question
         // percentage = (marks_obtained / total_marks) * 100
-        $studentAttempts = 0;
-        $totalMarksObtained = 0.0;
-        $totalMarksPossible = 0.0;
+        // accuracy = (correct_answers / questions_answered) * 100 (from student_answers)
         $examResults = [];
 
-        $stmt_res = $conn->prepare("SELECT r.id, r.exam_id, r.score AS correct_answers, e.title AS exam_title, e.marks_per_question,
-                                           (SELECT COUNT(*) FROM questions q WHERE q.exam_id = e.id) AS total_questions,
-                                           r.taken_at
-                                    FROM results r
-                                    JOIN exams e ON r.exam_id = e.id
-                                    JOIN (
-                                        SELECT DISTINCT exam_id, subject FROM questions WHERE subject IS NOT NULL AND TRIM(subject) != ''
-                                        UNION
-                                        SELECT DISTINCT exam_id, subject FROM ai_documents WHERE subject IS NOT NULL AND TRIM(subject) != ''
-                                    ) s ON r.exam_id = s.exam_id
-                                    WHERE r.user_id = ? AND LOWER(TRIM(s.subject)) = LOWER(?)
-                                    ORDER BY r.taken_at DESC");
-        $stmt_res->bind_param("is", $studentId, $cleanSubj);
+        $stmt_res = $conn->prepare("
+            SELECT r.id, r.exam_id, r.score AS correct_answers, e.title AS exam_title, e.marks_per_question,
+                   (SELECT COUNT(*) FROM questions q WHERE q.exam_id = e.id) AS total_questions,
+                   r.taken_at
+            FROM results r
+            JOIN exams e ON r.exam_id = e.id
+            LEFT JOIN (
+                SELECT DISTINCT exam_id, subject FROM questions WHERE subject IS NOT NULL AND TRIM(subject) != ''
+                UNION
+                SELECT DISTINCT exam_id, subject FROM ai_documents WHERE subject IS NOT NULL AND TRIM(subject) != ''
+            ) s ON r.exam_id = s.exam_id
+            WHERE r.user_id = ? AND (LOWER(TRIM(COALESCE(s.subject, ''))) = LOWER(?) OR LOWER(TRIM(e.title)) = LOWER(?))
+            ORDER BY r.taken_at DESC, r.id DESC
+        ");
+        $stmt_res->bind_param("iss", $studentId, $cleanSubj, $cleanSubj);
         $stmt_res->execute();
         $res_std = $stmt_res->get_result();
+
         while ($row = $res_std->fetch_assoc()) {
-            $studentAttempts++;
+            $examId = (int)$row['exam_id'];
             $marksPerQ = !empty($row['marks_per_question']) ? (float)$row['marks_per_question'] : 1.0;
             $totalQ = (int)$row['total_questions'];
             $maxM = $totalQ * $marksPerQ;
             $score = (float)$row['correct_answers'] * $marksPerQ;
-
-            $totalMarksObtained += $score;
-            $totalMarksPossible += $maxM;
             $pct = ($maxM > 0) ? round(($score / $maxM) * 100, 2) : 0.0;
 
+            // Fetch actual answered questions count and correct count from student_answers
+            $answeredCount = 0;
+            $correctAnsweredCount = 0;
+            $stmt_ans = $conn->prepare("
+                SELECT COUNT(*) AS answered_count,
+                       SUM(CASE WHEN TRIM(sa.answer) = TRIM(q.correct_option) THEN 1 ELSE 0 END) AS correct_count
+                FROM student_answers sa
+                JOIN questions q ON sa.question_id = q.id
+                WHERE sa.student_id = ? AND sa.exam_id = ?
+            ");
+            if ($stmt_ans) {
+                $stmt_ans->bind_param("ii", $studentId, $examId);
+                $stmt_ans->execute();
+                $ansRow = $stmt_ans->get_result()->fetch_assoc();
+                $answeredCount = (int)($ansRow['answered_count'] ?? 0);
+                $correctAnsweredCount = (int)($ansRow['correct_count'] ?? 0);
+            }
+
+            $questionAccuracy = ($answeredCount > 0)
+                ? round(($correctAnsweredCount / $answeredCount) * 100, 2)
+                : null;
+
+            $dispMarks = intval($score) == $score ? intval($score) : $score;
+            $dispTotal = intval($maxM) == $maxM ? intval($maxM) : $maxM;
+
             $examResults[] = [
+                'result_id' => (int)$row['id'],
+                'exam_id' => $examId,
                 'exam_title' => $row['exam_title'],
                 'correct_answers' => (int)$row['correct_answers'],
                 'total_questions' => $totalQ,
+                'marks_per_question' => $marksPerQ,
                 'score' => $score,
+                'marks_obtained' => $score,
                 'total_marks' => $maxM,
+                'marks_display' => "{$dispMarks}/{$dispTotal}",
                 'percentage' => $pct,
+                'questions_answered' => $answeredCount,
+                'answered_correct' => $correctAnsweredCount,
+                'question_accuracy' => $questionAccuracy,
+                'has_question_accuracy' => ($answeredCount > 0),
                 'taken_at' => $row['taken_at']
             ];
         }
 
-        $overallPercentage = ($totalMarksPossible > 0)
-            ? round(($totalMarksObtained / $totalMarksPossible) * 100, 2)
-            : 0.0;
+        // Apply clearly defined policy: use the latest completed attempt for specific performance figures
+        $latestAttempt = !empty($examResults) ? $examResults[0] : null;
+        $studentAttempts = count($examResults);
+
+        $primaryMarksObtained = $latestAttempt ? $latestAttempt['marks_obtained'] : 0.0;
+        $primaryTotalMarks = $latestAttempt ? $latestAttempt['total_marks'] : 0.0;
+        $primaryPercentage = $latestAttempt ? $latestAttempt['percentage'] : 0.0;
+        $primaryMarksDisplay = $latestAttempt ? $latestAttempt['marks_display'] : "0/0";
+        $primaryQuestionsAnswered = $latestAttempt ? $latestAttempt['questions_answered'] : 0;
+        $primaryQuestionAccuracy = $latestAttempt ? $latestAttempt['question_accuracy'] : null;
 
         // 7. Check question-level topic metadata for student attempts in this subject
-        $stmt_topics = $conn->prepare("SELECT q.topic, sa.answer, q.correct_option
-                                       FROM student_answers sa
-                                       JOIN questions q ON sa.question_id = q.id
-                                       WHERE sa.student_id = ? AND LOWER(TRIM(q.subject)) = LOWER(?)");
+        // Only consider actual non-empty topics from answered questions
         $hasTopicEvidence = false;
         $topicBreakdown = [];
-        if ($stmt_topics) {
-            $stmt_topics->bind_param("is", $studentId, $cleanSubj);
-            $stmt_topics->execute();
-            $res_top_chk = $stmt_topics->get_result();
-            while ($tRow = $res_top_chk->fetch_assoc()) {
-                $rawTopic = trim($tRow['topic'] ?? '');
-                if ($rawTopic !== '') {
-                    $hasTopicEvidence = true;
-                    if (!isset($topicBreakdown[$rawTopic])) {
-                        $topicBreakdown[$rawTopic] = ['total' => 0, 'correct' => 0];
-                    }
-                    $topicBreakdown[$rawTopic]['total']++;
-                    if (trim($tRow['answer']) === trim($tRow['correct_option'])) {
-                        $topicBreakdown[$rawTopic]['correct']++;
+        if ($latestAttempt) {
+            $latestExamId = $latestAttempt['exam_id'];
+            $stmt_topics = $conn->prepare("
+                SELECT q.topic, sa.answer, q.correct_option
+                FROM student_answers sa
+                JOIN questions q ON sa.question_id = q.id
+                WHERE sa.student_id = ? AND sa.exam_id = ?
+            ");
+            if ($stmt_topics) {
+                $stmt_topics->bind_param("ii", $studentId, $latestExamId);
+                $stmt_topics->execute();
+                $res_top_chk = $stmt_topics->get_result();
+                while ($tRow = $res_top_chk->fetch_assoc()) {
+                    $rawTopic = trim($tRow['topic'] ?? '');
+                    if ($rawTopic !== '') {
+                        $hasTopicEvidence = true;
+                        if (!isset($topicBreakdown[$rawTopic])) {
+                            $topicBreakdown[$rawTopic] = ['total' => 0, 'correct' => 0];
+                        }
+                        $topicBreakdown[$rawTopic]['total']++;
+                        if (trim($tRow['answer']) === trim($tRow['correct_option'])) {
+                            $topicBreakdown[$rawTopic]['correct']++;
+                        }
                     }
                 }
             }
@@ -340,11 +416,20 @@ class SubjectResolver {
             'approved_ai_questions' => $approvedAiQuestions,
             'available_topics' => $topics,
             'course_materials' => $courseMaterials,
+            'has_ingested_material' => $hasIngestedMaterial,
+            'has_failed_material' => $hasFailedMaterial,
+            'failed_errors' => $failedErrors,
             'student_attempts_count' => $studentAttempts,
-            'marks_obtained' => $totalMarksObtained,
-            'total_marks' => $totalMarksPossible,
-            'student_accuracy' => $overallPercentage,
-            'percentage' => $overallPercentage,
+            'marks_obtained' => $primaryMarksObtained,
+            'total_marks' => $primaryTotalMarks,
+            'marks_display' => $primaryMarksDisplay,
+            'percentage' => $primaryPercentage,
+            'student_accuracy' => $primaryPercentage, // Kept for backwards compatibility
+            'questions_answered' => $primaryQuestionsAnswered,
+            'question_accuracy' => $primaryQuestionAccuracy,
+            'has_question_accuracy' => ($primaryQuestionAccuracy !== null),
+            'latest_attempt' => $latestAttempt,
+            'attempt_policy' => 'latest_completed_attempt',
             'has_topic_evidence' => $hasTopicEvidence,
             'topic_breakdown' => $topicBreakdown,
             'exam_results' => $examResults

@@ -57,10 +57,11 @@ if (isset($_POST['resend_otp'])) {
 
                 if (saveAccountResetOtp($conn, $account, $newOtp, $newExpiry)) {
                     $roleLabel = ($account['role'] === 'admin') ? "Administrator Password Reset" : "Password Reset";
-                    $body = buildOtpEmailHtml($roleLabel, $newOtp, 10);
-                    $subject = "Password Reset OTP - Online Examination System";
+                    $subject   = buildOtpEmailSubject($roleLabel, $newOtp);
+                    $body      = buildOtpEmailHtml($roleLabel, $newOtp, 10);
+                    $textBody  = buildOtpEmailText($roleLabel, $newOtp, 10);
 
-                    if (sendMail($account['email'], $subject, $body)) {
+                    if (sendMail($account['email'], $subject, $body, $textBody)) {
                         $_SESSION[$lastSendKey] = time();
                         $_SESSION[$attemptKey] = 0; // reset attempt counter on new code
                         $_SESSION['mail_sent_mode'] = 'real';

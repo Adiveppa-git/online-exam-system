@@ -79,12 +79,13 @@ class RAGService:
         detected_subj, detected_top = SubjectDetector.detect(query)
         target_subject = SubjectDetector.normalize_subject(subject) or detected_subj
         target_topic = topic or detected_top
+        clean_target_subject = target_subject.strip() if target_subject else None
 
         vector_store = VectorStoreManager.get_instance()
         retrieved_chunks = vector_store.search_similarity(
             query=query,
             top_k=top_k,
-            subject=target_subject,
+            subject=clean_target_subject,
             topic=target_topic
         )
 
@@ -92,20 +93,44 @@ class RAGService:
         for c in retrieved_chunks:
             if c.get("similarity_score", 0.0) < threshold:
                 continue
-            if target_subject:
+            if clean_target_subject:
                 c_subj = SubjectDetector.normalize_subject(c.get("subject"))
-                if c_subj != target_subject:
+                if not c_subj or c_subj.strip().lower() != clean_target_subject.lower():
                     continue
             if target_topic:
                 if c.get("topic", "").strip().lower() != target_topic.strip().lower():
                     continue
             relevant_chunks.append(c)
 
+        # Fallback for conversational queries if clean_target_subject is specified and relevant_chunks is empty
+        if not relevant_chunks and clean_target_subject:
+            base_thresh = settings.RAG_RELEVANCE_THRESHOLD
+            for c in retrieved_chunks:
+                if c.get("similarity_score", 0.0) < base_thresh:
+                    continue
+                c_subj = SubjectDetector.normalize_subject(c.get("subject"))
+                if c_subj and c_subj.strip().lower() == clean_target_subject.lower():
+                    relevant_chunks.append(c)
+
+            if not relevant_chunks:
+                fallback_query = f"{clean_target_subject} core concepts study material"
+                fallback_chunks = vector_store.search_similarity(
+                    query=fallback_query,
+                    top_k=top_k,
+                    subject=clean_target_subject
+                )
+                for c in fallback_chunks:
+                    if c.get("similarity_score", 0.0) < base_thresh:
+                        continue
+                    c_subj = SubjectDetector.normalize_subject(c.get("subject"))
+                    if c_subj and c_subj.strip().lower() == clean_target_subject.lower():
+                        relevant_chunks.append(c)
+
         return {
             "query": query,
             "top_k": top_k,
             "threshold": threshold,
-            "detected_subject": target_subject,
+            "detected_subject": clean_target_subject,
             "detected_topic": target_topic,
             "retrieved_count": len(retrieved_chunks),
             "relevant_count": len(relevant_chunks),
@@ -254,6 +279,7 @@ class RAGService:
             if target_subject:
                 subj_summary = (user_context or {}).get("subject_summary", {})
                 attempts_count = subj_summary.get("student_attempts_count", 0)
+                latest_attempt = subj_summary.get("latest_attempt")
 
                 # Mode A: Subject-Specific performance query
                 subj_history = [
@@ -263,9 +289,9 @@ class RAGService:
                 if attempts_count == 0 and len(subj_history) == 0:
                     ans = f"You haven't completed any exam attempts in {target_subject} yet."
                 else:
-                    marks_obtained = subj_summary.get("marks_obtained")
-                    total_marks = subj_summary.get("total_marks")
-                    pct = subj_summary.get("percentage")
+                    marks_obtained = latest_attempt.get("marks_obtained") if latest_attempt else subj_summary.get("marks_obtained")
+                    total_marks = latest_attempt.get("total_marks") if latest_attempt else subj_summary.get("total_marks")
+                    pct = latest_attempt.get("percentage") if latest_attempt else subj_summary.get("percentage")
 
                     if marks_obtained is not None and total_marks is not None and pct is not None:
                         disp_obtained = int(marks_obtained) if float(marks_obtained).is_integer() else marks_obtained
@@ -273,7 +299,18 @@ class RAGService:
                         disp_pct = int(pct) if float(pct).is_integer() else pct
                         has_topics = subj_summary.get("has_topic_evidence", False)
                         topic_str = "" if has_topics else " Specific topic-level breakdown is not available for this exam's questions."
-                        ans = f"Based on your exam records in **{target_subject}**, you scored **{disp_obtained} out of {disp_total} marks ({disp_pct}% percentage)**.{topic_str}"
+
+                        q_acc = latest_attempt.get("question_accuracy") if latest_attempt else None
+                        q_answered = latest_attempt.get("questions_answered", 0) if latest_attempt else 0
+                        q_correct = latest_attempt.get("answered_correct", 0) if latest_attempt else 0
+
+                        if q_acc is not None:
+                            disp_q_acc = int(q_acc) if float(q_acc).is_integer() else q_acc
+                            acc_str = f" with a question accuracy of **{disp_q_acc}%** ({q_correct}/{q_answered} answered questions)"
+                        else:
+                            acc_str = ""
+
+                        ans = f"Based on your exam records in **{target_subject}**, you scored **{disp_obtained} out of {disp_total} marks ({disp_pct}% percentage)**{acc_str}.{topic_str}"
                     else:
                         tot = len(subj_history)
                         corr = sum(1 for h in subj_history if h.get("is_correct") or h.get("correct"))
@@ -314,57 +351,32 @@ class RAGService:
 
         # 7. Personalized Recommendation Intent
         if intent == "recommendation":
-            perf_response, identified_topics = cls._generate_personalized_recommendation(question, history, target_subject, user_context)
-
-            # Execute Subject-Isolated RAG Search
-            search_res = cls.search_context(
-                query=question,
-                top_k=top_k,
-                subject=target_subject,
-                topic=target_topic,
-                threshold=threshold
-            )
-
-            if search_res["has_sufficient_context"]:
-                rag_data = cls._build_grounded_answer(question, search_res["chunks"], target_subject=target_subject)
-                if rag_data.get("has_sufficient_context"):
-                    full_answer = f"{perf_response}\n\n📖 **Course Material Insight:**\n{rag_data['answer']}"
-                    return {
-                        "question": question,
-                        "answer": full_answer,
-                        "has_sufficient_context": True,
-                        "sources": rag_data["sources"],
-                        "retrieved_chunks": rag_data["retrieved_chunks"],
-                        "intent": "recommendation",
-                        "is_conversational": False
-                    }
-
-            # No grounded course material available for target_subject
             if target_subject:
-                subj_sum = (user_context or {}).get("subject_summary", {})
-                if subj_sum.get("exists") or subj_sum.get("total_exam_questions", 0) > 0:
-                    missing_msg = (
-                        f"I couldn't find matching indexed course materials for {target_subject} in the study repository. "
-                        f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
-                    )
-                else:
-                    missing_msg = (
-                        f"I don't have enough information about {target_subject} in the uploaded course materials yet. "
-                        f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
-                    )
-                full_answer = f"{perf_response}\n\n⚠️ {missing_msg}" if perf_response else missing_msg
+                # Execute Subject-Isolated RAG Search
+                search_res = cls.search_context(
+                    query=question,
+                    top_k=top_k,
+                    subject=target_subject,
+                    topic=target_topic,
+                    threshold=threshold
+                )
+                return cls._build_grounded_recommendation(
+                    question=question,
+                    target_subject=target_subject,
+                    user_context=user_context,
+                    search_chunks=search_res.get("chunks", [])
+                )
             else:
-                full_answer = perf_response
-
-            return {
-                "question": question,
-                "answer": full_answer,
-                "has_sufficient_context": False,
-                "sources": [],
-                "retrieved_chunks": [],
-                "intent": "recommendation",
-                "is_conversational": False
-            }
+                perf_response, identified_topics = cls._generate_personalized_recommendation(question, history, target_subject, user_context)
+                return {
+                    "question": question,
+                    "answer": perf_response,
+                    "has_sufficient_context": False,
+                    "sources": [],
+                    "retrieved_chunks": [],
+                    "intent": "recommendation",
+                    "is_conversational": False
+                }
 
         # 8. Academic RAG Question
         search_res = cls.search_context(
@@ -378,16 +390,21 @@ class RAGService:
         if not search_res["has_sufficient_context"]:
             if target_subject:
                 subj_sum = (user_context or {}).get("subject_summary", {})
-                if subj_sum.get("exists") or subj_sum.get("total_exam_questions", 0) > 0:
+                course_materials = subj_sum.get("course_materials", [])
+                has_failed = subj_sum.get("has_failed_material", False)
+                failed_errors = subj_sum.get("failed_errors", [])
+                has_ingested = subj_sum.get("has_ingested_material", False)
+                if has_failed and course_materials:
+                    err_text = "; ".join(failed_errors) or "Indexing error"
                     missing_msg = (
-                        f"I couldn't find matching indexed course materials for {target_subject} in the study repository. "
-                        f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
+                        f"Course material for {target_subject} ('{course_materials[0].get('original_name', 'Course Material')}') "
+                        f"is recorded in the database, but its indexing failed ({err_text}). "
+                        f"An administrator can re-index this material by navigating to Course Material Management and clicking Retry Indexing."
                     )
+                elif course_materials and has_ingested:
+                    missing_msg = f"I couldn't find specific information about that in the approved {target_subject} course materials."
                 else:
-                    missing_msg = (
-                        f"I don't have enough information about {target_subject} in the uploaded course materials yet. "
-                        f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
-                    )
+                    missing_msg = f"I couldn't find enough information about {target_subject} in the uploaded course materials."
             else:
                 missing_msg = "I couldn't find enough information about this in the uploaded course materials."
 
@@ -410,10 +427,7 @@ class RAGService:
         rag_data = cls._build_grounded_answer(question, search_res["chunks"], target_subject=target_subject)
         if not rag_data.get("has_sufficient_context", True):
             if target_subject:
-                missing_msg = (
-                    f"I don't have enough information about {target_subject} in the uploaded course materials yet. "
-                    f"You can upload {target_subject} notes under Subject = {target_subject} to enable grounded recommendations."
-                )
+                missing_msg = f"I couldn't find enough information about {target_subject} in the uploaded course materials."
             else:
                 missing_msg = "I couldn't find enough information about this in the uploaded course materials."
             return {
@@ -435,6 +449,254 @@ class RAGService:
             "sources": rag_data["sources"],
             "retrieved_chunks": rag_data["retrieved_chunks"],
             "intent": "academic_question",
+            "is_conversational": False
+        }
+
+    @classmethod
+    def _build_grounded_recommendation(
+        cls,
+        question: str,
+        target_subject: str,
+        user_context: Optional[Dict[str, Any]],
+        search_chunks: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Generates grounded study advice strictly adhering to the 5-point structure:
+        1. Performance: actual marks, total marks, percentage, question accuracy, and attempt used.
+        2. Areas to improve: topics supported by actual performance data.
+        3. Relevant study materials: real matching document titles and topics retrieved from indexed repository.
+        4. Recommended next steps: specific concepts and practice questions grounded in approved materials.
+        5. Data limitations: mention only genuine missing records or retrieval/indexing problems.
+        """
+        norm_subject = SubjectDetector.normalize_subject(target_subject) or target_subject
+        subj_summary = (user_context or {}).get("subject_summary", {})
+        latest_attempt = subj_summary.get("latest_attempt")
+        student_attempts_count = subj_summary.get("student_attempts_count", 0)
+        course_materials = subj_summary.get("document_details") or subj_summary.get("course_materials") or []
+        has_ingested_material = subj_summary.get("has_ingested_material", False)
+        has_failed_material = subj_summary.get("has_failed_material", False) or any(d.get("status") in ["failed", "error"] for d in course_materials)
+        failed_errors = subj_summary.get("failed_errors", [])
+        has_topics = subj_summary.get("has_topic_evidence", False)
+        topic_breakdown = subj_summary.get("topic_breakdown", {})
+        total_exam_questions = subj_summary.get("total_exam_questions", 0)
+        approved_ai_questions = subj_summary.get("approved_ai_questions", 0)
+
+        # 1. Subject Performance
+        perf_lines = []
+        marks_display = "0/0"
+        disp_pct = 0
+        disp_marks = 0
+        disp_total = 0
+        if student_attempts_count > 0 and latest_attempt:
+            exam_title = latest_attempt.get("exam_title", norm_subject)
+            taken_at = latest_attempt.get("taken_at", "N/A")
+            marks_obtained = latest_attempt.get("marks_obtained", 0)
+            total_marks = latest_attempt.get("total_marks", 0)
+            pct = latest_attempt.get("percentage", 0.0)
+
+            disp_marks = int(marks_obtained) if float(marks_obtained).is_integer() else marks_obtained
+            disp_total = int(total_marks) if float(total_marks).is_integer() else total_marks
+            disp_pct = int(pct) if float(pct).is_integer() else pct
+            marks_display = f"{disp_marks}/{disp_total}"
+
+            q_answered = latest_attempt.get("questions_answered", 0)
+            q_correct = latest_attempt.get("answered_correct", 0)
+            q_acc = latest_attempt.get("question_accuracy")
+
+            if q_acc is not None:
+                disp_q_acc = int(q_acc) if float(q_acc).is_integer() else q_acc
+                accuracy_text = f"**{disp_q_acc}%** ({q_correct} correct answers out of {q_answered} answered questions)"
+            else:
+                accuracy_text = "N/A (Question accuracy cannot be calculated because individual question response records are not available)"
+
+            policy_text = f"Latest completed attempt on {taken_at}"
+            if student_attempts_count > 1:
+                policy_text += f" (out of {student_attempts_count} completed attempts)"
+
+            perf_lines.extend([
+                f"- **Exam Title:** {exam_title} (Subject: {norm_subject})",
+                f"- **Attempt Used:** {policy_text}",
+                f"- **Marks Obtained:** **{disp_marks} out of {disp_total} marks** ({marks_display})",
+                f"- **Marks Percentage:** **{disp_pct}%** (calculated as `({disp_marks} / {disp_total}) × 100`)",
+                f"- **Question Accuracy:** {accuracy_text}"
+            ])
+        else:
+            perf_lines.extend([
+                f"- **Status:** You haven't completed any exam attempts in **{norm_subject}** yet (performance metrics are not available).",
+                f"- **Marks Obtained:** N/A (No attempt records found in database)",
+                f"- **Marks Percentage:** Cannot be calculated without completed exam records.",
+                f"- **Question Accuracy:** Cannot be calculated without completed exam records."
+            ])
+
+        sec1 = f"### 1. {norm_subject} Performance\n" + "\n".join(perf_lines)
+
+        # 2. Areas to Improve
+        improve_lines = []
+        if has_topics and topic_breakdown:
+            topic_items = []
+            for t_name, t_stat in topic_breakdown.items():
+                tot = t_stat["total"]
+                corr = t_stat["correct"]
+                acc = round((corr / tot) * 100, 1) if tot > 0 else 0.0
+                topic_items.append((t_name, acc, tot, corr))
+            topic_items.sort(key=lambda x: x[1])
+
+            weak_t = topic_items[0]
+            improve_lines.append(f"- **Lowest Scoring Topic:** **{weak_t[0]}** ({weak_t[1]}% accuracy across {weak_t[2]} questions, {weak_t[3]} correct).")
+            if len(topic_items) > 1:
+                other_str = ", ".join([f"{t[0]} ({t[1]}%)" for t in topic_items[1:]])
+                improve_lines.append(f"- **Other Evaluated Topics:** {other_str}.")
+        else:
+            improve_lines.append(
+                f"- Specific topic-level breakdown is not available for this exam's questions because individual questions do not contain topic tags."
+            )
+            if student_attempts_count > 0 and latest_attempt:
+                score_pct = latest_attempt.get("percentage", 0.0)
+                if score_pct < 40:
+                    improve_lines.append(
+                        f"- Because your current score of **{marks_display} ({disp_pct}%)** is below the 40% passing standard, your primary area to improve is building core conceptual comprehension across foundational {norm_subject} principles before retaking the exam."
+                    )
+                else:
+                    improve_lines.append(
+                        f"- Continue reviewing the approved course notes to maintain your performance and reinforce understanding."
+                    )
+            else:
+                avail_topics = subj_summary.get("available_topics", [])
+                if avail_topics:
+                    improve_lines.append(f"- The exam curriculum covers topics including: {', '.join(avail_topics[:4])}.")
+
+        sec2 = f"### 2. Areas to Improve\n" + "\n".join(improve_lines)
+
+        # 3. Relevant Study Materials
+        mat_lines = []
+        citations = []
+        retrieved_out = []
+        valid_chunks = [
+            c for c in search_chunks
+            if SubjectDetector.normalize_subject(c.get("subject", "")).strip().lower() == norm_subject.strip().lower()
+        ]
+
+        failed_docs = [
+            d for d in course_materials
+            if str(d.get("status", "")).lower() in ["failed", "error"]
+        ]
+
+        if valid_chunks:
+            seen_docs = set()
+            for c in valid_chunks:
+                fn = c.get("filename", f"{norm_subject}_Notes.md")
+                pnum = c.get("page_number", 1)
+                top = c.get("topic", "Core Principles")
+                doc_key = (fn, top)
+                if doc_key not in seen_docs:
+                    seen_docs.add(doc_key)
+                    mat_lines.append(f"- **Document Title:** `{fn}`")
+                    mat_lines.append(f"  - **Topic / Focus Area:** {top}")
+                    mat_lines.append(f"  - **Status:** Approved and indexed in study repository")
+
+                if not any(cit["filename"] == fn and cit["page_number"] == pnum for cit in citations):
+                    citations.append({"filename": fn, "page_number": pnum})
+
+                retrieved_out.append({
+                    "chunk_id": c.get("chunk_id", ""),
+                    "filename": fn,
+                    "page_number": pnum,
+                    "similarity_score": c.get("similarity_score", 0.0)
+                })
+
+            if failed_docs:
+                for fd in failed_docs:
+                    fn = fd.get("original_name") or fd.get("filename")
+                    doc_id = fd.get("id")
+                    err = fd.get("error_message") or "Unknown indexing error"
+                    mat_lines.append(f"- **Ingestion Diagnostic for Document:** `{fn}` (ID: #{doc_id})")
+                    mat_lines.append(f"  - **Indexing Status:** ❌ **Failed** ({err})")
+                    mat_lines.append(f"  - **Recovery Path:** An administrator can re-index this material by opening **Course Material Management** and clicking **Retry Indexing**.")
+        elif failed_docs:
+            for fd in failed_docs:
+                fn = fd.get("original_name") or fd.get("filename")
+                doc_id = fd.get("id")
+                err = fd.get("error_message") or "Unknown indexing error"
+                mat_lines.append(f"- **Ingestion Diagnostic for Document:** `{fn}` (ID: #{doc_id})")
+                mat_lines.append(f"  - **Indexing Status:** ❌ **Failed** ({err})")
+                mat_lines.append(f"  - **Recovery Path:** An administrator can re-index this material by opening **Course Material Management** and clicking **Retry Indexing**.")
+        elif course_materials:
+            first_doc = course_materials[0]
+            fn = first_doc.get("original_name") or first_doc.get("filename")
+            doc_id = first_doc.get("id")
+            doc_status = first_doc.get("status", "pending")
+            doc_top = first_doc.get("topic", "Core Principles")
+
+            if doc_status == "pending":
+                mat_lines.append(f"- **Document Title:** `{fn}` (ID: #{doc_id})")
+                mat_lines.append(f"  - **Topic / Focus Area:** {doc_top}")
+                mat_lines.append(f"  - **Indexing Status:** ⏳ **Pending ingestion**")
+            else:
+                mat_lines.append(f"- **Document Title:** `{fn}` (ID: #{doc_id})")
+                mat_lines.append(f"  - **Topic / Focus Area:** {doc_top}")
+                mat_lines.append(f"  - **Indexing Status:** Verified in database ({first_doc.get('total_chunks', 0)} chunks)")
+        else:
+            mat_lines.append(f"- No course materials have been uploaded or generated for **{norm_subject}** in the repository yet.")
+
+        sec3 = f"### 3. Relevant {norm_subject} Study Materials\n" + "\n".join(mat_lines)
+
+        # 4. Recommended Next Steps
+        step_lines = []
+        if valid_chunks:
+            concept_snippets = []
+            for c in valid_chunks[:4]:
+                raw_txt = c.get("chunk_text", "").replace("\n", " ")
+                m = re.findall(r'(?:Concept(?:\s*\(Q#[^\)]+\))?:\s*|###?\s*\d+\.\d+\.?\s*)([A-Za-z0-9\s\-_,\.]{15,100})', raw_txt)
+                if m:
+                    for item in m[:2]:
+                        cl = item.strip().strip("-* ")
+                        if cl and cl not in concept_snippets and len(cl) > 10:
+                            concept_snippets.append(cl)
+
+            if concept_snippets:
+                step_lines.append(f"- **Review Key Concepts:** Study the verified {norm_subject} material focusing on:")
+                for cs in concept_snippets[:3]:
+                    step_lines.append(f"  - {cs}")
+            else:
+                step_lines.append(f"- **Review Course Material:** Read through `{valid_chunks[0]['filename']}` to consolidate your understanding of {valid_chunks[0].get('topic', 'Core Principles')}.")
+
+            q_bank_total = total_exam_questions or approved_ai_questions or 50
+            step_lines.append(f"- **Targeted Question Practice:** Practice with the {q_bank_total} approved {norm_subject} questions available in the question bank.")
+            step_lines.append(f"- **Retake Baseline:** Take a timed practice exam attempt after reviewing to track score progression.")
+        else:
+            q_count = total_exam_questions or approved_ai_questions or "available"
+            step_lines.append(f"- Work through the {q_count} approved practice questions for {norm_subject} in the student portal.")
+            step_lines.append(f"- Review your course textbook and syllabus for {norm_subject} core concepts.")
+
+        sec4 = f"### 4. Recommended Next Steps\n" + "\n".join(step_lines)
+
+        # 5. Data Limitations
+        lim_lines = []
+        if not has_topics:
+            lim_lines.append(f"- **Topic Metadata:** Question-level topic metadata was not tagged on this exam's questions, so granular topic accuracy cannot be computed.")
+        if student_attempts_count > 0 and latest_attempt:
+            q_ans = latest_attempt.get("questions_answered", 0)
+            tot_q = latest_attempt.get("total_questions", 0)
+            if q_ans > 0 and q_ans < tot_q:
+                lim_lines.append(f"- **Partial Answer Log:** In your recorded attempt, {q_ans} out of {tot_q} questions were answered ({tot_q - q_ans} questions were left unattempted).")
+        if failed_docs:
+            lim_lines.append(f"- **Material Indexing:** Document #{failed_docs[0].get('id')} indexing failed ({failed_docs[0].get('error_message')}); administrator retry is required.")
+        elif has_failed_material and course_materials:
+            lim_lines.append(f"- **Material Indexing:** Document #{course_materials[0].get('id')} indexing is incomplete; administrator retry is required.")
+        if not lim_lines:
+            lim_lines.append(f"- None. All available performance records and course materials for {norm_subject} were verified.")
+
+        sec5 = f"### 5. Data Limitations\n" + "\n".join(lim_lines)
+
+        full_answer = f"{sec1}\n\n{sec2}\n\n{sec3}\n\n{sec4}\n\n{sec5}"
+
+        return {
+            "question": question,
+            "answer": full_answer,
+            "has_sufficient_context": len(valid_chunks) > 0,
+            "sources": citations,
+            "retrieved_chunks": retrieved_out,
+            "intent": "recommendation",
             "is_conversational": False
         }
 
