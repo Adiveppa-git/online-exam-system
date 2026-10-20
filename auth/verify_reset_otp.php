@@ -339,12 +339,45 @@ if (isset($_POST['verify'])) {
     box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.35);
 }
 
-/* Consistent navigation links */
+/* Consistent navigation links: single horizontal line with left, center, right alignment */
 .auth-nav-links {
-    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
     margin-top: 22px;
     font-size: 14px;
     color: #6c757d;
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+
+.auth-nav-links .nav-left {
+    flex: 1 1 0%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin: 0;
+    padding: 0;
+}
+
+.auth-nav-links .divider {
+    flex: 0 0 auto;
+    text-align: center;
+    padding: 0 8px;
+    color: #adb5bd;
+    font-size: 14px;
+    line-height: 1;
+    user-select: none;
+}
+
+.auth-nav-links .nav-right {
+    flex: 1 1 0%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin: 0;
+    padding: 0;
 }
 
 .auth-nav-links a,
@@ -357,8 +390,10 @@ if (isset($_POST['verify'])) {
     background: none;
     border: none;
     padding: 0;
+    margin: 0;
     cursor: pointer;
-    display: inline;
+    display: inline-flex;
+    align-items: center;
     transition: color 0.15s ease;
 }
 
@@ -371,11 +406,21 @@ if (isset($_POST['verify'])) {
 .auth-nav-links .link-button:focus {
     outline: 2px solid rgba(13, 110, 253, 0.4);
     outline-offset: 2px;
+    border-radius: 2px;
 }
 
-.auth-nav-links .divider {
-    margin: 0 8px;
-    color: #adb5bd;
+@media (max-width: 360px) {
+    .auth-nav-links {
+        font-size: 13px;
+    }
+    .auth-nav-links a,
+    .auth-nav-links .link-button,
+    .auth-nav-links .divider {
+        font-size: 13px;
+    }
+    .auth-nav-links .divider {
+        padding: 0 4px;
+    }
 }
 
 /* Mobile responsiveness */
@@ -453,12 +498,14 @@ if (isset($_POST['verify'])) {
 </form>
 
 <div class="auth-nav-links">
-    <form method="post" style="display:inline;margin:0;padding:0;">
+    <form method="post" class="nav-left">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
         <button type="submit" name="resend_otp" class="link-button" id="btnResendOtp">Request new OTP</button>
     </form>
     <span class="divider">&bull;</span>
-    <a href="login.php" class="nav-link">Back to Login</a>
+    <div class="nav-right">
+        <a href="login.php" class="nav-link">Back to Login</a>
+    </div>
 </div>
 
 </div>
