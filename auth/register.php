@@ -66,9 +66,11 @@ if (isset($_POST['send_otp']))
                     'expiry'=>$expiry
                 ];
 
-                $body = buildOtpEmailHtml("Email Verification", $otp, 10);
+                $subject   = buildOtpEmailSubject("Email Verification", $otp);
+                $body      = buildOtpEmailHtml("Email Verification", $otp, 10);
+                $textBody  = buildOtpEmailText("Email Verification", $otp, 10);
 
-                if (sendMail($email, "Verify Your Email - Online Examination System", $body))
+                if (sendMail($email, $subject, $body, $textBody))
                 {
                     $_SESSION[$lastRegKey] = time();
                     $_SESSION['reg_otp_attempts_' . md5($email)] = 0;

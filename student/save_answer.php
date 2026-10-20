@@ -33,8 +33,7 @@ $answer      = $_POST['answer'] ?? '';
 /* ===== VALIDATION ===== */
 if (
     $exam_id <= 0 ||
-    $question_id <= 0 ||
-    !in_array($answer, ['A','B','C','D'])
+    $question_id <= 0
 ) {
     echo json_encode([
         "status" => "error",
@@ -56,15 +55,33 @@ if ($chkComp->get_result()->num_rows > 0) {
 }
 
 /* ===== VALIDATE QUESTION BELONGS TO EXAM ===== */
-$chkQ = $conn->prepare("SELECT id FROM questions WHERE id = ? AND exam_id = ?");
+$chkQ = $conn->prepare("SELECT id, option_a FROM questions WHERE id = ? AND exam_id = ?");
 $chkQ->bind_param("ii", $question_id, $exam_id);
 $chkQ->execute();
-if ($chkQ->get_result()->num_rows === 0) {
+$qRow = $chkQ->get_result()->fetch_assoc();
+$chkQ->close();
+
+if (!$qRow) {
     echo json_encode([
         "status" => "error",
         "msg" => "Invalid question for exam"
     ]);
     exit;
+}
+
+$has_options = !empty($qRow['option_a']);
+if ($has_options) {
+    if (!in_array($answer, ['A','B','C','D'], true)) {
+        echo json_encode([
+            "status" => "error",
+            "msg" => "Invalid MCQ choice"
+        ]);
+        exit;
+    }
+} else {
+    if (strlen($answer) > 255) {
+        $answer = substr($answer, 0, 255);
+    }
 }
 
 /* ===== INSERT OR UPDATE ANSWER ===== */

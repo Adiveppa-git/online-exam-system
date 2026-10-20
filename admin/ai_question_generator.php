@@ -185,7 +185,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
         $subject = trim($_POST['subject'] ?? '');
         $topic = trim($_POST['topic'] ?? '');
         $difficulty = trim($_POST['difficulty'] ?? '');
-        $question_type = 'mcq';
+        $raw_qtype = strtolower(trim($_POST['question_type'] ?? 'mcq'));
+        $allowed_types = ['mcq', 'coding', 'short_answer', 'descriptive', 'mixed'];
+        $question_type = in_array($raw_qtype, $allowed_types, true) ? $raw_qtype : 'mcq';
         $num_questions_raw = trim($_POST['number_of_questions'] ?? '');
         $num_questions = is_numeric($num_questions_raw) ? (int)$num_questions_raw : 0;
         $context = trim($_POST['additional_context'] ?? '');
@@ -251,7 +253,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                 $conn->commit();
 
                 // 3. Call AI Microservice outside lock
-                $response = $aiClient->generateQuestions($subject, $topic, $difficulty, $num_questions, $context);
+                $response = $aiClient->generateQuestions($subject, $topic, $difficulty, $num_questions, $context, $question_type);
 
                 if (!$response['success']) {
                     $req_id = "req_fail_" . uniqid();
@@ -282,7 +284,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                     // Insert unique questions into staging table (status = pending)
                     $inserted_count = 0;
                     $skipped_duplicate_count = 0;
-                    $stmtIns = $conn->prepare("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, difficulty, question_type, question, option_a, option_b, option_c, option_d, correct_option, explanation, generation_model, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')");
+                    $stmtIns = $conn->prepare("INSERT INTO ai_generated_questions (
+                        request_id, admin_id, exam_id, subject, topic, difficulty, question_type,
+                        question, option_a, option_b, option_c, option_d, correct_option, explanation, generation_model,
+                        programming_language, starter_code, input_format, output_format, constraints, sample_test_cases, hidden_test_cases, reference_solution, time_complexity, space_complexity, status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')");
 
                     foreach ($generated_questions as $gq) {
                         $qRaw = $gq['question'] ?? '';
@@ -297,16 +303,34 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                             continue;
                         }
 
-                        $optA = $gq['options']['A'] ?? '';
-                        $optB = $gq['options']['B'] ?? '';
-                        $optC = $gq['options']['C'] ?? '';
-                        $optD = $gq['options']['D'] ?? '';
-                        $correct = $gq['correct_answer'] ?? 'A';
+                        $item_qtype = strtolower(trim($gq['question_type'] ?? $question_type));
+                        if (!in_array($item_qtype, ['mcq', 'coding', 'short_answer', 'descriptive'], true)) {
+                            $item_qtype = ($question_type === 'mixed') ? 'mcq' : $question_type;
+                        }
+
+                        $has_opts = !empty($gq['options']) && is_array($gq['options']);
+                        $optA = $has_opts ? ($gq['options']['A'] ?? null) : (($item_qtype === 'mcq') ? ($gq['options']['A'] ?? '') : null);
+                        $optB = $has_opts ? ($gq['options']['B'] ?? null) : (($item_qtype === 'mcq') ? ($gq['options']['B'] ?? '') : null);
+                        $optC = $has_opts ? ($gq['options']['C'] ?? null) : (($item_qtype === 'mcq') ? ($gq['options']['C'] ?? '') : null);
+                        $optD = $has_opts ? ($gq['options']['D'] ?? null) : (($item_qtype === 'mcq') ? ($gq['options']['D'] ?? '') : null);
+                        $correct = ($has_opts || $item_qtype === 'mcq') ? ($gq['correct_answer'] ?? 'A') : ($gq['correct_answer'] ?? null);
                         $explanation = $gq['explanation'] ?? '';
 
-                        $stmtIns->bind_param("siissssssssssss",
-                            $request_id, $admin_id, $exam_id, $subject, $topic, $difficulty, $question_type,
-                            $qText, $optA, $optB, $optC, $optD, $correct, $explanation, $model_used
+                        $progLang = $gq['programming_language'] ?? null;
+                        $starterCode = $gq['starter_code'] ?? null;
+                        $inputFmt = $gq['input_format'] ?? null;
+                        $outputFmt = $gq['output_format'] ?? null;
+                        $constraints = $gq['constraints'] ?? null;
+                        $sampleCases = !empty($gq['sample_test_cases']) ? (is_string($gq['sample_test_cases']) ? $gq['sample_test_cases'] : json_encode($gq['sample_test_cases'], JSON_UNESCAPED_SLASHES)) : null;
+                        $hiddenCases = !empty($gq['hidden_test_cases']) ? (is_string($gq['hidden_test_cases']) ? $gq['hidden_test_cases'] : json_encode($gq['hidden_test_cases'], JSON_UNESCAPED_SLASHES)) : null;
+                        $refSol = $gq['reference_solution'] ?? null;
+                        $timeComp = $gq['time_complexity'] ?? null;
+                        $spaceComp = $gq['space_complexity'] ?? null;
+
+                        $stmtIns->bind_param("siissssssssssssssssssssss",
+                            $request_id, $admin_id, $exam_id, $subject, $topic, $difficulty, $item_qtype,
+                            $qText, $optA, $optB, $optC, $optD, $correct, $explanation, $model_used,
+                            $progLang, $starterCode, $inputFmt, $outputFmt, $constraints, $sampleCases, $hiddenCases, $refSol, $timeComp, $spaceComp
                         );
 
                         if ($stmtIns->execute()) {
@@ -457,7 +481,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                 <a href="add_question.php" style="background: #0d6efd; color: white; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px; display: inline-block;">➕ Add Question</a>
             </div>
         </div>
-        <p style="color: #666; margin-bottom: 20px;">Use the AI Microservice to generate structured MCQs. Generated questions will enter the <strong>Pending Review</strong> queue and must be approved before becoming active exam questions.</p>
+        <p style="color: #666; margin-bottom: 20px;">Use the AI Microservice to generate structured MCQs, coding problems, short answer, descriptive, or mixed questions. Generated questions will enter the <strong>Pending Review</strong> queue and must be approved before becoming active exam questions.</p>
 
         <?php if (!empty($error)): ?>
             <div class="alert-error"><?= htmlspecialchars($error) ?></div>
@@ -507,15 +531,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                 <div class="form-row">
                     <div class="form-group">
                         <label>Subject *</label>
-                        <input type="text" name="subject" id="subject" required placeholder="e.g. Computer Science, Python, Physics" value="<?= htmlspecialchars($_POST['subject'] ?? '') ?>">
+                        <input type="text" name="subject" id="subject" required placeholder="e.g. Computer Science, Python, Java, C, SQL" value="<?= htmlspecialchars($_POST['subject'] ?? '') ?>">
                     </div>
                     <div class="form-group">
                         <label>Topic (Optional)</label>
-                        <input type="text" name="topic" id="topic" placeholder="e.g. Data Structures, OOP, SQL Queries" value="<?= htmlspecialchars($_POST['topic'] ?? '') ?>">
+                        <input type="text" name="topic" id="topic" placeholder="e.g. Arrays, OOP, Binary Search, Stacks" value="<?= htmlspecialchars($_POST['topic'] ?? '') ?>">
                     </div>
                 </div>
 
                 <div class="form-row">
+                    <div class="form-group">
+                        <label>Question Type *</label>
+                        <select name="question_type" id="question_type" required>
+                            <option value="mcq" <?= ($_POST['question_type'] ?? 'mcq') === 'mcq' ? 'selected' : '' ?>>Multiple Choice (MCQ)</option>
+                            <option value="coding" <?= ($_POST['question_type'] ?? '') === 'coding' ? 'selected' : '' ?>>Coding / Programming</option>
+                            <option value="short_answer" <?= ($_POST['question_type'] ?? '') === 'short_answer' ? 'selected' : '' ?>>Short Answer</option>
+                            <option value="descriptive" <?= ($_POST['question_type'] ?? '') === 'descriptive' ? 'selected' : '' ?>>Descriptive / Long Answer</option>
+                            <option value="mixed" <?= ($_POST['question_type'] ?? '') === 'mixed' ? 'selected' : '' ?>>Mixed Questions</option>
+                        </select>
+                    </div>
                     <div class="form-group">
                         <label>Difficulty *</label>
                         <select name="difficulty" id="difficulty" required>
@@ -640,30 +674,138 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                                 <span style="background: #e0e7ff; color: #3730a3; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; margin-left: 6px;"><?= htmlspecialchars($vq['subject']) ?></span>
                                 <span style="background: #f3f4f6; color: #374151; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; margin-left: 6px;"><?= htmlspecialchars($vq['topic']) ?></span>
                                 <span style="background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; margin-left: 6px;"><?= strtoupper(htmlspecialchars($vq['difficulty'])) ?></span>
+                                <?php $vQType = strtolower(trim($vq['question_type'] ?? 'mcq')); ?>
+                                <span style="background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; margin-left: 6px;"><?= strtoupper(htmlspecialchars($vQType)) ?></span>
                             </div>
                             <span style="font-size: 12px; color: #94a3b8;">
                                 <?= !empty($vq['created_at']) ? htmlspecialchars(date('M d, Y h:i A', strtotime($vq['created_at']))) : 'N/A' ?>
                             </span>
                         </div>
 
-                        <div style="font-weight: 600; font-size: 16px; margin-bottom: 12px; color: #1e293b; line-height: 1.4;">
+                        <div style="font-weight: 600; font-size: 16px; margin-bottom: 12px; color: #1e293b; line-height: 1.5; white-space: pre-wrap; word-break: break-word;">
                             <?= htmlspecialchars(clean_question_title($vq['question'])) ?>
                         </div>
 
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px; margin-bottom: 12px;">
-                            <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= $vq['correct_option']==='A' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
-                                <strong>A:</strong> <?= htmlspecialchars($vq['option_a']) ?> <?= $vq['correct_option']==='A' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
+                        <?php if ($vQType === 'coding'): ?>
+                            <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; margin-bottom: 12px;">
+                                <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 10px;">
+                                    <?php if (!empty($vq['programming_language'])): ?>
+                                        <span style="background: #0f172a; color: #38bdf8; padding: 3px 8px; border-radius: 4px; font-family: monospace; font-size: 12px; font-weight: bold;">
+                                            💻 <?= htmlspecialchars($vq['programming_language']) ?>
+                                        </span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($vq['time_complexity'])): ?>
+                                        <span style="font-size: 12px; color: #475569; background: #f1f5f9; padding: 3px 8px; border-radius: 4px;">
+                                            ⏱️ Time: <strong><?= htmlspecialchars($vq['time_complexity']) ?></strong>
+                                        </span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($vq['space_complexity'])): ?>
+                                        <span style="font-size: 12px; color: #475569; background: #f1f5f9; padding: 3px 8px; border-radius: 4px;">
+                                            💾 Space: <strong><?= htmlspecialchars($vq['space_complexity']) ?></strong>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+
+                                <?php if (!empty($vq['input_format']) || !empty($vq['output_format'])): ?>
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px; margin-bottom: 10px; font-size: 13px;">
+                                        <?php if (!empty($vq['input_format'])): ?>
+                                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px;">
+                                                <strong style="color: #475569; font-size: 11px; text-transform: uppercase;">📥 Input Format</strong>
+                                                <div style="margin-top: 3px;"><?= nl2br(htmlspecialchars($vq['input_format'])) ?></div>
+                                            </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($vq['output_format'])): ?>
+                                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px;">
+                                                <strong style="color: #475569; font-size: 11px; text-transform: uppercase;">📤 Output Format</strong>
+                                                <div style="margin-top: 3px;"><?= nl2br(htmlspecialchars($vq['output_format'])) ?></div>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+
+                                <?php if (!empty($vq['constraints'])): ?>
+                                    <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 6px 10px; margin-bottom: 10px; font-size: 12px; color: #92400e;">
+                                        ⚠️ <strong>Constraints:</strong> <code><?= htmlspecialchars($vq['constraints']) ?></code>
+                                    </div>
+                                <?php endif; ?>
+
+                                <?php
+                                $samples = [];
+                                if (!empty($vq['sample_test_cases'])) {
+                                    $decoded = json_decode($vq['sample_test_cases'], true);
+                                    if (is_array($decoded)) { $samples = $decoded; }
+                                }
+                                ?>
+                                <?php if (!empty($samples)): ?>
+                                    <div style="margin-bottom: 10px;">
+                                        <strong style="font-size: 12px; color: #334155;">🧪 Sample Test Cases:</strong>
+                                        <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
+                                            <?php foreach ($samples as $sIdx => $stc): ?>
+                                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px; font-size: 12px;">
+                                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                                                        <div><span style="color: #64748b; font-size: 10px; text-transform: uppercase;">Input:</span><pre style="background: white; padding: 4px; border-radius: 3px; margin: 2px 0 0 0; font-family: monospace; font-size: 11px; white-space: pre-wrap;"><?= htmlspecialchars(is_scalar($stc['input'] ?? '') ? (string)$stc['input'] : json_encode($stc['input'])) ?></pre></div>
+                                                        <div><span style="color: #64748b; font-size: 10px; text-transform: uppercase;">Expected Output:</span><pre style="background: #ecfdf5; color: #065f46; padding: 4px; border-radius: 3px; margin: 2px 0 0 0; font-family: monospace; font-weight: bold; font-size: 11px; white-space: pre-wrap;"><?= htmlspecialchars(is_scalar($stc['output'] ?? '') ? (string)$stc['output'] : json_encode($stc['output'])) ?></pre></div>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
+
+                                <?php if (!empty($vq['starter_code'])): ?>
+                                    <div style="margin-top: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
+                                        <strong style="color: #475569; font-size: 11px; text-transform: uppercase;">💻 Starter Code / Template</strong>
+                                        <pre style="background: #1e293b; color: #e2e8f0; padding: 8px; border-radius: 4px; font-family: monospace; font-size: 12px; overflow-x: auto; margin-top: 4px; white-space: pre-wrap;"><code><?= htmlspecialchars($vq['starter_code']) ?></code></pre>
+                                    </div>
+                                <?php endif; ?>
+
+                                <?php if (!empty($vq['reference_solution'])): ?>
+                                    <details style="margin-top: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
+                                        <summary style="font-weight: 600; color: #0284c7; cursor: pointer; font-size: 12px;">💻 View Reference Solution</summary>
+                                        <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; overflow-x: auto; margin-top: 6px; max-height: 240px; white-space: pre-wrap;"><code><?= htmlspecialchars($vq['reference_solution']) ?></code></pre>
+                                    </details>
+                                <?php endif; ?>
+
+                                <?php if (!empty($vq['option_a']) || !empty($vq['option_b'])): ?>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px; margin-top: 12px; margin-bottom: 12px;">
+                                        <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= ($vq['correct_option'] ?? '')==='A' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
+                                            <strong>A:</strong> <?= htmlspecialchars($vq['option_a'] ?? '') ?> <?= ($vq['correct_option'] ?? '')==='A' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
+                                        </div>
+                                        <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= ($vq['correct_option'] ?? '')==='B' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
+                                            <strong>B:</strong> <?= htmlspecialchars($vq['option_b'] ?? '') ?> <?= ($vq['correct_option'] ?? '')==='B' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
+                                        </div>
+                                        <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= ($vq['correct_option'] ?? '')==='C' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
+                                            <strong>C:</strong> <?= htmlspecialchars($vq['option_c'] ?? '') ?> <?= ($vq['correct_option'] ?? '')==='C' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
+                                        </div>
+                                        <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= ($vq['correct_option'] ?? '')==='D' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
+                                            <strong>D:</strong> <?= htmlspecialchars($vq['option_d'] ?? '') ?> <?= ($vq['correct_option'] ?? '')==='D' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
                             </div>
-                            <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= $vq['correct_option']==='B' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
-                                <strong>B:</strong> <?= htmlspecialchars($vq['option_b']) ?> <?= $vq['correct_option']==='B' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
+                        <?php elseif ($vQType === 'short_answer' || $vQType === 'descriptive'): ?>
+                            <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                                <strong style="color: #334155; font-size: 12px;">📝 Model Answer / Rubric:</strong>
+                                <div style="margin-top: 4px; font-size: 13px; color: #1e293b; line-height: 1.4; background: #f8fafc; padding: 8px; border-radius: 4px;">
+                                    <?= nl2br(htmlspecialchars($vq['correct_option'] ?? 'N/A')) ?>
+                                </div>
                             </div>
-                            <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= $vq['correct_option']==='C' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
-                                <strong>C:</strong> <?= htmlspecialchars($vq['option_c']) ?> <?= $vq['correct_option']==='C' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
+                        <?php else: /* Default MCQ */ ?>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px; margin-bottom: 12px;">
+                                <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= $vq['correct_option']==='A' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
+                                    <strong>A:</strong> <?= htmlspecialchars($vq['option_a'] ?? '') ?> <?= $vq['correct_option']==='A' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
+                                </div>
+                                <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= $vq['correct_option']==='B' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
+                                    <strong>B:</strong> <?= htmlspecialchars($vq['option_b'] ?? '') ?> <?= $vq['correct_option']==='B' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
+                                </div>
+                                <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= $vq['correct_option']==='C' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
+                                    <strong>C:</strong> <?= htmlspecialchars($vq['option_c'] ?? '') ?> <?= $vq['correct_option']==='C' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
+                                </div>
+                                <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= $vq['correct_option']==='D' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
+                                    <strong>D:</strong> <?= htmlspecialchars($vq['option_d'] ?? '') ?> <?= $vq['correct_option']==='D' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
+                                </div>
                             </div>
-                            <div style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 4px; <?= $vq['correct_option']==='D' ? 'background:#ecfdf5; border-color:#10b981; font-weight:bold; color:#047857;' : 'background:#ffffff;' ?>">
-                                <strong>D:</strong> <?= htmlspecialchars($vq['option_d']) ?> <?= $vq['correct_option']==='D' ? ' <span style="font-size:12px; color:#047857;">(Correct)</span>' : '' ?>
-                            </div>
-                        </div>
+                        <?php endif; ?>
 
                         <?php if (!empty($vq['explanation'])): ?>
                             <div style="background: #f0f9ff; border: 1px solid #bae6fd; padding: 10px 14px; border-radius: 6px; font-size: 13px; color: #0369a1;">

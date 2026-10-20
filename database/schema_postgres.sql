@@ -58,7 +58,17 @@ CREATE TABLE questions (
     subject VARCHAR(100) DEFAULT 'General',
     topic VARCHAR(100) DEFAULT 'General',
     difficulty VARCHAR(10) DEFAULT 'medium' CHECK (difficulty IN ('easy', 'medium', 'hard')),
-    explanation TEXT DEFAULT NULL
+    explanation TEXT DEFAULT NULL,
+    question_type VARCHAR(50) NOT NULL DEFAULT 'mcq',
+    programming_language VARCHAR(50) DEFAULT NULL,
+    input_format TEXT DEFAULT NULL,
+    output_format TEXT DEFAULT NULL,
+    constraints TEXT DEFAULT NULL,
+    sample_test_cases TEXT DEFAULT NULL,
+    hidden_test_cases TEXT DEFAULT NULL,
+    reference_solution TEXT DEFAULT NULL,
+    time_complexity VARCHAR(100) DEFAULT NULL,
+    space_complexity VARCHAR(100) DEFAULT NULL
 );
 CREATE INDEX idx_questions_exam_id ON questions(exam_id);
 
@@ -146,17 +156,26 @@ CREATE TABLE ai_generated_questions (
     difficulty VARCHAR(10) NOT NULL DEFAULT 'medium' CHECK (difficulty IN ('easy', 'medium', 'hard')),
     question_type VARCHAR(50) NOT NULL DEFAULT 'mcq',
     question TEXT NOT NULL,
-    option_a VARCHAR(255) NOT NULL,
-    option_b VARCHAR(255) NOT NULL,
-    option_c VARCHAR(255) NOT NULL,
-    option_d VARCHAR(255) NOT NULL,
-    correct_option CHAR(1) NOT NULL,
+    option_a VARCHAR(255) DEFAULT NULL,
+    option_b VARCHAR(255) DEFAULT NULL,
+    option_c VARCHAR(255) DEFAULT NULL,
+    option_d VARCHAR(255) DEFAULT NULL,
+    correct_option VARCHAR(255) DEFAULT NULL,
     explanation TEXT DEFAULT NULL,
     generation_model VARCHAR(100) DEFAULT 'gpt-4o-mini',
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
     rejection_reason VARCHAR(255) DEFAULT NULL,
     reviewed_by INT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
     reviewed_at TIMESTAMPTZ DEFAULT NULL,
+    programming_language VARCHAR(50) DEFAULT NULL,
+    input_format TEXT DEFAULT NULL,
+    output_format TEXT DEFAULT NULL,
+    constraints TEXT DEFAULT NULL,
+    sample_test_cases TEXT DEFAULT NULL,
+    hidden_test_cases TEXT DEFAULT NULL,
+    reference_solution TEXT DEFAULT NULL,
+    time_complexity VARCHAR(100) DEFAULT NULL,
+    space_complexity VARCHAR(100) DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_ai_gen_q_status ON ai_generated_questions(status);

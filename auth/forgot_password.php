@@ -53,11 +53,12 @@ if (isset($_POST['send_otp'])) {
 
                 /* SEND MAIL TO REGISTERED RECIPIENT */
                 $roleLabel = ($account['role'] === 'admin') ? "Administrator Password Reset" : "Password Reset";
-                $body = buildOtpEmailHtml($roleLabel, $otp, 10);
-                $subject = "Password Reset OTP - Online Examination System";
+                $subject   = buildOtpEmailSubject($roleLabel, $otp);
+                $body      = buildOtpEmailHtml($roleLabel, $otp, 10);
+                $textBody  = buildOtpEmailText($roleLabel, $otp, 10);
 
                 // Explicitly send to the verified registered account email (never default to admin)
-                if (sendMail($registeredEmail, $subject, $body)) {
+                if (sendMail($registeredEmail, $subject, $body, $textBody)) {
                     $_SESSION['reset_email'] = $registeredEmail;
                     $_SESSION['reset_account'] = $account;
                     $_SESSION['mail_sent_success'] = true;

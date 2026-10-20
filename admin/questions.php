@@ -756,8 +756,17 @@ border-radius:4px;
 <tr>
 <td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle;"><?= $i++ ?></td>
 <td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; font-weight:600;"><?= htmlspecialchars($q['exam_title']) ?></td>
-<td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle;"><?= htmlspecialchars(clean_question_title($q['question'])) ?></td>
-<td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; text-align:center;"><span style="background:#e0e7ff; color:#3730a3; padding:4px 10px; border-radius:12px; font-weight:bold;"><?= htmlspecialchars($q['correct_option']) ?></span></td>
+<td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; white-space: pre-wrap; word-break: break-word;"><?= htmlspecialchars(clean_question_title($q['question'])) ?></td>
+<td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; text-align:center;">
+    <?php $tableQType = strtolower(trim($q['question_type'] ?? 'mcq')); ?>
+    <?php if ($tableQType === 'coding'): ?>
+        <span style="background:#e0f2fe; color:#0369a1; padding:4px 10px; border-radius:12px; font-weight:bold; font-size:12px;">💻 CODING (<?= htmlspecialchars($q['programming_language'] ?? 'Code') ?>)</span>
+    <?php elseif ($tableQType === 'short_answer' || $tableQType === 'descriptive'): ?>
+        <span style="background:#fef3c7; color:#92400e; padding:4px 10px; border-radius:12px; font-weight:bold; font-size:12px;">📝 <?= strtoupper(str_replace('_', ' ', $tableQType)) ?></span>
+    <?php else: ?>
+        <span style="background:#e0e7ff; color:#3730a3; padding:4px 10px; border-radius:12px; font-weight:bold;"><?= htmlspecialchars($q['correct_option'] ?? 'A') ?></span>
+    <?php endif; ?>
+</td>
 <td style="padding:12px; border-bottom:1px solid #e2e8f0; vertical-align:middle; text-align:center;" class="action-btns">
 <a href="questions.php?mode=edit&id=<?= $q['id'] ?>" class="edit-link" style="background:#22d3ee; color:#0f172a; padding:6px 12px; border-radius:6px; border:none; text-decoration:none; font-weight:600; font-size:13px; display:inline-block; vertical-align:middle;">Edit</a>
 <form method="post" action="questions.php?mode=manage" style="display:inline-block; margin:0; padding:0; vertical-align:middle;">

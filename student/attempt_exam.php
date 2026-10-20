@@ -139,25 +139,107 @@ style="<?= $index!==0?'display:none':'' ?>">
 
 <h2>Q<?= $index+1 ?>. <?= htmlspecialchars(clean_question_title($q['question'])) ?></h2>
 
-<div class="options">
+<?php if (!empty($q['programming_language'])): ?>
+    <div style="margin-bottom: 12px;">
+        <span style="background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 4px; font-size: 13px; font-weight: 600;">
+            💻 Language: <?= htmlspecialchars($q['programming_language']) ?>
+        </span>
+    </div>
+<?php endif; ?>
 
+<?php if (!empty($q['input_format']) || !empty($q['output_format'])): ?>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 12px; font-size: 13px;">
+        <?php if (!empty($q['input_format'])): ?>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px;">
+                <strong style="color: #475569; text-transform: uppercase; font-size: 11px;">📥 Input Format</strong>
+                <div style="margin-top: 4px; color: #1e293b;"><?= nl2br(htmlspecialchars($q['input_format'])) ?></div>
+            </div>
+        <?php endif; ?>
+        <?php if (!empty($q['output_format'])): ?>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px;">
+                <strong style="color: #475569; text-transform: uppercase; font-size: 11px;">📤 Output Format</strong>
+                <div style="margin-top: 4px; color: #1e293b;"><?= nl2br(htmlspecialchars($q['output_format'])) ?></div>
+            </div>
+        <?php endif; ?>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($q['constraints'])): ?>
+    <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; color: #92400e;">
+        ⚠️ <strong>Constraints:</strong> <code><?= htmlspecialchars($q['constraints']) ?></code>
+    </div>
+<?php endif; ?>
+
+<?php
+$sampleCases = [];
+if (!empty($q['sample_test_cases'])) {
+    $decodedSamples = is_string($q['sample_test_cases']) ? json_decode($q['sample_test_cases'], true) : $q['sample_test_cases'];
+    if (is_array($decodedSamples)) {
+        $sampleCases = $decodedSamples;
+    }
+}
+?>
+<?php if (!empty($sampleCases)): ?>
+    <div style="margin-bottom: 14px;">
+        <strong style="font-size: 13px; color: #334155;">🧪 Sample Test Cases:</strong>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+            <?php foreach ($sampleCases as $sIdx => $stc): ?>
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; font-size: 13px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div>
+                            <span style="color: #64748b; font-size: 11px; text-transform: uppercase;">Sample Input:</span>
+                            <pre style="background: white; border: 1px solid #cbd5e1; padding: 6px; border-radius: 4px; margin: 2px 0 0 0; font-family: monospace; font-size: 12px; white-space: pre-wrap;"><?= htmlspecialchars(is_scalar($stc['input'] ?? '') ? (string)$stc['input'] : json_encode($stc['input'])) ?></pre>
+                        </div>
+                        <div>
+                            <span style="color: #64748b; font-size: 11px; text-transform: uppercase;">Sample Output:</span>
+                            <pre style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 6px; border-radius: 4px; margin: 2px 0 0 0; font-family: monospace; font-weight: bold; font-size: 12px; white-space: pre-wrap;"><?= htmlspecialchars(is_scalar($stc['output'] ?? '') ? (string)$stc['output'] : json_encode($stc['output'])) ?></pre>
+                        </div>
+                    </div>
+                    <?php if (!empty($stc['explanation'])): ?>
+                        <div style="font-size: 12px; color: #64748b; margin-top: 4px; font-style: italic;">
+                            Explanation: <?= htmlspecialchars($stc['explanation']) ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($q['starter_code'])): ?>
+    <div style="margin-bottom: 14px;">
+        <strong style="font-size: 13px; color: #334155;">💻 Starter Code:</strong>
+        <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 12px; overflow-x: auto; margin-top: 6px; white-space: pre-wrap;"><code><?= htmlspecialchars($q['starter_code']) ?></code></pre>
+    </div>
+<?php endif; ?>
+
+<?php
+$has_mcq_options = (!empty($q['option_a']) || !empty($q['option_b']));
+if ($has_mcq_options):
+?>
+<div class="options">
 <?php foreach(['A','B','C','D'] as $opt): 
     $qid = (int)$q['id'];
     $isChecked = (isset($saved_answers[$qid]) && $saved_answers[$qid] === $opt) ? 'checked' : '';
+    $optText = $q['option_'.strtolower($opt)] ?? '';
+    if ($optText === '') continue;
 ?>
-
 <label>
 <input type="radio"
 name="answer[<?= $q['id'] ?>]"
 value="<?= $opt ?>"
 <?= $isChecked ?>
 onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, '<?= $opt ?>')">
-<?= htmlspecialchars($q['option_'.strtolower($opt)]) ?>
+<?= htmlspecialchars($optText) ?>
 </label>
-
 <?php endforeach; ?>
-
 </div>
+<?php else: ?>
+<div style="margin-top: 15px;">
+    <label style="display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; color: #1e293b;">Your Solution / Answer:</label>
+    <textarea name="answer[<?= $q['id'] ?>]" rows="8" style="width: 100%; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; line-height: 1.5;" placeholder="Enter your code solution or answer here..." onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, this.value)"><?= htmlspecialchars($saved_answers[(int)$q['id']] ?? '') ?></textarea>
+</div>
+<?php endif; ?>
 
 <div class="actions">
 

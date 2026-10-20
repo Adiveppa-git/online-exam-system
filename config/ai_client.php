@@ -46,16 +46,20 @@ class AiClient {
         return $this->request('GET', '/readiness', null, $customTimeout);
     }
 
-    public function generateQuestions($arg1, string $topic = '', string $difficulty = 'medium', int $numQuestions = 3, string $additionalContext = ''): array {
+    public function generateQuestions($arg1, string $topic = '', string $difficulty = 'medium', int $numQuestions = 3, string $additionalContext = '', string $questionType = 'mcq'): array {
         if (is_array($arg1)) {
             $payload = $arg1;
+            if (!isset($payload['question_type'])) {
+                $payload['question_type'] = $questionType;
+            }
         } else {
             $payload = [
                 'subject' => $arg1,
                 'topic' => $topic,
                 'difficulty' => strtolower($difficulty),
                 'number_of_questions' => $numQuestions,
-                'additional_context' => $additionalContext
+                'additional_context' => $additionalContext,
+                'question_type' => strtolower($questionType ?: 'mcq')
             ];
         }
         $res = $this->request('POST', '/api/v1/questions/generate', $payload);

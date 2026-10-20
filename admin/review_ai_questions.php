@@ -130,7 +130,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             }
 
             // 4. Execution phase: All questions are pre-validated, insert into active questions table
-            $insStmt = $conn->prepare("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option, subject, topic, difficulty, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $insStmt = $conn->prepare("INSERT INTO questions (
+                exam_id, question, option_a, option_b, option_c, option_d, correct_option,
+                subject, topic, difficulty, explanation,
+                question_type, programming_language, starter_code, input_format, output_format, constraints,
+                sample_test_cases, hidden_test_cases, reference_solution, time_complexity, space_complexity
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $updStmt = $conn->prepare("UPDATE ai_generated_questions SET status = 'approved', reviewed_by = ?, reviewed_at = NOW() WHERE id = ? AND status = 'pending'");
 
             $count = 0;
@@ -144,11 +149,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $subjToUse = trim($gq['subject'] ?? '') ?: 'General';
                 $topicToUse = trim($gq['topic'] ?? '');
                 $expToUse = trim($gq['explanation'] ?? '');
+                $qType = strtolower(trim($gq['question_type'] ?? 'mcq'));
+                if (!in_array($qType, ['mcq', 'coding', 'short_answer', 'descriptive'], true)) {
+                    $qType = 'mcq';
+                }
 
                 $cleanQ = clean_question_title($gq['question']);
-                $insStmt->bind_param("issssssssss",
+                $starterCode = $gq['starter_code'] ?? null;
+                $insStmt->bind_param("isssssssssssssssssssss",
                     $eId, $cleanQ, $gq['option_a'], $gq['option_b'], $gq['option_c'], $gq['option_d'],
-                    $gq['correct_option'], $subjToUse, $topicToUse, $diffToUse, $expToUse
+                    $gq['correct_option'], $subjToUse, $topicToUse, $diffToUse, $expToUse,
+                    $qType, $gq['programming_language'], $starterCode, $gq['input_format'], $gq['output_format'],
+                    $gq['constraints'], $gq['sample_test_cases'], $gq['hidden_test_cases'],
+                    $gq['reference_solution'], $gq['time_complexity'], $gq['space_complexity']
                 );
                 if (!$insStmt->execute()) {
                     throw new Exception("Failed to insert question #" . $gq['id'] . ": " . ($insStmt->error ?: $conn->error));
@@ -266,11 +279,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $expToUse = trim($gq['explanation'] ?? '');
 
             // 1. Insert into active questions table
-            $insStmt = $conn->prepare("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option, subject, topic, difficulty, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $insStmt = $conn->prepare("INSERT INTO questions (
+                exam_id, question, option_a, option_b, option_c, option_d, correct_option,
+                subject, topic, difficulty, explanation,
+                question_type, programming_language, starter_code, input_format, output_format, constraints,
+                sample_test_cases, hidden_test_cases, reference_solution, time_complexity, space_complexity
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $cleanQ = clean_question_title($gq['question']);
-            $insStmt->bind_param("issssssssss",
+            $qType = strtolower(trim($gq['question_type'] ?? 'mcq'));
+            if (!in_array($qType, ['mcq', 'coding', 'short_answer', 'descriptive'], true)) {
+                $qType = 'mcq';
+            }
+
+            $starterCode = $gq['starter_code'] ?? null;
+            $insStmt->bind_param("isssssssssssssssssssss",
                 $eId, $cleanQ, $gq['option_a'], $gq['option_b'], $gq['option_c'], $gq['option_d'],
-                $gq['correct_option'], $subjToUse, $topicToUse, $difficultyToUse, $expToUse
+                $gq['correct_option'], $subjToUse, $topicToUse, $difficultyToUse, $expToUse,
+                $qType, $gq['programming_language'], $starterCode, $gq['input_format'], $gq['output_format'],
+                $gq['constraints'], $gq['sample_test_cases'], $gq['hidden_test_cases'],
+                $gq['reference_solution'], $gq['time_complexity'], $gq['space_complexity']
             );
 
             if (!$insStmt->execute()) {
@@ -409,19 +436,91 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($action === 'edit') {
         $exam_id = (int)($_POST['exam_id'] ?? 0);
         $question = clean_question_title(trim($_POST['question'] ?? ''));
-        $a = trim($_POST['option_a'] ?? '');
-        $b = trim($_POST['option_b'] ?? '');
-        $c = trim($_POST['option_c'] ?? '');
-        $d = trim($_POST['option_d'] ?? '');
-        $correct = $_POST['correct_option'] ?? 'A';
+        $qtype = strtolower(trim($_POST['question_type'] ?? 'mcq'));
+        if (!in_array($qtype, ['mcq', 'coding', 'short_answer', 'descriptive'], true)) {
+            $qtype = 'mcq';
+        }
+
         $subject = trim($_POST['subject'] ?? 'General');
         $topic = trim($_POST['topic'] ?? 'General');
         $difficulty = $_POST['difficulty'] ?? 'medium';
+        if (!in_array($difficulty, ['easy', 'medium', 'hard'], true)) {
+            $difficulty = 'medium';
+        }
         $explanation = trim($_POST['explanation'] ?? '');
 
-        if (empty($question) || empty($a) || empty($b) || empty($c) || empty($d)) {
-            $_SESSION['error'] = "All question and option fields are required.";
-        } elseif ($exam_id <= 0) {
+        // Type-specific field parsing and validation
+        if ($qtype === 'mcq') {
+            $a = trim($_POST['option_a'] ?? '');
+            $b = trim($_POST['option_b'] ?? '');
+            $c = trim($_POST['option_c'] ?? '');
+            $d = trim($_POST['option_d'] ?? '');
+            $correct = strtoupper(trim($_POST['correct_option'] ?? 'A'));
+            if (!in_array($correct, ['A', 'B', 'C', 'D'], true)) {
+                $correct = 'A';
+            }
+            $progLang = null;
+            $inputFmt = null;
+            $outputFmt = null;
+            $constraints = null;
+            $sampleCases = null;
+            $hiddenCases = null;
+            $refSol = null;
+            $timeComp = null;
+            $spaceComp = null;
+
+            if (empty($question) || empty($a) || empty($b) || empty($c) || empty($d)) {
+                $_SESSION['error'] = "All question and MCQ option fields are required.";
+                if (!headers_sent()) { header("Location: " . $redirect_url); }
+                exit;
+            }
+        } elseif ($qtype === 'coding') {
+            $a = null;
+            $b = null;
+            $c = null;
+            $d = null;
+            $correct = null;
+            $progLang = trim($_POST['programming_language'] ?? '');
+            $starterCode = trim($_POST['starter_code'] ?? '');
+            $inputFmt = trim($_POST['input_format'] ?? '');
+            $outputFmt = trim($_POST['output_format'] ?? '');
+            $constraints = trim($_POST['constraints'] ?? '');
+            $sampleCases = trim($_POST['sample_test_cases'] ?? '');
+            $hiddenCases = trim($_POST['hidden_test_cases'] ?? '');
+            $refSol = trim($_POST['reference_solution'] ?? '');
+            $timeComp = trim($_POST['time_complexity'] ?? '');
+            $spaceComp = trim($_POST['space_complexity'] ?? '');
+
+            if (empty($question)) {
+                $_SESSION['error'] = "Problem statement is required.";
+                if (!headers_sent()) { header("Location: " . $redirect_url); }
+                exit;
+            }
+        } else { // short_answer or descriptive
+            $a = null;
+            $b = null;
+            $c = null;
+            $d = null;
+            $correct = trim($_POST['correct_option'] ?? '');
+            $progLang = null;
+            $starterCode = null;
+            $inputFmt = null;
+            $outputFmt = null;
+            $constraints = null;
+            $sampleCases = null;
+            $hiddenCases = null;
+            $refSol = null;
+            $timeComp = null;
+            $spaceComp = null;
+
+            if (empty($question)) {
+                $_SESSION['error'] = "Question text is required.";
+                if (!headers_sent()) { header("Location: " . $redirect_url); }
+                exit;
+            }
+        }
+
+        if ($exam_id <= 0) {
             $_SESSION['error'] = "Please select a valid target exam.";
         } else {
             // Verify exam exists in exams table
@@ -434,8 +533,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             if (!$examExists) {
                 $_SESSION['error'] = "Selected target exam does not exist.";
             } else {
-                $updStmt = $conn->prepare("UPDATE ai_generated_questions SET exam_id = ?, question = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?, correct_option = ?, subject = ?, topic = ?, difficulty = ?, explanation = ? WHERE id = ? AND status = 'pending'");
-                $updStmt->bind_param("issssssssssi", $exam_id, $question, $a, $b, $c, $d, $correct, $subject, $topic, $difficulty, $explanation, $qid);
+                $updStmt = $conn->prepare("UPDATE ai_generated_questions SET
+                    exam_id = ?, question_type = ?, question = ?,
+                    option_a = ?, option_b = ?, option_c = ?, option_d = ?, correct_option = ?,
+                    subject = ?, topic = ?, difficulty = ?, explanation = ?,
+                    programming_language = ?, starter_code = ?, input_format = ?, output_format = ?, constraints = ?,
+                    sample_test_cases = ?, hidden_test_cases = ?, reference_solution = ?,
+                    time_complexity = ?, space_complexity = ?
+                    WHERE id = ? AND status = 'pending'");
+                $updStmt->bind_param("isssssssssssssssssssssi",
+                    $exam_id, $qtype, $question,
+                    $a, $b, $c, $d, $correct,
+                    $subject, $topic, $difficulty, $explanation,
+                    $progLang, $starterCode, $inputFmt, $outputFmt, $constraints,
+                    $sampleCases, $hiddenCases, $refSol,
+                    $timeComp, $spaceComp,
+                    $qid
+                );
                 $updStmt->execute();
                 $updStmt->close();
 
@@ -620,6 +734,9 @@ $cnt_unassigned_pending = count($unassigned_pending_ids);
             font-weight: bold;
             margin: 15px 0 10px 0;
             color: #1f2937;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.5;
         }
         .options-grid {
             display: grid;
@@ -809,6 +926,8 @@ $cnt_unassigned_pending = count($unassigned_pending_ids);
                     <div>
                         <span class="badge" style="background: #1e293b; color: white;">#<?= $sl_no++ ?> (ID: #<?= (int)$q['id'] ?>)</span>
                         <span class="badge badge-<?= $q['status'] ?>"><?= strtoupper($q['status']) ?></span>
+                        <?php $itemQType = strtolower(trim($q['question_type'] ?? 'mcq')); ?>
+                        <span class="badge" style="background: #e0f2fe; color: #0369a1;"><?= strtoupper(htmlspecialchars($itemQType)) ?></span>
                         <?php if ($hasValidExam): ?>
                             <span class="badge badge-subject" style="background: #fef3c7; color: #92400e;">EXAM: <?= htmlspecialchars($q['exam_title']) ?></span>
                         <?php elseif ($isPending && $hasExam): ?>
@@ -851,20 +970,145 @@ $cnt_unassigned_pending = count($unassigned_pending_ids);
 
                     <div class="q-title"><?= htmlspecialchars(clean_question_title($q['question'])) ?></div>
 
-                    <div class="options-grid">
-                        <div class="opt-item <?= $q['correct_option']==='A'?'is-correct':'' ?>">
-                            <strong>A:</strong> <?= htmlspecialchars($q['option_a']) ?>
+                    <?php if ($itemQType === 'coding'): ?>
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 14px;">
+                            <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
+                                <?php if (!empty($q['programming_language'])): ?>
+                                    <span style="background: #0f172a; color: #38bdf8; padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 13px; font-weight: bold;">
+                                        💻 <?= htmlspecialchars($q['programming_language']) ?>
+                                    </span>
+                                <?php endif; ?>
+                                <?php if (!empty($q['time_complexity'])): ?>
+                                    <span style="font-size: 12px; color: #475569; background: #e2e8f0; padding: 3px 8px; border-radius: 4px;">
+                                        ⏱️ Time: <strong><?= htmlspecialchars($q['time_complexity']) ?></strong>
+                                    </span>
+                                <?php endif; ?>
+                                <?php if (!empty($q['space_complexity'])): ?>
+                                    <span style="font-size: 12px; color: #475569; background: #e2e8f0; padding: 3px 8px; border-radius: 4px;">
+                                        💾 Space: <strong><?= htmlspecialchars($q['space_complexity']) ?></strong>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+
+                            <?php if (!empty($q['input_format']) || !empty($q['output_format'])): ?>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin-bottom: 12px;">
+                                    <?php if (!empty($q['input_format'])): ?>
+                                        <div style="background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px;">
+                                            <strong style="color: #334155; font-size: 12px; text-transform: uppercase;">📥 Input Format</strong>
+                                            <div style="font-size: 13px; color: #1e293b; margin-top: 4px;"><?= nl2br(htmlspecialchars($q['input_format'])) ?></div>
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($q['output_format'])): ?>
+                                        <div style="background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px;">
+                                            <strong style="color: #334155; font-size: 12px; text-transform: uppercase;">📤 Output Format</strong>
+                                            <div style="font-size: 13px; color: #1e293b; margin-top: 4px;"><?= nl2br(htmlspecialchars($q['output_format'])) ?></div>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if (!empty($q['constraints'])): ?>
+                                <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; color: #92400e;">
+                                    ⚠️ <strong>Constraints:</strong> <code><?= htmlspecialchars($q['constraints']) ?></code>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php
+                            $samples = [];
+                            if (!empty($q['sample_test_cases'])) {
+                                $decoded = json_decode($q['sample_test_cases'], true);
+                                if (is_array($decoded)) {
+                                    $samples = $decoded;
+                                }
+                            }
+                            ?>
+                            <?php if (!empty($samples)): ?>
+                                <div style="margin-bottom: 12px;">
+                                    <strong style="font-size: 13px; color: #334155;">🧪 Sample Test Cases:</strong>
+                                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+                                        <?php foreach ($samples as $sIdx => $stc): ?>
+                                            <div style="background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; font-size: 13px;">
+                                                <div style="font-weight: 600; color: #475569; margin-bottom: 4px;">Example <?= $sIdx + 1 ?>:</div>
+                                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">
+                                                    <div>
+                                                        <span style="color: #64748b; font-size: 11px; text-transform: uppercase;">Input:</span>
+                                                        <pre style="background: #f1f5f9; padding: 6px; border-radius: 4px; margin: 2px 0 0 0; font-family: monospace; font-size: 12px; white-space: pre-wrap;"><?= htmlspecialchars(is_scalar($stc['input'] ?? '') ? (string)$stc['input'] : json_encode($stc['input'])) ?></pre>
+                                                    </div>
+                                                    <div>
+                                                        <span style="color: #64748b; font-size: 11px; text-transform: uppercase;">Expected Output:</span>
+                                                        <pre style="background: #ecfdf5; color: #065f46; padding: 6px; border-radius: 4px; margin: 2px 0 0 0; font-family: monospace; font-weight: bold; font-size: 12px; white-space: pre-wrap;"><?= htmlspecialchars(is_scalar($stc['output'] ?? '') ? (string)$stc['output'] : json_encode($stc['output'])) ?></pre>
+                                                    </div>
+                                                </div>
+                                                <?php if (!empty($stc['explanation'])): ?>
+                                                    <div style="font-size: 12px; color: #64748b; margin-top: 4px; font-style: italic;">
+                                                        Explanation: <?= htmlspecialchars($stc['explanation']) ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            <?php elseif (!empty($q['sample_test_cases']) && is_string($q['sample_test_cases'])): ?>
+                                <div style="margin-bottom: 12px;">
+                                    <strong style="font-size: 13px; color: #334155;">🧪 Sample Test Cases:</strong>
+                                    <pre style="background: white; border: 1px solid #cbd5e1; padding: 8px; border-radius: 4px; font-size: 12px; white-space: pre-wrap;"><?= htmlspecialchars($q['sample_test_cases']) ?></pre>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if (!empty($q['starter_code'])): ?>
+                                <div style="margin-top: 8px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px;">
+                                    <strong style="color: #334155; font-size: 13px;">💻 Starter Code / Function Signature:</strong>
+                                    <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 6px; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; overflow-x: auto; margin-top: 6px; white-space: pre-wrap;"><code><?= htmlspecialchars($q['starter_code']) ?></code></pre>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if (!empty($q['reference_solution'])): ?>
+                                <details style="margin-top: 8px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px;">
+                                    <summary style="font-weight: 600; color: #0284c7; cursor: pointer; font-size: 13px;">💻 View Reference Solution / Implementation</summary>
+                                    <pre style="background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; overflow-x: auto; margin-top: 8px; max-height: 280px; white-space: pre-wrap;"><code><?= htmlspecialchars($q['reference_solution']) ?></code></pre>
+                                </details>
+                            <?php endif; ?>
+
+                            <?php if (!empty($q['option_a']) || !empty($q['option_b'])): ?>
+                                <div class="options-grid" style="margin-top: 14px; margin-bottom: 0;">
+                                    <div class="opt-item <?= ($q['correct_option'] ?? '')==='A'?'is-correct':'' ?>">
+                                        <strong>A:</strong> <?= htmlspecialchars($q['option_a'] ?? '') ?>
+                                    </div>
+                                    <div class="opt-item <?= ($q['correct_option'] ?? '')==='B'?'is-correct':'' ?>">
+                                        <strong>B:</strong> <?= htmlspecialchars($q['option_b'] ?? '') ?>
+                                    </div>
+                                    <div class="opt-item <?= ($q['correct_option'] ?? '')==='C'?'is-correct':'' ?>">
+                                        <strong>C:</strong> <?= htmlspecialchars($q['option_c'] ?? '') ?>
+                                    </div>
+                                    <div class="opt-item <?= ($q['correct_option'] ?? '')==='D'?'is-correct':'' ?>">
+                                        <strong>D:</strong> <?= htmlspecialchars($q['option_d'] ?? '') ?>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
                         </div>
-                        <div class="opt-item <?= $q['correct_option']==='B'?'is-correct':'' ?>">
-                            <strong>B:</strong> <?= htmlspecialchars($q['option_b']) ?>
+                    <?php elseif ($itemQType === 'short_answer' || $itemQType === 'descriptive'): ?>
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px; margin-bottom: 12px;">
+                            <strong style="color: #334155; font-size: 13px;">📝 Expected Answer / Scoring Rubric:</strong>
+                            <div style="margin-top: 6px; font-size: 14px; color: #1e293b; line-height: 1.5; background: white; border: 1px solid #cbd5e1; padding: 10px; border-radius: 4px;">
+                                <?= nl2br(htmlspecialchars($q['correct_option'] ?? 'N/A')) ?>
+                            </div>
                         </div>
-                        <div class="opt-item <?= $q['correct_option']==='C'?'is-correct':'' ?>">
-                            <strong>C:</strong> <?= htmlspecialchars($q['option_c']) ?>
+                    <?php else: /* Default MCQ */ ?>
+                        <div class="options-grid">
+                            <div class="opt-item <?= ($q['correct_option'] ?? '')==='A'?'is-correct':'' ?>">
+                                <strong>A:</strong> <?= htmlspecialchars($q['option_a'] ?? '') ?>
+                            </div>
+                            <div class="opt-item <?= ($q['correct_option'] ?? '')==='B'?'is-correct':'' ?>">
+                                <strong>B:</strong> <?= htmlspecialchars($q['option_b'] ?? '') ?>
+                            </div>
+                            <div class="opt-item <?= ($q['correct_option'] ?? '')==='C'?'is-correct':'' ?>">
+                                <strong>C:</strong> <?= htmlspecialchars($q['option_c'] ?? '') ?>
+                            </div>
+                            <div class="opt-item <?= ($q['correct_option'] ?? '')==='D'?'is-correct':'' ?>">
+                                <strong>D:</strong> <?= htmlspecialchars($q['option_d'] ?? '') ?>
+                            </div>
                         </div>
-                        <div class="opt-item <?= $q['correct_option']==='D'?'is-correct':'' ?>">
-                            <strong>D:</strong> <?= htmlspecialchars($q['option_d']) ?>
-                        </div>
-                    </div>
+                    <?php endif; ?>
 
                     <?php if (!empty($q['explanation'])): ?>
                         <div class="exp-box">
@@ -946,11 +1190,12 @@ $cnt_unassigned_pending = count($unassigned_pending_ids);
 
                     <!-- INLINE EDIT FORM -->
                     <div class="edit-form" id="edit_form_<?= $q['id'] ?>">
-                        <h4 style="margin-top: 0;">Edit AI Question Details</h4>
+                        <h4 style="margin-top: 0; color: #1e293b;">✏ Edit AI Question Details (<?= strtoupper(htmlspecialchars($itemQType)) ?>)</h4>
                         <form method="POST">
                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
                             <input type="hidden" name="action" value="edit">
                             <input type="hidden" name="question_id" value="<?= $q['id'] ?>">
+                            <input type="hidden" name="question_type" value="<?= htmlspecialchars($itemQType) ?>">
 
                             <div style="margin-bottom: 12px;">
                                 <label style="font-weight: 600; font-size: 13px;">Target Exam *</label>
@@ -964,40 +1209,120 @@ $cnt_unassigned_pending = count($unassigned_pending_ids);
                                 </select>
                             </div>
 
-                            <label>Question Text</label>
-                            <textarea name="question" required><?= htmlspecialchars(clean_question_title($q['question'])) ?></textarea>
+                            <label style="font-weight: 600; font-size: 13px;">Question Text / Problem Statement *</label>
+                            <textarea name="question" required rows="3"><?= htmlspecialchars(clean_question_title($q['question'])) ?></textarea>
 
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                <div>
-                                    <label>Option A</label>
-                                    <input type="text" name="option_a" value="<?= htmlspecialchars($q['option_a']) ?>" required>
+                            <?php if ($itemQType === 'coding'): ?>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;">
+                                    <div>
+                                        <label style="font-weight: 600; font-size: 13px;">Programming Language</label>
+                                        <input type="text" name="programming_language" value="<?= htmlspecialchars($q['programming_language'] ?? '') ?>" placeholder="e.g. Python, Java, C++, SQL">
+                                    </div>
+                                    <div>
+                                        <label style="font-weight: 600; font-size: 13px;">Constraints</label>
+                                        <input type="text" name="constraints" value="<?= htmlspecialchars($q['constraints'] ?? '') ?>" placeholder="e.g. 1 <= N <= 10^5">
+                                    </div>
                                 </div>
-                                <div>
-                                    <label>Option B</label>
-                                    <input type="text" name="option_b" value="<?= htmlspecialchars($q['option_b']) ?>" required>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;">
+                                    <div>
+                                        <label style="font-weight: 600; font-size: 13px;">Input Format</label>
+                                        <textarea name="input_format" rows="2"><?= htmlspecialchars($q['input_format'] ?? '') ?></textarea>
+                                    </div>
+                                    <div>
+                                        <label style="font-weight: 600; font-size: 13px;">Output Format</label>
+                                        <textarea name="output_format" rows="2"><?= htmlspecialchars($q['output_format'] ?? '') ?></textarea>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label>Option C</label>
-                                    <input type="text" name="option_c" value="<?= htmlspecialchars($q['option_c']) ?>" required>
+                                <div style="margin-top: 8px;">
+                                    <label style="font-weight: 600; font-size: 13px;">Sample Test Cases (JSON format preferred)</label>
+                                    <textarea name="sample_test_cases" rows="3"><?= htmlspecialchars($q['sample_test_cases'] ?? '') ?></textarea>
                                 </div>
-                                <div>
-                                    <label>Option D</label>
-                                    <input type="text" name="option_d" value="<?= htmlspecialchars($q['option_d']) ?>" required>
+                                <div style="margin-top: 8px;">
+                                    <label style="font-weight: 600; font-size: 13px;">Starter Code / Function Signature</label>
+                                    <textarea name="starter_code" rows="3" style="font-family: monospace;"><?= htmlspecialchars($q['starter_code'] ?? '') ?></textarea>
                                 </div>
-                            </div>
+                                <div style="margin-top: 8px;">
+                                    <label style="font-weight: 600; font-size: 13px;">Reference Solution</label>
+                                    <textarea name="reference_solution" rows="4" style="font-family: monospace;"><?= htmlspecialchars($q['reference_solution'] ?? '') ?></textarea>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;">
+                                    <div>
+                                        <label style="font-weight: 600; font-size: 13px;">Time Complexity</label>
+                                        <input type="text" name="time_complexity" value="<?= htmlspecialchars($q['time_complexity'] ?? '') ?>" placeholder="e.g. O(N)">
+                                    </div>
+                                    <div>
+                                        <label style="font-weight: 600; font-size: 13px;">Space Complexity</label>
+                                        <input type="text" name="space_complexity" value="<?= htmlspecialchars($q['space_complexity'] ?? '') ?>" placeholder="e.g. O(1)">
+                                    </div>
+                                </div>
+                                <?php if (!empty($q['option_a']) || !empty($q['option_b'])): ?>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;">
+                                        <div>
+                                            <label style="font-weight: 600; font-size: 13px;">Option A</label>
+                                            <input type="text" name="option_a" value="<?= htmlspecialchars($q['option_a'] ?? '') ?>">
+                                        </div>
+                                        <div>
+                                            <label style="font-weight: 600; font-size: 13px;">Option B</label>
+                                            <input type="text" name="option_b" value="<?= htmlspecialchars($q['option_b'] ?? '') ?>">
+                                        </div>
+                                        <div>
+                                            <label style="font-weight: 600; font-size: 13px;">Option C</label>
+                                            <input type="text" name="option_c" value="<?= htmlspecialchars($q['option_c'] ?? '') ?>">
+                                        </div>
+                                        <div>
+                                            <label style="font-weight: 600; font-size: 13px;">Option D</label>
+                                            <input type="text" name="option_d" value="<?= htmlspecialchars($q['option_d'] ?? '') ?>">
+                                        </div>
+                                    </div>
+                                    <div style="margin-top: 8px;">
+                                        <label style="font-weight: 600; font-size: 13px;">Correct Choice</label>
+                                        <select name="correct_option">
+                                            <option value="A" <?= ($q['correct_option'] ?? '') === 'A' ? 'selected' : '' ?>>Option A</option>
+                                            <option value="B" <?= ($q['correct_option'] ?? '') === 'B' ? 'selected' : '' ?>>Option B</option>
+                                            <option value="C" <?= ($q['correct_option'] ?? '') === 'C' ? 'selected' : '' ?>>Option C</option>
+                                            <option value="D" <?= ($q['correct_option'] ?? '') === 'D' ? 'selected' : '' ?>>Option D</option>
+                                        </select>
+                                    </div>
+                                <?php endif; ?>
+                            <?php elseif ($itemQType === 'short_answer' || $itemQType === 'descriptive'): ?>
+                                <div style="margin-top: 8px;">
+                                    <label style="font-weight: 600; font-size: 13px;">Expected Answer / Rubric</label>
+                                    <textarea name="correct_option" rows="4"><?= htmlspecialchars($q['correct_option'] ?? '') ?></textarea>
+                                </div>
+                            <?php else: /* MCQ */ ?>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;">
+                                    <div>
+                                        <label style="font-weight: 600; font-size: 13px;">Option A</label>
+                                        <input type="text" name="option_a" value="<?= htmlspecialchars($q['option_a'] ?? '') ?>" required>
+                                    </div>
+                                    <div>
+                                        <label style="font-weight: 600; font-size: 13px;">Option B</label>
+                                        <input type="text" name="option_b" value="<?= htmlspecialchars($q['option_b'] ?? '') ?>" required>
+                                    </div>
+                                    <div>
+                                        <label style="font-weight: 600; font-size: 13px;">Option C</label>
+                                        <input type="text" name="option_c" value="<?= htmlspecialchars($q['option_c'] ?? '') ?>" required>
+                                    </div>
+                                    <div>
+                                        <label style="font-weight: 600; font-size: 13px;">Option D</label>
+                                        <input type="text" name="option_d" value="<?= htmlspecialchars($q['option_d'] ?? '') ?>" required>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 8px;">
+                                    <label style="font-weight: 600; font-size: 13px;">Correct Choice</label>
+                                    <select name="correct_option" required>
+                                        <option value="A" <?= ($q['correct_option'] ?? '') === 'A' ? 'selected' : '' ?>>Option A</option>
+                                        <option value="B" <?= ($q['correct_option'] ?? '') === 'B' ? 'selected' : '' ?>>Option B</option>
+                                        <option value="C" <?= ($q['correct_option'] ?? '') === 'C' ? 'selected' : '' ?>>Option C</option>
+                                        <option value="D" <?= ($q['correct_option'] ?? '') === 'D' ? 'selected' : '' ?>>Option D</option>
+                                    </select>
+                                </div>
+                            <?php endif; ?>
 
                             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
                                 <div>
-                                    <label>Correct Choice</label>
-                                    <select name="correct_option" required>
-                                        <option value="A" <?= $q['correct_option']==='A'?'selected':'' ?>>Option A</option>
-                                        <option value="B" <?= $q['correct_option']==='B'?'selected':'' ?>>Option B</option>
-                                        <option value="C" <?= $q['correct_option']==='C'?'selected':'' ?>>Option C</option>
-                                        <option value="D" <?= $q['correct_option']==='D'?'selected':'' ?>>Option D</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label>Difficulty</label>
+                                    <label style="font-weight: 600; font-size: 13px;">Difficulty</label>
                                     <select name="difficulty" required>
                                         <option value="easy" <?= strtolower($q['difficulty'])==='easy'?'selected':'' ?>>Easy</option>
                                         <option value="medium" <?= strtolower($q['difficulty'])==='medium'?'selected':'' ?>>Medium</option>
@@ -1005,18 +1330,17 @@ $cnt_unassigned_pending = count($unassigned_pending_ids);
                                     </select>
                                 </div>
                                 <div>
-                                    <label>Subject</label>
+                                    <label style="font-weight: 600; font-size: 13px;">Subject</label>
                                     <input type="text" name="subject" value="<?= htmlspecialchars($q['subject']) ?>" required>
+                                </div>
+                                <div>
+                                    <label style="font-weight: 600; font-size: 13px;">Topic</label>
+                                    <input type="text" name="topic" value="<?= htmlspecialchars($q['topic']) ?>" required>
                                 </div>
                             </div>
 
-                            <div style="margin-top: 10px;">
-                                <label>Topic</label>
-                                <input type="text" name="topic" value="<?= htmlspecialchars($q['topic']) ?>" required>
-                            </div>
-
-                            <label style="margin-top: 10px;">Explanation</label>
-                            <textarea name="explanation"><?= htmlspecialchars($q['explanation']) ?></textarea>
+                            <label style="margin-top: 10px; font-weight: 600; font-size: 13px;">Explanation</label>
+                            <textarea name="explanation" rows="2"><?= htmlspecialchars($q['explanation']) ?></textarea>
 
                             <div style="margin-top: 10px;">
                                 <button type="submit" class="btn-action btn-approve">Save Changes</button>

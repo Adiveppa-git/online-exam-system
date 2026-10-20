@@ -37,27 +37,45 @@ echo "  SMTP_PASSWORD:   " . ($hasPassword ? "[CONFIGURED (" . strlen(getenv('SM
 echo "  SENDER_EMAIL:    {$sender}\n";
 echo "  Target Recipient: {$targetEmail}\n\n";
 
+echo "Domain & DNS Deliverability Inspection:\n";
+$deliverability = inspectSenderDomainDeliverability($sender);
+echo "  Domain:          " . ($deliverability['domain'] ?: 'N/A') . "\n";
+echo "  SMTP Auth:       " . ($deliverability['smtp_authenticated'] ? 'YES' : 'NO') . "\n";
+echo "  Sender Aligned:  " . ($deliverability['sender_aligned'] ? 'YES' : 'NO (May trigger DMARC/From rewrite)') . "\n";
+echo "  MX Records:      " . ($deliverability['has_mx'] ? 'FOUND (' . count($deliverability['mx_records']) . ' hosts)' : 'MISSING') . "\n";
+echo "  SPF Record:      " . ($deliverability['has_spf'] ? $deliverability['spf_record'] : 'MISSING') . "\n";
+echo "  DMARC Record:    " . ($deliverability['has_dmarc'] ? $deliverability['dmarc_record'] : 'MISSING') . "\n";
+if (!empty($deliverability['recommendations'])) {
+    echo "  Notes/Advisories:\n";
+    foreach ($deliverability['recommendations'] as $rec) {
+        echo "   - {$rec}\n";
+    }
+}
+echo "\n";
+
 if (!$hasPassword) {
     echo "❌ ERROR: SMTP_PASSWORD is missing or empty in .env.\n";
     echo "   Please set SMTP_PASSWORD=<your 16-char Gmail App Password> in .env before running this test.\n";
     exit(1);
 }
 
-echo "Attempting real SMTP mail send via PHPMailer...\n";
+echo "Attempting real SMTP mail send via PHPMailer (with multipart/alternative AltBody & deliverability headers)...\n";
 
 // Force MAIL_DRIVER=smtp for diagnostic run
 putenv("MAIL_DRIVER=smtp");
 
 $otp = rand(100000, 999999);
-$subject = "Gmail SMTP Test - Online Examination System";
+$subject = buildOtpEmailSubject("Gmail SMTP Diagnostic Test", $otp);
 $body = buildOtpEmailHtml("Gmail SMTP Diagnostic Test", $otp, 10);
+$textBody = buildOtpEmailText("Gmail SMTP Diagnostic Test", $otp, 10);
 
 $startTime = microtime(true);
-$sent = sendMail($targetEmail, $subject, $body);
+$sent = sendMail($targetEmail, $subject, $body, $textBody);
 $duration = round(microtime(true) - $startTime, 2);
 
 if ($sent) {
     echo "✅ SUCCESS: Real email delivered to {$targetEmail} via Gmail SMTP in {$duration} seconds.\n";
+    echo "   Subject:  {$subject}\n";
     echo "   OTP Sent: {$otp}\n";
     exit(0);
 } else {
