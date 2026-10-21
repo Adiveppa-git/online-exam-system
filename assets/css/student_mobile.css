@@ -130,6 +130,18 @@ padding:18px;
 margin-top:20px;
 }
 
+/* coding answer editor responsive */
+.coding-answer-editor,
+.coding-answer-textarea{
+width:100% !important;
+max-width:100% !important;
+min-height:300px;
+height:360px;
+box-sizing:border-box !important;
+font-size:13.5px;
+padding:12px 14px;
+}
+
 /* navigation buttons */
 
 .actions{

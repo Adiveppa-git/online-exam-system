@@ -46,8 +46,14 @@ font-weight:bold;
 
 .exam-content{
 flex:1;
+min-width:0;
 padding:40px;
 background:#f4f6f8;
+box-sizing:border-box;
+}
+
+#examForm{
+width:100%;
 box-sizing:border-box;
 }
 
@@ -57,7 +63,9 @@ box-sizing:border-box;
 background:#fff;
 padding:30px;
 border-radius:10px;
+width:100%;
 max-width:980px;
+box-sizing:border-box;
 margin:auto;
 box-shadow:0 2px 8px rgba(0,0,0,0.06);
 }
@@ -336,14 +344,16 @@ letter-spacing: 0.5px;
 border: 1px solid #bae6fd;
 }
 
-/* Enlarge coding editor to 400px comfortable height with sleek dark IDE theme */
+/* Enlarge coding editor to 420px comfortable height with sleek dark IDE theme */
+.coding-answer-editor,
 .coding-answer-textarea {
 width: 100%;
-min-height: 380px;
-height: 410px;
+max-width: 100%;
+min-height: 350px;
+height: 420px;
 box-sizing: border-box;
 font-family: 'Consolas', 'Monaco', 'Courier New', 'Fira Code', monospace;
-font-size: 14px;
+font-size: 14.5px;
 line-height: 1.6;
 padding: 16px 18px;
 border: 1px solid #334155;
@@ -361,6 +371,7 @@ word-wrap: normal;
 transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+.coding-answer-editor:focus,
 .coding-answer-textarea:focus {
 outline: none;
 border-color: #38bdf8;
@@ -778,6 +789,7 @@ gap: 8px;
 display: none;
 }
 
+.coding-answer-editor,
 .coding-answer-textarea {
 min-height: 320px;
 height: 360px;

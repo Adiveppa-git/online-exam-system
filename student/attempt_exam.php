@@ -70,8 +70,77 @@ $duration = $exam['duration'] * 60;
 
 <title>Attempt Exam</title>
 
-<link rel="stylesheet" href="../assets/css/style.css">
-<link rel="stylesheet" href="../assets/css/attempt_exam.css">
+<link rel="stylesheet" href="../assets/css/style.css?v=<?= file_exists(__DIR__ . '/../assets/css/style.css') ? filemtime(__DIR__ . '/../assets/css/style.css') : time() ?>">
+<link rel="stylesheet" href="../assets/css/attempt_exam.css?v=<?= file_exists(__DIR__ . '/../assets/css/attempt_exam.css') ? filemtime(__DIR__ . '/../assets/css/attempt_exam.css') : time() ?>">
+
+<style>
+/* GUARANTEED FULL-WIDTH CODING ANSWER EDITOR */
+.coding-answer-editor,
+.coding-answer-textarea,
+textarea.coding-answer-editor,
+textarea.coding-answer-textarea {
+    display: block !important;
+    width: 100% !important;
+    min-height: 350px !important;
+    height: 420px !important;
+    box-sizing: border-box !important;
+    font-family: 'Consolas', 'Monaco', 'Courier New', 'Fira Code', monospace !important;
+    font-size: 14.5px !important;
+    line-height: 1.6 !important;
+    padding: 16px 18px !important;
+    background: #0f172a !important;
+    color: #f8fafc !important;
+    caret-color: #38bdf8 !important;
+    border: 1px solid #334155 !important;
+    border-radius: 8px !important;
+    tab-size: 4 !important;
+    -moz-tab-size: 4 !important;
+    resize: vertical !important;
+    white-space: pre !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    word-wrap: normal !important;
+}
+
+.coding-answer-editor:focus,
+.coding-answer-textarea:focus {
+    outline: none !important;
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25) !important;
+}
+
+.coding-answer-box {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin-top: 20px !important;
+    padding-top: 16px !important;
+    border-top: 1px solid #e2e8f0 !important;
+}
+
+.question-box {
+    max-width: 980px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+@media (max-width: 768px) {
+    .coding-answer-editor,
+    .coding-answer-textarea,
+    textarea.coding-answer-editor,
+    textarea.coding-answer-textarea {
+        height: 360px !important;
+        min-height: 300px !important;
+        font-size: 13.5px !important;
+        padding: 12px 14px !important;
+    }
+    .question-box {
+        padding: 18px !important;
+    }
+    .exam-content {
+        padding: 15px !important;
+    }
+}
+</style>
 
 </head>
 
@@ -207,36 +276,19 @@ if (!empty($q['sample_test_cases'])) {
 <?php endif; ?>
 
 <?php
+$qType = strtolower(trim($q['question_type'] ?? ''));
 $has_mcq_options = (!empty($q['option_a']) || !empty($q['option_b']));
-if ($has_mcq_options):
+$is_coding = ($qType === 'coding') || (!empty($q['programming_language']) && $qType !== 'mcq' && $qType !== 'short_answer' && $qType !== 'descriptive');
+
+if ($is_coding):
+    $existingAnswer = $saved_answers[(int)$q['id']] ?? null;
+    if ($existingAnswer !== null && $existingAnswer !== '') {
+        $editorInitialCode = $existingAnswer;
+    } else {
+        $editorInitialCode = get_coding_starter_code($q);
+    }
 ?>
-<div class="options">
-<?php foreach(['A','B','C','D'] as $opt): 
-    $qid = (int)$q['id'];
-    $isChecked = (isset($saved_answers[$qid]) && $saved_answers[$qid] === $opt) ? 'checked' : '';
-    $optText = $q['option_'.strtolower($opt)] ?? '';
-    if ($optText === '') continue;
-?>
-<label>
-<input type="radio"
-name="answer[<?= $q['id'] ?>]"
-value="<?= $opt ?>"
-<?= $isChecked ?>
-onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, '<?= $opt ?>')">
-<?= htmlspecialchars($optText) ?>
-</label>
-<?php endforeach; ?>
-</div>
-<?php else: ?>
-<?php
-$existingAnswer = $saved_answers[(int)$q['id']] ?? null;
-if ($existingAnswer !== null && $existingAnswer !== '') {
-    $editorInitialCode = $existingAnswer;
-} else {
-    $editorInitialCode = get_coding_starter_code($q);
-}
-?>
-<div class="coding-answer-box">
+<div class="coding-answer-box" style="width: 100% !important; box-sizing: border-box !important;">
     <div class="coding-answer-header">
         <label class="coding-answer-label">💻 Your Solution / Answer Editor:</label>
         <?php if (!empty($q['programming_language'])): ?>
@@ -252,7 +304,8 @@ if ($existingAnswer !== null && $existingAnswer !== '') {
         data-idx="<?= $index ?>"
         data-lang="<?= htmlspecialchars($q['programming_language'] ?? 'python') ?>"
         rows="18"
-        class="coding-answer-textarea"
+        class="coding-answer-editor coding-answer-textarea"
+        style="display: block !important; width: 100% !important; min-height: 350px !important; height: 420px; box-sizing: border-box !important; font-family: 'Consolas', 'Monaco', 'Courier New', 'Fira Code', monospace !important; font-size: 14.5px !important; line-height: 1.6 !important; padding: 16px 18px !important; background: #0f172a !important; color: #f8fafc !important; caret-color: #38bdf8 !important; border: 1px solid #334155 !important; border-radius: 8px !important; tab-size: 4 !important; -moz-tab-size: 4 !important; resize: vertical !important; white-space: pre !important; overflow-x: auto !important; overflow-y: auto !important; word-wrap: normal !important;"
         placeholder="Enter your code solution or answer here..."
         spellcheck="false"
         oninput="handleAnswerInput(<?= $index ?>, <?= $q['id'] ?>, this.value)"
@@ -296,6 +349,52 @@ if ($existingAnswer !== null && $existingAnswer !== '') {
         </div>
         <div id="outputContent_<?= $q['id'] ?>"></div>
     </div>
+</div>
+<?php elseif ($qType === 'short_answer'): ?>
+<div class="short-answer-box" style="margin-top: 20px; width: 100%;">
+    <label style="display: block; font-weight: 700; font-size: 14px; margin-bottom: 8px; color: #0f172a;">Your Short Answer:</label>
+    <textarea name="answer[<?= $q['id'] ?>]"
+        id="ans_<?= $q['id'] ?>"
+        data-qid="<?= $q['id'] ?>"
+        data-idx="<?= $index ?>"
+        rows="4"
+        class="short-answer-textarea"
+        style="width: 100%; min-height: 110px; padding: 12px; font-size: 15px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-family: inherit;"
+        placeholder="Enter your concise answer here..."
+        oninput="handleAnswerInput(<?= $index ?>, <?= $q['id'] ?>, this.value)"
+        onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, this.value)"><?= htmlspecialchars($saved_answers[(int)$q['id']] ?? '') ?></textarea>
+</div>
+<?php elseif ($qType === 'descriptive'): ?>
+<div class="descriptive-answer-box" style="margin-top: 20px; width: 100%;">
+    <label style="display: block; font-weight: 700; font-size: 14px; margin-bottom: 8px; color: #0f172a;">Your Descriptive Answer:</label>
+    <textarea name="answer[<?= $q['id'] ?>]"
+        id="ans_<?= $q['id'] ?>"
+        data-qid="<?= $q['id'] ?>"
+        data-idx="<?= $index ?>"
+        rows="8"
+        class="descriptive-answer-textarea"
+        style="width: 100%; min-height: 200px; padding: 12px; font-size: 15px; line-height: 1.5; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-family: inherit;"
+        placeholder="Enter your detailed answer / explanation here..."
+        oninput="handleAnswerInput(<?= $index ?>, <?= $q['id'] ?>, this.value)"
+        onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, this.value)"><?= htmlspecialchars($saved_answers[(int)$q['id']] ?? '') ?></textarea>
+</div>
+<?php else: ?>
+<div class="options">
+<?php foreach(['A','B','C','D'] as $opt):
+    $qid = (int)$q['id'];
+    $isChecked = (isset($saved_answers[$qid]) && $saved_answers[$qid] === $opt) ? 'checked' : '';
+    $optText = $q['option_'.strtolower($opt)] ?? '';
+    if ($optText === '') continue;
+?>
+<label>
+<input type="radio"
+name="answer[<?= $q['id'] ?>]"
+value="<?= $opt ?>"
+<?= $isChecked ?>
+onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, '<?= $opt ?>')">
+<?= htmlspecialchars($optText) ?>
+</label>
+<?php endforeach; ?>
 </div>
 <?php endif; ?>
 
@@ -358,7 +457,7 @@ let saveDebounceTimer=null;
 function saveCurrentAnswerIfTextarea() {
     let currentBox = document.getElementById("q" + current);
     if (!currentBox) return;
-    let ta = currentBox.querySelector('textarea.coding-answer-textarea');
+    let ta = currentBox.querySelector('textarea[name^="answer"]');
     if (ta && ta.dataset.qid) {
         markAnswered(current, parseInt(ta.dataset.qid), ta.value);
     }
@@ -467,7 +566,7 @@ function showSaveError(){
 
 // Enable Tab key indentation inside coding answer textareas
 document.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll('.coding-answer-textarea').forEach(ta => {
+    document.querySelectorAll('.coding-answer-editor, .coding-answer-textarea').forEach(ta => {
         ta.addEventListener('keydown', function(e) {
             if (e.key === 'Tab') {
                 e.preventDefault();

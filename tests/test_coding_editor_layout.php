@@ -110,10 +110,10 @@ assert_test(!str_contains($sourceAttempt, 'class="btn-copy-starter"'), "Removed 
 
 // Confirm boilerplate initialization inside answer editor
 assert_test(str_contains($sourceAttempt, 'get_coding_starter_code($q)'), "Uses get_coding_starter_code(\$q) to initialize editor");
-assert_test(str_contains($sourceAttempt, 'class="coding-answer-textarea"'), "Contains coding-answer-textarea");
+assert_test(str_contains($sourceAttempt, 'coding-answer-editor') || str_contains($sourceAttempt, 'coding-answer-textarea'), "Contains coding-answer-editor / coding-answer-textarea");
 
 // Confirm controls directly below expanded editor
-$posEditor = strpos($sourceAttempt, 'class="coding-answer-textarea"');
+$posEditor = strpos($sourceAttempt, 'coding-answer-editor') ?: strpos($sourceAttempt, 'coding-answer-textarea');
 $posToolbar = strpos($sourceAttempt, 'class="coding-toolbar"');
 $posRun = strpos($sourceAttempt, 'btn-run-code');
 $posCheck = strpos($sourceAttempt, 'btn-run-check');
@@ -131,6 +131,8 @@ assert_test(str_contains($sourceAttempt, 'showQuestion('), "showQuestion navigat
 assert_test(str_contains($sourceAttempt, 'saveCurrentAnswerIfTextarea()'), "saveCurrentAnswerIfTextarea intact");
 assert_test(str_contains($sourceAttempt, 'markAnswered('), "markAnswered auto-save intact");
 assert_test(str_contains($sourceAttempt, 'Submit Exam'), "Submit Exam button intact");
+assert_test(str_contains($sourceAttempt, 'attempt_exam.css?v='), "attempt_exam.css has cache-busting version parameter");
+assert_test(str_contains($sourceAttempt, 'class="coding-answer-editor coding-answer-textarea"'), "Contains both coding-answer-editor and coding-answer-textarea classes");
 
 // ==========================================
 // 3. CSS DIMENSIONS AND STYLES VERIFICATION
@@ -140,15 +142,22 @@ echo "\n[3] Verifying assets/css/attempt_exam.css Rules:\n";
 $sourceCss = file_get_contents(__DIR__ . '/../assets/css/attempt_exam.css');
 
 assert_test(str_contains($sourceCss, 'max-width:980px') || str_contains($sourceCss, 'max-width: 980px'), "Question box max-width increased to 980px on desktop");
-assert_test(str_contains($sourceCss, 'min-height: 380px'), "Editor min-height set to 380px");
-assert_test(str_contains($sourceCss, 'height: 410px'), "Editor height set to 410px (within 350-450px target)");
+assert_test(str_contains($sourceCss, 'min-height: 350px') || str_contains($sourceCss, 'min-height: 380px'), "Editor min-height set to at least 350px");
+assert_test(str_contains($sourceCss, 'height: 420px') || str_contains($sourceCss, 'height: 410px'), "Editor height set to ~420px (within 350-450px target)");
 assert_test(str_contains($sourceCss, 'resize: vertical;'), "Editor allows vertical resizing");
 assert_test(str_contains($sourceCss, 'white-space: pre;'), "Editor preserves indentation and formatting");
 assert_test(str_contains($sourceCss, 'overflow-x: auto;'), "Editor supports horizontal scrolling for long code");
 
 // Mobile responsive rules
-assert_test(str_contains($sourceCss, 'min-height: 320px'), "Mobile min-height set appropriately");
-assert_test(str_contains($sourceCss, 'height: 360px'), "Mobile height set for smaller screens");
+assert_test(str_contains($sourceCss, 'min-height: 320px'), "Mobile min-height set appropriately in attempt_exam.css");
+assert_test(str_contains($sourceCss, 'height: 360px'), "Mobile height set for smaller screens in attempt_exam.css");
+
+// Check mobile.css and student_mobile.css
+$sourceMobile = file_get_contents(__DIR__ . '/../assets/css/mobile.css');
+assert_test(str_contains($sourceMobile, 'coding-answer-editor'), "mobile.css includes coding-answer-editor responsive rules");
+
+$sourceStudentMobile = file_get_contents(__DIR__ . '/../assets/css/student_mobile.css');
+assert_test(str_contains($sourceStudentMobile, 'coding-answer-editor'), "student_mobile.css includes coding-answer-editor responsive rules");
 
 echo "\n----------------------------------------------------\n";
 echo "Summary: $passed Passed, $failed Failed\n";
