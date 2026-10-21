@@ -185,9 +185,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
         $subject = trim($_POST['subject'] ?? '');
         $topic = trim($_POST['topic'] ?? '');
         $difficulty = trim($_POST['difficulty'] ?? '');
-        $raw_qtype = strtolower(trim($_POST['question_type'] ?? 'mcq'));
+        $raw_qtype = isset($_POST['question_type']) ? strtolower(trim($_POST['question_type'])) : 'mcq';
         $allowed_types = ['mcq', 'coding', 'short_answer', 'descriptive', 'mixed'];
-        $question_type = in_array($raw_qtype, $allowed_types, true) ? $raw_qtype : 'mcq';
+        $question_type = in_array($raw_qtype, $allowed_types, true) ? $raw_qtype : '';
         $num_questions_raw = trim($_POST['number_of_questions'] ?? '');
         $num_questions = is_numeric($num_questions_raw) ? (int)$num_questions_raw : 0;
         $context = trim($_POST['additional_context'] ?? '');
@@ -200,6 +200,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
             $error = "Please select a valid difficulty level.";
         } elseif ($num_questions_raw === '' || $num_questions < 1 || $num_questions > 100) {
             $error = "Number of questions must be between 1 and 100.";
+        } elseif (empty($question_type)) {
+            $error = "Please select a valid question type.";
         } else {
             // ATOMIC RACE-CONDITION PROOF STUDENT-ATTEMPT LOCK GUARD
             $conn->begin_transaction();
@@ -409,6 +411,45 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
             border: 1px solid #dcdfe6;
             border-radius: 6px;
             box-sizing: border-box;
+            background-color: #ffffff;
+            color: #2c3e50;
+            font-family: inherit;
+        }
+        .form-group input:not([type="checkbox"]):not([type="radio"]),
+        .form-group select,
+        .form-select {
+            height: 46px;
+            line-height: normal;
+        }
+        .form-group select,
+        .form-select {
+            cursor: pointer;
+        }
+        .form-select {
+            width: 100%;
+            height: 46px;
+            padding: 10px 36px 10px 12px;
+            font-size: 15px;
+            font-family: inherit;
+            color: #2c3e50;
+            background-color: #ffffff;
+            border: 1px solid #dcdfe6;
+            border-radius: 6px;
+            box-sizing: border-box;
+            cursor: pointer;
+            line-height: normal;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234a5568' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 12px;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus, .form-select:focus {
+            outline: none;
+            border-color: #1e88e5;
+            box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.15);
         }
         .form-group textarea {
             height: 90px;
@@ -466,6 +507,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
             font-weight: bold;
             color: #1e88e5;
         }
+        @media (max-width: 768px) {
+            .gen-container {
+                padding: 20px 15px;
+            }
+            .form-row {
+                flex-wrap: wrap;
+                gap: 15px;
+                margin-bottom: 0;
+            }
+            .form-row .form-group {
+                flex: 1 1 calc(50% - 8px);
+                min-width: 130px;
+                margin-bottom: 15px;
+            }
+            .form-row .form-group:nth-child(3) {
+                flex: 1 1 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -514,7 +573,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
 
                 <div class="form-group">
                     <label>Select Target Exam *</label>
-                    <select name="exam_id" id="exam_id" required onchange="handleExamSelect(this)">
+                    <select name="exam_id" id="exam_id" class="form-select" required onchange="handleExamSelect(this)">
                         <option value="">-- Select Exam --</option>
                         <?php foreach ($exams_list as $ex): ?>
                             <option value="<?= $ex['id'] ?>"
@@ -542,8 +601,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                 <div class="form-row">
                     <div class="form-group">
                         <label>Question Type *</label>
-                        <select name="question_type" id="question_type" required>
-                            <option value="mcq" <?= ($_POST['question_type'] ?? 'mcq') === 'mcq' ? 'selected' : '' ?>>Multiple Choice (MCQ)</option>
+                        <select name="question_type" id="question_type" class="form-select" required>
+                            <option value="" <?= empty($_POST['question_type']) ? 'selected' : '' ?>>Choose Question Type</option>
+                            <option value="mcq" <?= ($_POST['question_type'] ?? '') === 'mcq' ? 'selected' : '' ?>>Multiple Choice (MCQ)</option>
                             <option value="coding" <?= ($_POST['question_type'] ?? '') === 'coding' ? 'selected' : '' ?>>Coding / Programming</option>
                             <option value="short_answer" <?= ($_POST['question_type'] ?? '') === 'short_answer' ? 'selected' : '' ?>>Short Answer</option>
                             <option value="descriptive" <?= ($_POST['question_type'] ?? '') === 'descriptive' ? 'selected' : '' ?>>Descriptive / Long Answer</option>
@@ -552,7 +612,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                     </div>
                     <div class="form-group">
                         <label>Difficulty *</label>
-                        <select name="difficulty" id="difficulty" required>
+                        <select name="difficulty" id="difficulty" class="form-select" required>
                             <option value="" <?= empty($_POST['difficulty']) ? 'selected' : '' ?>>Choose Difficulty</option>
                             <option value="easy" <?= ($_POST['difficulty'] ?? '') === 'easy' ? 'selected' : '' ?>>Easy</option>
                             <option value="medium" <?= ($_POST['difficulty'] ?? '') === 'medium' ? 'selected' : '' ?>>Medium</option>
