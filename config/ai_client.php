@@ -233,6 +233,33 @@ class AiClient {
         return $res;
     }
 
+    // --- Code Execution Sandbox Methods ---
+
+    public function getCodeExecutionStatus(): array {
+        return $this->request('GET', '/api/v1/code/status', null, 5);
+    }
+
+    public function executeCode(string $language, string $code, string $stdin = '', float $timeout = 5.0): array {
+        $payload = [
+            'language' => $language,
+            'code' => $code,
+            'stdin' => $stdin,
+            'timeout_seconds' => $timeout
+        ];
+        return $this->request('POST', '/api/v1/code/execute', $payload, (int)ceil($timeout) + 3);
+    }
+
+    public function checkSampleCases(string $language, string $code, array $sampleCases, float $timeout = 5.0): array {
+        $payload = [
+            'language' => $language,
+            'code' => $code,
+            'test_cases' => $sampleCases,
+            'timeout_seconds' => $timeout
+        ];
+        $totalTimeout = (int)ceil($timeout * max(1, count($sampleCases))) + 5;
+        return $this->request('POST', '/api/v1/code/check', $payload, min(30, $totalTimeout));
+    }
+
     private function request(string $method, string $endpoint, ?array $payload = null, ?int $overrideTimeout = null, int $retryCount = 0): array {
         $endpointClean = '/' . ltrim($endpoint, '/');
         $url = $this->baseUrl . $endpointClean;

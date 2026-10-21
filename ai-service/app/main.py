@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.auth import verify_internal_api_key
-from app.routes import health, question_gen, performance, ml_difficulty, rag, recommendations
+from app.routes import health, question_gen, performance, ml_difficulty, rag, recommendations, code_execution
 from app.services.vector_store import VectorStoreManager
 
 # Structured Logging Setup
@@ -84,6 +84,9 @@ app.include_router(rag.router, prefix=settings.API_V1_STR, tags=["RAG Study Assi
 
 app.include_router(recommendations.router, tags=["Personalized Adaptive Learning"], dependencies=auth_deps)
 app.include_router(recommendations.router, prefix=settings.API_V1_STR, tags=["Personalized Adaptive Learning"], dependencies=auth_deps)
+
+app.include_router(code_execution.router, tags=["Code Execution"], dependencies=auth_deps)
+app.include_router(code_execution.router, prefix=settings.API_V1_STR, tags=["Code Execution"], dependencies=auth_deps)
 
 @app.get("/")
 def root():

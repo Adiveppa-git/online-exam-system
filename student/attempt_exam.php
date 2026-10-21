@@ -208,8 +208,11 @@ if (!empty($q['sample_test_cases'])) {
 
 <?php if (!empty($q['starter_code'])): ?>
     <div class="coding-section">
-        <div class="coding-section-label">💻 Starter Code</div>
-        <pre class="starter-code-block"><code><?= htmlspecialchars($q['starter_code']) ?></code></pre>
+        <div class="coding-section-label" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>💻 Starter Code</span>
+            <button type="button" class="btn-copy-starter" onclick="copyStarterCode(<?= $q['id'] ?>)">📋 Copy to Editor</button>
+        </div>
+        <pre class="starter-code-block" id="starterCode_<?= $q['id'] ?>"><code><?= htmlspecialchars($q['starter_code']) ?></code></pre>
     </div>
 <?php endif; ?>
 
@@ -236,19 +239,64 @@ onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, '<?= $opt ?>')">
 </div>
 <?php else: ?>
 <div class="coding-answer-box">
-    <label class="coding-answer-label">Your Solution / Answer:</label>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <label class="coding-answer-label" style="margin-bottom: 0;">Your Solution / Answer:</label>
+        <?php if (!empty($q['programming_language'])): ?>
+            <span style="font-size: 11px; font-weight: 700; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;">
+                <?= htmlspecialchars($q['programming_language']) ?>
+            </span>
+        <?php endif; ?>
+    </div>
+    
     <textarea name="answer[<?= $q['id'] ?>]"
         id="ans_<?= $q['id'] ?>"
         data-qid="<?= $q['id'] ?>"
         data-idx="<?= $index ?>"
-        rows="10"
+        data-lang="<?= htmlspecialchars($q['programming_language'] ?? 'python') ?>"
+        rows="15"
         class="coding-answer-textarea"
         placeholder="Enter your code solution or answer here..."
+        spellcheck="false"
         oninput="handleAnswerInput(<?= $index ?>, <?= $q['id'] ?>, this.value)"
         onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, this.value)"><?= htmlspecialchars($saved_answers[(int)$q['id']] ?? '') ?></textarea>
-    <div class="coding-answer-hint">
-        <span>Press <kbd style="background:#e2e8f0;padding:1px 5px;border-radius:3px;font-size:11px;">Tab</kbd> to indent code.</span>
-        <span id="saveStatus_<?= $q['id'] ?>"></span>
+
+    <!-- Coding Execution Toolbar -->
+    <div class="coding-toolbar">
+        <div class="coding-toolbar-left">
+            <button type="button" class="btn-code-action btn-run-code" id="btnRun_<?= $q['id'] ?>" onclick="runStudentCode(<?= $index ?>, <?= $q['id'] ?>)">
+                ▶ Run Code
+            </button>
+            <?php if (!empty($sampleCases)): ?>
+                <button type="button" class="btn-code-action btn-run-check" id="btnCheck_<?= $q['id'] ?>" onclick="runAndCheckSampleCases(<?= $index ?>, <?= $q['id'] ?>)">
+                    ✓ Run &amp; Check (<?= count($sampleCases) ?> Sample <?= count($sampleCases) === 1 ? 'Case' : 'Cases' ?>)
+                </button>
+            <?php endif; ?>
+            <button type="button" class="btn-code-action btn-toggle-input" id="btnToggleInput_<?= $q['id'] ?>" onclick="toggleCustomInput(<?= $q['id'] ?>)">
+                📥 Custom Input
+            </button>
+        </div>
+        <div class="coding-toolbar-right">
+            <span>Press <kbd style="background:#e2e8f0;padding:1px 5px;border-radius:3px;font-size:11px;color:#1e293b;">Tab</kbd> to indent</span>
+            <span id="saveStatus_<?= $q['id'] ?>" style="min-width: 55px; text-align: right;"></span>
+        </div>
+    </div>
+
+    <!-- Collapsible Custom Input Card -->
+    <div id="customInputCard_<?= $q['id'] ?>" class="custom-input-card" style="display: none;">
+        <label class="custom-input-label">Standard Input (stdin):</label>
+        <textarea id="customInput_<?= $q['id'] ?>" class="custom-input-textarea" placeholder="Enter input here (lines passed to input() / Scanner)..."><?= htmlspecialchars(is_scalar($sampleCases[0]['input'] ?? '') ? (string)$sampleCases[0]['input'] : '') ?></textarea>
+    </div>
+
+    <!-- Dedicated Output Panel -->
+    <div id="outputPanel_<?= $q['id'] ?>" class="execution-output-panel" style="display: none;">
+        <div class="execution-output-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="outputBadge_<?= $q['id'] ?>" class="execution-status-badge">Console Output</span>
+                <span id="outputMeta_<?= $q['id'] ?>" style="color: #94a3b8; font-size: 11px;"></span>
+            </div>
+            <button type="button" class="btn-close-output" onclick="closeOutputPanel(<?= $q['id'] ?>)" title="Close Output">✕</button>
+        </div>
+        <div id="outputContent_<?= $q['id'] ?>"></div>
     </div>
 </div>
 <?php endif; ?>
@@ -434,6 +482,301 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 });
+
+/* CODE EXECUTION & TEST CASES CLIENT LOGIC */
+function escapeHtml(text) {
+    if (text === null || text === undefined) return "";
+    return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function toggleCustomInput(qid) {
+    const card = document.getElementById("customInputCard_" + qid);
+    const btn = document.getElementById("btnToggleInput_" + qid);
+    if (!card) return;
+    if (card.style.display === "none" || card.style.display === "") {
+        card.style.display = "block";
+        if (btn) btn.classList.add("active");
+        const ta = document.getElementById("customInput_" + qid);
+        if (ta) ta.focus();
+    } else {
+        card.style.display = "none";
+        if (btn) btn.classList.remove("active");
+    }
+}
+
+function closeOutputPanel(qid) {
+    const panel = document.getElementById("outputPanel_" + qid);
+    if (panel) panel.style.display = "none";
+}
+
+function copyStarterCode(qid) {
+    const starterPre = document.getElementById("starterCode_" + qid);
+    const editor = document.getElementById("ans_" + qid);
+    if (!starterPre || !editor) return;
+    const starterText = starterPre.innerText || starterPre.textContent;
+    if (editor.value.trim() !== "" && editor.value.trim() !== starterText.trim()) {
+        if (!confirm("Replace current editor contents with starter code?")) {
+            return;
+        }
+    }
+    editor.value = starterText;
+    editor.dispatchEvent(new Event('input'));
+    editor.focus();
+}
+
+function runStudentCode(index, qid) {
+    const editor = document.getElementById("ans_" + qid);
+    if (!editor) return;
+    const code = editor.value;
+    if (code.trim() === "") {
+        alert("Please enter your code solution in the editor before running.");
+        editor.focus();
+        return;
+    }
+
+    const panel = document.getElementById("outputPanel_" + qid);
+    const badge = document.getElementById("outputBadge_" + qid);
+    const meta = document.getElementById("outputMeta_" + qid);
+    const content = document.getElementById("outputContent_" + qid);
+    const btnRun = document.getElementById("btnRun_" + qid);
+    const btnCheck = document.getElementById("btnCheck_" + qid);
+
+    // Get custom input if visible
+    let customInput = "";
+    const customCard = document.getElementById("customInputCard_" + qid);
+    if (customCard && customCard.style.display !== "none") {
+        const customTa = document.getElementById("customInput_" + qid);
+        if (customTa) customInput = customTa.value;
+    }
+
+    // Set loading state
+    if (panel) panel.style.display = "block";
+    if (badge) {
+        badge.className = "execution-status-badge status-badge-running";
+        badge.innerText = "⏳ Running...";
+    }
+    if (meta) meta.innerText = "";
+    if (content) {
+        content.innerHTML = '<div style="padding: 16px; color: #93c5fd; font-family: monospace; font-size: 13px;">Executing program securely in sandbox...</div>';
+    }
+    if (btnRun) btnRun.disabled = true;
+    if (btnCheck) btnCheck.disabled = true;
+
+    fetch("run_code.php", {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: "csrf_token=<?= urlencode($csrf_token) ?>"
+            + "&exam_id=<?= $exam_id ?>"
+            + "&question_id=" + encodeURIComponent(qid)
+            + "&action=run"
+            + "&code=" + encodeURIComponent(code)
+            + "&custom_input=" + encodeURIComponent(customInput)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (btnRun) btnRun.disabled = false;
+        if (btnCheck) btnCheck.disabled = false;
+
+        if (data.status === "error") {
+            if (badge) {
+                badge.className = "execution-status-badge status-badge-error";
+                badge.innerText = "Execution Error";
+            }
+            if (content) {
+                content.innerHTML = '<div style="padding: 14px; color: #f87171; font-family: monospace; font-size: 13px;">' + escapeHtml(data.message || "Execution failed.") + '</div>';
+            }
+            return;
+        }
+
+        const runData = data.data || {};
+        const execStatus = runData.status || "error";
+        const execTime = runData.execution_time_ms ? runData.execution_time_ms + " ms" : "";
+
+        if (meta) meta.innerText = execTime ? "Runtime: " + execTime : "";
+
+        if (execStatus === "success") {
+            if (badge) {
+                badge.className = "execution-status-badge status-badge-success";
+                badge.innerText = "✓ Success";
+            }
+            let outHtml = '<pre class="console-output-box">' + (escapeHtml(runData.stdout) || '<span style="color:#64748b; font-style:italic;">(Program completed successfully with no output to stdout)</span>');
+            if (runData.stderr) {
+                outHtml += '<div class="console-stderr"><strong>Standard Error:</strong><br>' + escapeHtml(runData.stderr) + '</div>';
+            }
+            outHtml += '</pre>';
+            if (content) content.innerHTML = outHtml;
+
+        } else if (execStatus === "compilation_error") {
+            if (badge) {
+                badge.className = "execution-status-badge status-badge-error";
+                badge.innerText = "✗ Compilation Error";
+            }
+            if (content) {
+                content.innerHTML = '<pre class="console-output-box"><span class="console-stderr"><strong>Compilation Error:</strong><br>' + escapeHtml(runData.stderr || runData.stdout || "Compilation failed.") + '</span></pre>';
+            }
+
+        } else if (execStatus === "timeout") {
+            if (badge) {
+                badge.className = "execution-status-badge status-badge-timeout";
+                badge.innerText = "⏱ Time Limit Exceeded";
+            }
+            if (content) {
+                content.innerHTML = '<div class="console-stderr" style="padding: 14px; font-family: monospace; font-size: 13px;"><strong>Time Limit Exceeded:</strong><br>' + escapeHtml(runData.stderr || "Program execution timed out.") + '</div>';
+            }
+
+        } else {
+            // Runtime error
+            if (badge) {
+                badge.className = "execution-status-badge status-badge-error";
+                badge.innerText = "✗ Runtime Error" + (runData.exit_code ? " (Exit " + runData.exit_code + ")" : "");
+            }
+            let outHtml = '<pre class="console-output-box">';
+            if (runData.stdout) {
+                outHtml += escapeHtml(runData.stdout) + '<br>';
+            }
+            outHtml += '<span class="console-stderr"><strong>Runtime Error:</strong><br>' + escapeHtml(runData.stderr || "Process exited with non-zero status.") + '</span></pre>';
+            if (content) content.innerHTML = outHtml;
+        }
+    })
+    .catch(err => {
+        if (btnRun) btnRun.disabled = false;
+        if (btnCheck) btnCheck.disabled = false;
+        if (badge) {
+            badge.className = "execution-status-badge status-badge-error";
+            badge.innerText = "Network Error";
+        }
+        if (content) {
+            content.innerHTML = '<div style="padding: 14px; color: #f87171; font-family: monospace; font-size: 13px;">Network request failed. Please check backend server status.</div>';
+        }
+    });
+}
+
+function runAndCheckSampleCases(index, qid) {
+    const editor = document.getElementById("ans_" + qid);
+    if (!editor) return;
+    const code = editor.value;
+    if (code.trim() === "") {
+        alert("Please enter your code solution in the editor before checking.");
+        editor.focus();
+        return;
+    }
+
+    const panel = document.getElementById("outputPanel_" + qid);
+    const badge = document.getElementById("outputBadge_" + qid);
+    const meta = document.getElementById("outputMeta_" + qid);
+    const content = document.getElementById("outputContent_" + qid);
+    const btnRun = document.getElementById("btnRun_" + qid);
+    const btnCheck = document.getElementById("btnCheck_" + qid);
+
+    // Set loading state
+    if (panel) panel.style.display = "block";
+    if (badge) {
+        badge.className = "execution-status-badge status-badge-running";
+        badge.innerText = "⏳ Checking Test Cases...";
+    }
+    if (meta) meta.innerText = "";
+    if (content) {
+        content.innerHTML = '<div style="padding: 16px; color: #93c5fd; font-family: monospace; font-size: 13px;">Running code against sample test cases...</div>';
+    }
+    if (btnRun) btnRun.disabled = true;
+    if (btnCheck) btnCheck.disabled = true;
+
+    fetch("run_code.php", {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: "csrf_token=<?= urlencode($csrf_token) ?>"
+            + "&exam_id=<?= $exam_id ?>"
+            + "&question_id=" + encodeURIComponent(qid)
+            + "&action=check"
+            + "&code=" + encodeURIComponent(code)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (btnRun) btnRun.disabled = false;
+        if (btnCheck) btnCheck.disabled = false;
+
+        if (data.status === "error") {
+            if (badge) {
+                badge.className = "execution-status-badge status-badge-error";
+                badge.innerText = "Check Error";
+            }
+            if (content) {
+                content.innerHTML = '<div style="padding: 14px; color: #f87171; font-family: monospace; font-size: 13px;">' + escapeHtml(data.message || "Failed to check test cases.") + '</div>';
+            }
+            return;
+        }
+
+        const checkData = data.data || {};
+        const results = checkData.results || [];
+        const passedCount = checkData.passed_cases || 0;
+        const totalCount = checkData.total_cases || 0;
+        const allPassed = checkData.all_passed || false;
+
+        if (badge) {
+            if (allPassed) {
+                badge.className = "execution-status-badge status-badge-success";
+                badge.innerText = "✓ Passed All Cases (" + passedCount + "/" + totalCount + ")";
+            } else if (checkData.status === "compilation_error") {
+                badge.className = "execution-status-badge status-badge-error";
+                badge.innerText = "✗ Compilation Error";
+            } else {
+                badge.className = "execution-status-badge status-badge-error";
+                badge.innerText = "✗ " + passedCount + "/" + totalCount + " Passed";
+            }
+        }
+
+        if (meta) {
+            meta.innerText = allPassed ? "All sample cases verified" : "Some test cases failed";
+        }
+
+        if (checkData.status === "compilation_error") {
+            if (content) {
+                content.innerHTML = '<pre class="console-output-box"><span class="console-stderr"><strong>Compilation Error:</strong><br>' + escapeHtml(checkData.error_summary || "Compilation failed.") + '</span></pre>';
+            }
+            return;
+        }
+
+        let html = '<div class="test-cases-output-grid">';
+        results.forEach(tc => {
+            html += '<div class="tc-card ' + (tc.passed ? 'tc-passed' : 'tc-failed') + '">';
+            html += '  <div class="tc-card-header">';
+            html += '    <span>Sample Test Case #' + tc.case_index + '</span>';
+            html += '    <span style="color:' + (tc.passed ? '#34d399' : '#f87171') + '; font-weight:700;">' + (tc.passed ? '✓ Passed' : '✗ Failed') + '</span>';
+            html += '  </div>';
+            html += '  <div class="tc-grid">';
+            html += '    <div><span class="tc-label">Input</span><pre class="tc-code">' + (escapeHtml(tc.input) || '<span style="color:#64748b;">(Empty)</span>') + '</pre></div>';
+            html += '    <div><span class="tc-label">Expected Output</span><pre class="tc-code tc-code-expected">' + (escapeHtml(tc.expected_output) || '<span style="color:#64748b;">(Empty)</span>') + '</pre></div>';
+            html += '  </div>';
+            html += '  <div style="margin-top:6px;">';
+            html += '    <span class="tc-label">Your Output</span>';
+            html += '    <pre class="tc-code ' + (tc.passed ? 'tc-code-actual-pass' : 'tc-code-actual-fail') + '">' + (escapeHtml(tc.actual_output) || '<span style="color:#64748b;">(No output)</span>') + '</pre>';
+            html += '  </div>';
+            if (tc.error && !tc.passed) {
+                html += '  <div class="console-stderr" style="margin-top:6px; font-size:12px;"><strong>Error:</strong><br>' + escapeHtml(tc.error) + '</div>';
+            }
+            html += '</div>';
+        });
+        html += '</div>';
+
+        if (content) content.innerHTML = html;
+    })
+    .catch(err => {
+        if (btnRun) btnRun.disabled = false;
+        if (btnCheck) btnCheck.disabled = false;
+        if (badge) {
+            badge.className = "execution-status-badge status-badge-error";
+            badge.innerText = "Network Error";
+        }
+        if (content) {
+            content.innerHTML = '<div style="padding: 14px; color: #f87171; font-family: monospace; font-size: 13px;">Network request failed. Please check backend server status.</div>';
+        }
+    });
+}
 
 
 /* PERFECT 0.2 SECOND BEEP TIMER */

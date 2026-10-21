@@ -307,24 +307,26 @@ border-top: 1px dashed #cbd5e1;
 
 .coding-answer-label {
 display: block;
-font-weight: 600;
+font-weight: 700;
 font-size: 14px;
-margin-bottom: 6px;
+margin-bottom: 8px;
 color: #0f172a;
 }
 
+/* Enlarge coding editor to 380-400px min-height with sleek dark IDE theme */
 .coding-answer-textarea {
 width: 100%;
-min-height: 230px;
-font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-font-size: 13.5px;
-line-height: 1.55;
-padding: 12px 14px;
-border: 1px solid #94a3b8;
+min-height: 380px;
+font-family: 'Consolas', 'Monaco', 'Courier New', 'Fira Code', monospace;
+font-size: 14px;
+line-height: 1.6;
+padding: 14px 16px;
+border: 1px solid #334155;
 border-radius: 8px;
 box-sizing: border-box;
-background: #ffffff;
-color: #0f172a;
+background: #0f172a;
+color: #f8fafc;
+caret-color: #38bdf8;
 tab-size: 4;
 -moz-tab-size: 4;
 resize: vertical;
@@ -333,16 +335,284 @@ transition: border-color 0.15s, box-shadow 0.15s;
 
 .coding-answer-textarea:focus {
 outline: none;
-border-color: #2563eb;
-box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+border-color: #38bdf8;
+box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
 }
 
 .coding-answer-hint {
 font-size: 12px;
 color: #64748b;
-margin-top: 4px;
+margin-top: 6px;
 display: flex;
 justify-content: space-between;
+align-items: center;
+}
+
+/* Coding Execution Toolbar & Buttons */
+.coding-toolbar {
+display: flex;
+flex-wrap: wrap;
+align-items: center;
+justify-content: space-between;
+gap: 10px;
+margin-top: 10px;
+margin-bottom: 12px;
+}
+
+.coding-toolbar-left {
+display: flex;
+flex-wrap: wrap;
+align-items: center;
+gap: 8px;
+}
+
+.coding-toolbar-right {
+display: flex;
+align-items: center;
+gap: 10px;
+font-size: 12px;
+color: #64748b;
+}
+
+.btn-code-action {
+display: inline-flex;
+align-items: center;
+gap: 6px;
+padding: 7px 15px;
+border-radius: 6px;
+font-size: 13px;
+font-weight: 600;
+cursor: pointer;
+border: none;
+transition: background 0.15s, transform 0.05s, opacity 0.15s;
+user-select: none;
+}
+.btn-code-action:active {
+transform: scale(0.98);
+}
+.btn-code-action:disabled {
+opacity: 0.6;
+cursor: not-allowed;
+}
+
+.btn-run-code {
+background: #2563eb;
+color: #ffffff;
+}
+.btn-run-code:hover:not(:disabled) {
+background: #1d4ed8;
+}
+
+.btn-run-check {
+background: #059669;
+color: #ffffff;
+}
+.btn-run-check:hover:not(:disabled) {
+background: #047857;
+}
+
+.btn-toggle-input {
+background: #f1f5f9;
+color: #334155;
+border: 1px solid #cbd5e1;
+}
+.btn-toggle-input:hover:not(:disabled) {
+background: #e2e8f0;
+}
+.btn-toggle-input.active {
+background: #e0e7ff;
+color: #3730a3;
+border-color: #a5b4fc;
+}
+
+.btn-copy-starter {
+font-size: 11px;
+background: rgba(255, 255, 255, 0.1);
+color: #cbd5e1;
+border: 1px solid rgba(255, 255, 255, 0.2);
+padding: 3px 8px;
+border-radius: 4px;
+cursor: pointer;
+transition: background 0.15s, color 0.15s;
+}
+.btn-copy-starter:hover {
+background: rgba(255, 255, 255, 0.2);
+color: #ffffff;
+}
+
+/* Custom Input Card */
+.custom-input-card {
+background: #f8fafc;
+border: 1px solid #cbd5e1;
+border-radius: 8px;
+padding: 10px 12px;
+margin-top: 10px;
+margin-bottom: 12px;
+}
+.custom-input-label {
+font-size: 11px;
+font-weight: 700;
+text-transform: uppercase;
+color: #475569;
+margin-bottom: 4px;
+display: block;
+}
+.custom-input-textarea {
+width: 100%;
+min-height: 70px;
+font-family: 'Consolas', 'Monaco', monospace;
+font-size: 13px;
+padding: 8px;
+border: 1px solid #cbd5e1;
+border-radius: 6px;
+box-sizing: border-box;
+background: #ffffff;
+color: #0f172a;
+resize: vertical;
+}
+
+/* Execution Output Panel */
+.execution-output-panel {
+margin-top: 14px;
+border-radius: 8px;
+border: 1px solid #334155;
+background: #0f172a;
+color: #f8fafc;
+overflow: hidden;
+box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+.execution-output-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+background: #1e293b;
+padding: 8px 14px;
+border-bottom: 1px solid #334155;
+font-size: 13px;
+}
+
+.execution-status-badge {
+display: inline-flex;
+align-items: center;
+gap: 6px;
+padding: 3px 9px;
+border-radius: 4px;
+font-size: 12px;
+font-weight: 700;
+}
+.status-badge-success {
+background: #065f46;
+color: #34d399;
+}
+.status-badge-error {
+background: #7f1d1d;
+color: #f87171;
+}
+.status-badge-timeout {
+background: #78350f;
+color: #fbbf24;
+}
+.status-badge-running {
+background: #1e3a8a;
+color: #93c5fd;
+}
+
+.btn-close-output {
+background: transparent;
+border: none;
+color: #94a3b8;
+font-size: 14px;
+cursor: pointer;
+padding: 2px 6px;
+border-radius: 4px;
+}
+.btn-close-output:hover {
+color: #ffffff;
+background: rgba(255, 255, 255, 0.1);
+}
+
+.console-output-box {
+padding: 14px;
+margin: 0;
+font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+font-size: 13px;
+line-height: 1.5;
+white-space: pre-wrap;
+word-break: break-word;
+max-height: 260px;
+overflow-y: auto;
+}
+.console-stderr {
+color: #f87171;
+margin-top: 8px;
+padding-top: 8px;
+border-top: 1px dashed #475569;
+}
+
+/* Test Cases Output Container */
+.test-cases-output-grid {
+padding: 12px 14px;
+display: flex;
+flex-direction: column;
+gap: 10px;
+max-height: 380px;
+overflow-y: auto;
+}
+
+.tc-card {
+background: #1e293b;
+border: 1px solid #334155;
+border-radius: 6px;
+padding: 10px 12px;
+}
+.tc-card.tc-passed {
+border-left: 4px solid #10b981;
+}
+.tc-card.tc-failed {
+border-left: 4px solid #ef4444;
+}
+
+.tc-card-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-bottom: 6px;
+font-size: 12px;
+font-weight: 600;
+}
+
+.tc-grid {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 8px;
+font-size: 12px;
+}
+.tc-label {
+color: #94a3b8;
+font-size: 11px;
+text-transform: uppercase;
+display: block;
+margin-bottom: 2px;
+}
+.tc-code {
+background: #0f172a;
+padding: 6px 8px;
+border-radius: 4px;
+font-family: 'Consolas', monospace;
+font-size: 12px;
+margin: 0;
+white-space: pre-wrap;
+word-break: break-all;
+}
+.tc-code-expected {
+color: #a7f3d0;
+}
+.tc-code-actual-pass {
+color: #6ee7b7;
+}
+.tc-code-actual-fail {
+color: #fca5a5;
 }
 
 /* options */
@@ -478,6 +748,28 @@ gap: 8px;
 
 .constraints-divider {
 display: none;
+}
+
+.coding-answer-textarea {
+min-height: 280px;
+}
+
+.coding-toolbar {
+flex-direction: column;
+align-items: stretch;
+}
+
+.coding-toolbar-left {
+flex-direction: column;
+}
+
+.btn-code-action {
+width: 100%;
+justify-content: center;
+}
+
+.tc-grid {
+grid-template-columns: 1fr;
 }
 
 /* buttons stacked */
