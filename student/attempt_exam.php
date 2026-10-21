@@ -137,36 +137,36 @@ onclick="showQuestion(<?= $i ?>)">
 id="q<?= $index ?>"
 style="<?= $index!==0?'display:none':'' ?>">
 
-<h2>Q<?= $index+1 ?>. <?= htmlspecialchars(clean_question_title($q['question'])) ?></h2>
+<?= render_exam_question($q['question'], $index + 1) ?>
 
 <?php if (!empty($q['programming_language'])): ?>
-    <div style="margin-bottom: 12px;">
-        <span style="background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 4px; font-size: 13px; font-weight: 600;">
-            💻 Language: <?= htmlspecialchars($q['programming_language']) ?>
+    <div class="coding-section">
+        <span class="coding-lang-badge">
+            💻 Programming Language: <?= htmlspecialchars($q['programming_language']) ?>
         </span>
     </div>
 <?php endif; ?>
 
 <?php if (!empty($q['input_format']) || !empty($q['output_format'])): ?>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-bottom: 12px; font-size: 13px;">
+    <div class="io-grid">
         <?php if (!empty($q['input_format'])): ?>
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px;">
-                <strong style="color: #475569; text-transform: uppercase; font-size: 11px;">📥 Input Format</strong>
-                <div style="margin-top: 4px; color: #1e293b;"><?= nl2br(htmlspecialchars($q['input_format'])) ?></div>
+            <div class="io-card">
+                <div class="coding-section-label">📥 Input Format</div>
+                <div class="io-content"><?= nl2br(htmlspecialchars($q['input_format'])) ?></div>
             </div>
         <?php endif; ?>
         <?php if (!empty($q['output_format'])): ?>
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px;">
-                <strong style="color: #475569; text-transform: uppercase; font-size: 11px;">📤 Output Format</strong>
-                <div style="margin-top: 4px; color: #1e293b;"><?= nl2br(htmlspecialchars($q['output_format'])) ?></div>
+            <div class="io-card">
+                <div class="coding-section-label">📤 Output Format</div>
+                <div class="io-content"><?= nl2br(htmlspecialchars($q['output_format'])) ?></div>
             </div>
         <?php endif; ?>
     </div>
 <?php endif; ?>
 
 <?php if (!empty($q['constraints'])): ?>
-    <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; color: #92400e;">
-        ⚠️ <strong>Constraints:</strong> <code><?= htmlspecialchars($q['constraints']) ?></code>
+    <div class="coding-section">
+        <?= render_coding_constraints($q['constraints']) ?>
     </div>
 <?php endif; ?>
 
@@ -180,24 +180,24 @@ if (!empty($q['sample_test_cases'])) {
 }
 ?>
 <?php if (!empty($sampleCases)): ?>
-    <div style="margin-bottom: 14px;">
-        <strong style="font-size: 13px; color: #334155;">🧪 Sample Test Cases:</strong>
-        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+    <div class="coding-section">
+        <div class="coding-section-label">🧪 Sample Test Cases</div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
             <?php foreach ($sampleCases as $sIdx => $stc): ?>
-                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; font-size: 13px;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div class="sample-case-card">
+                    <div class="sample-case-grid">
                         <div>
-                            <span style="color: #64748b; font-size: 11px; text-transform: uppercase;">Sample Input:</span>
-                            <pre style="background: white; border: 1px solid #cbd5e1; padding: 6px; border-radius: 4px; margin: 2px 0 0 0; font-family: monospace; font-size: 12px; white-space: pre-wrap;"><?= htmlspecialchars(is_scalar($stc['input'] ?? '') ? (string)$stc['input'] : json_encode($stc['input'])) ?></pre>
+                            <span class="sample-case-label">Sample Input:</span>
+                            <pre class="sample-case-code sample-input-code"><?= htmlspecialchars(is_scalar($stc['input'] ?? '') ? (string)$stc['input'] : json_encode($stc['input'])) ?></pre>
                         </div>
                         <div>
-                            <span style="color: #64748b; font-size: 11px; text-transform: uppercase;">Sample Output:</span>
-                            <pre style="background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 6px; border-radius: 4px; margin: 2px 0 0 0; font-family: monospace; font-weight: bold; font-size: 12px; white-space: pre-wrap;"><?= htmlspecialchars(is_scalar($stc['output'] ?? '') ? (string)$stc['output'] : json_encode($stc['output'])) ?></pre>
+                            <span class="sample-case-label">Sample Output:</span>
+                            <pre class="sample-case-code sample-output-code"><?= htmlspecialchars(is_scalar($stc['output'] ?? '') ? (string)$stc['output'] : json_encode($stc['output'])) ?></pre>
                         </div>
                     </div>
                     <?php if (!empty($stc['explanation'])): ?>
-                        <div style="font-size: 12px; color: #64748b; margin-top: 4px; font-style: italic;">
-                            Explanation: <?= htmlspecialchars($stc['explanation']) ?>
+                        <div class="sample-case-explanation">
+                            <strong>Explanation:</strong> <?= htmlspecialchars($stc['explanation']) ?>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -207,9 +207,9 @@ if (!empty($q['sample_test_cases'])) {
 <?php endif; ?>
 
 <?php if (!empty($q['starter_code'])): ?>
-    <div style="margin-bottom: 14px;">
-        <strong style="font-size: 13px; color: #334155;">💻 Starter Code:</strong>
-        <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 12px; overflow-x: auto; margin-top: 6px; white-space: pre-wrap;"><code><?= htmlspecialchars($q['starter_code']) ?></code></pre>
+    <div class="coding-section">
+        <div class="coding-section-label">💻 Starter Code</div>
+        <pre class="starter-code-block"><code><?= htmlspecialchars($q['starter_code']) ?></code></pre>
     </div>
 <?php endif; ?>
 
@@ -235,9 +235,21 @@ onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, '<?= $opt ?>')">
 <?php endforeach; ?>
 </div>
 <?php else: ?>
-<div style="margin-top: 15px;">
-    <label style="display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; color: #1e293b;">Your Solution / Answer:</label>
-    <textarea name="answer[<?= $q['id'] ?>]" rows="8" style="width: 100%; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; line-height: 1.5;" placeholder="Enter your code solution or answer here..." onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, this.value)"><?= htmlspecialchars($saved_answers[(int)$q['id']] ?? '') ?></textarea>
+<div class="coding-answer-box">
+    <label class="coding-answer-label">Your Solution / Answer:</label>
+    <textarea name="answer[<?= $q['id'] ?>]"
+        id="ans_<?= $q['id'] ?>"
+        data-qid="<?= $q['id'] ?>"
+        data-idx="<?= $index ?>"
+        rows="10"
+        class="coding-answer-textarea"
+        placeholder="Enter your code solution or answer here..."
+        oninput="handleAnswerInput(<?= $index ?>, <?= $q['id'] ?>, this.value)"
+        onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, this.value)"><?= htmlspecialchars($saved_answers[(int)$q['id']] ?? '') ?></textarea>
+    <div class="coding-answer-hint">
+        <span>Press <kbd style="background:#e2e8f0;padding:1px 5px;border-radius:3px;font-size:11px;">Tab</kbd> to indent code.</span>
+        <span id="saveStatus_<?= $q['id'] ?>"></span>
+    </div>
 </div>
 <?php endif; ?>
 
@@ -293,70 +305,135 @@ document.addEventListener("click",unlockAudio);
 document.addEventListener("keydown",unlockAudio);
 
 
-/* QUESTION NAV */
+/* QUESTION NAV & ANSWER PERSISTENCE */
 let current=0;
+let saveDebounceTimer=null;
 
-function showQuestion(i){
-
-let currentBtn=document.getElementById("nav"+current);
-
-currentBtn.classList.remove("active");
-
-if(!currentBtn.classList.contains("answered")){
-currentBtn.classList.remove("not-visited");
-currentBtn.classList.add("visited");
+function saveCurrentAnswerIfTextarea() {
+    let currentBox = document.getElementById("q" + current);
+    if (!currentBox) return;
+    let ta = currentBox.querySelector('textarea.coding-answer-textarea');
+    if (ta && ta.dataset.qid) {
+        markAnswered(current, parseInt(ta.dataset.qid), ta.value);
+    }
 }
 
-document.getElementById("q"+current).style.display="none";
-document.getElementById("q"+i).style.display="block";
+function showQuestion(i){
+    // Save current textarea answer immediately before navigating
+    saveCurrentAnswerIfTextarea();
 
-let newBtn=document.getElementById("nav"+i);
+    let currentBtn=document.getElementById("nav"+current);
+    if (currentBtn) {
+        currentBtn.classList.remove("active");
+        if(!currentBtn.classList.contains("answered")){
+            currentBtn.classList.remove("not-visited");
+            currentBtn.classList.add("visited");
+        }
+    }
 
-newBtn.classList.remove("not-visited","visited");
-newBtn.classList.add("active");
+    document.getElementById("q"+current).style.display="none";
+    document.getElementById("q"+i).style.display="block";
 
-current=i;
+    let newBtn=document.getElementById("nav"+i);
+    if (newBtn) {
+        newBtn.classList.remove("not-visited","visited");
+        newBtn.classList.add("active");
+    }
 
+    current=i;
+}
+
+function handleAnswerInput(i, qid, val) {
+    let btn = document.getElementById("nav" + i);
+    if (btn) {
+        if (val.trim() !== "") {
+            btn.classList.remove("not-visited", "visited");
+            btn.classList.add("answered");
+        }
+    }
+    clearTimeout(saveDebounceTimer);
+    saveDebounceTimer = setTimeout(() => {
+        markAnswered(i, qid, val);
+    }, 800);
 }
 
 function markAnswered(i, qid, optVal){
+    let btn=document.getElementById("nav"+i);
+    if(btn){
+        if (optVal !== undefined && optVal !== null && optVal.trim() !== '') {
+            btn.classList.remove("not-visited","visited");
+            btn.classList.add("answered");
+        }
+    }
 
-let btn=document.getElementById("nav"+i);
+    if(qid !== undefined && qid !== null && optVal !== undefined && optVal !== null){
+        let statusEl = document.getElementById("saveStatus_" + qid);
+        if (statusEl) {
+            statusEl.innerText = "Saving...";
+            statusEl.style.color = "#64748b";
+        }
 
-if(btn){
-btn.classList.remove("not-visited","visited");
-btn.classList.add("answered");
-}
-
-if(qid && optVal){
-fetch("save_answer.php",{
-method:"POST",
-headers:{"Content-Type":"application/x-www-form-urlencoded"},
-body:"exam_id=<?= $exam_id ?>&csrf_token=<?= urlencode($csrf_token) ?>&question_id="+encodeURIComponent(qid)+"&answer="+encodeURIComponent(optVal)
-})
-.then(res => res.json())
-.then(data => {
-if(data.status !== "success"){
-showSaveError();
-}
-})
-.catch(err => {
-showSaveError();
-});
-}
-
+        fetch("save_answer.php",{
+            method:"POST",
+            headers:{"Content-Type":"application/x-www-form-urlencoded"},
+            body:"exam_id=<?= $exam_id ?>&csrf_token=<?= urlencode($csrf_token) ?>&question_id="+encodeURIComponent(qid)+"&answer="+encodeURIComponent(optVal)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status !== "success"){
+                showSaveError();
+                if (statusEl) {
+                    statusEl.innerText = "Save failed";
+                    statusEl.style.color = "#dc2626";
+                }
+            } else {
+                if (statusEl) {
+                    statusEl.innerText = "Saved";
+                    statusEl.style.color = "#16a34a";
+                    setTimeout(() => {
+                        if (statusEl.innerText === "Saved") {
+                            statusEl.innerText = "";
+                        }
+                    }, 2500);
+                }
+            }
+        })
+        .catch(err => {
+            showSaveError();
+            if (statusEl) {
+                statusEl.innerText = "Save error";
+                statusEl.style.color = "#dc2626";
+            }
+        });
+    }
 }
 
 function showSaveError(){
-let warningBox=document.getElementById("warningBox");
-if(warningBox){
-warningBox.innerText="Answer could not be saved. Please try again.";
-warningBox.style.display="block";
-setTimeout(()=>{
-warningBox.style.display="none";
-},3000);
+    let warningBox=document.getElementById("warningBox");
+    if(warningBox){
+        warningBox.innerText="Answer could not be saved. Please try again.";
+        warningBox.style.display="block";
+        setTimeout(()=>{
+            warningBox.style.display="none";
+        },3000);
+    }
 }
-}
+
+// Enable Tab key indentation inside coding answer textareas
+document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll('.coding-answer-textarea').forEach(ta => {
+        ta.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = this.value.substring(0, start) + '    ' + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 4;
+                this.dispatchEvent(new Event('input'));
+            }
+        });
+    });
+});
 
 
 /* PERFECT 0.2 SECOND BEEP TIMER */

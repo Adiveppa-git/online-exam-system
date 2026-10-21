@@ -85,20 +85,29 @@ if ($health['online'] && ($health['status'] === 'success' || $health['data']['st
     $foundVariantInGen = false;
     $allPunctuationValid = true;
 
+    $failedDetails = '';
     if (!empty($res['data']['questions'])) {
         foreach ($res['data']['questions'] as $gq) {
             $text = $gq['question'];
             if (stripos($text, 'variant') !== false) {
                 $foundVariantInGen = true;
             }
-            if (!preg_match('/[?.!]$/u', trim($text))) {
+            $trimmed = trim($text);
+            $hasValidPunct = preg_match('/[?.!]$/u', $trimmed);
+            if (!$hasValidPunct && str_ends_with($trimmed, '```')) {
+                // For multiline questions with markdown code fences, check if the question prompt has valid punctuation
+                $beforeFence = preg_replace('/```[\s\S]*$/u', '', $trimmed);
+                $hasValidPunct = preg_match('/[?.!]\s*$/u', trim($beforeFence));
+            }
+            if (!$hasValidPunct) {
                 $allPunctuationValid = false;
+                $failedDetails .= " [Invalid: " . json_encode($text) . "]";
             }
         }
     }
 
     assert_test("No artificial variant markers in newly generated questions", !$foundVariantInGen);
-    assert_test("All generated questions have valid punctuation", $allPunctuationValid);
+    assert_test("All generated questions have valid punctuation", $allPunctuationValid, $failedDetails);
 } else {
     echo " - AI Service offline on port 8001. Skipping live generation test.\n";
 }
