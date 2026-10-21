@@ -91,23 +91,50 @@ word-break: break-word;
 }
 
 .question-description {
-font-size: 14.5px;
+font-size: 15px;
 line-height: 1.65;
 color: #334155;
-margin-bottom: 18px;
+margin-bottom: 20px;
 }
 
 .question-p {
 margin: 0 0 12px 0;
+line-height: 1.65;
 }
 .question-p:last-child {
+margin-bottom: 0;
+}
+
+/* Lists in Question Description */
+.question-list {
+margin: 8px 0 14px 24px;
+padding-left: 8px;
+color: #334155;
+line-height: 1.65;
+font-size: 15px;
+}
+
+.question-ol {
+list-style-type: decimal;
+}
+
+.question-ul {
+list-style-type: disc;
+}
+
+.question-li {
+margin-bottom: 6px;
+padding-left: 4px;
+}
+
+.question-li:last-child {
 margin-bottom: 0;
 }
 
 .inline-code-pill {
 background: #f1f5f9;
 color: #0f172a;
-border: 1px solid #e2e8f0;
+border: 1px solid #cbd5e1;
 padding: 2px 6px;
 border-radius: 4px;
 font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
@@ -116,7 +143,7 @@ font-size: 0.88em;
 
 /* Code Blocks within Questions */
 .code-block-wrapper {
-margin: 12px 0 16px 0;
+margin: 14px 0 18px 0;
 border-radius: 8px;
 overflow: hidden;
 border: 1px solid #334155;
@@ -128,7 +155,7 @@ display: flex;
 justify-content: space-between;
 align-items: center;
 background: #1e293b;
-padding: 6px 12px;
+padding: 6px 14px;
 border-bottom: 1px solid #334155;
 }
 
@@ -141,32 +168,59 @@ text-transform: uppercase;
 letter-spacing: 0.5px;
 }
 
+/* Code Display Styling for Coding Questions & Code Blocks */
+.code-display,
+.code-display pre,
+.code-display code,
+.question-code,
+.question-code pre,
+.question-code code,
+.starter-code-block,
+.coding-editor,
 .code-block-dark {
-background: #0f172a;
-color: #e2e8f0;
-padding: 14px 16px;
-margin: 0;
-font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-font-size: 13px;
-line-height: 1.55;
-overflow-x: auto;
-white-space: pre;
-tab-size: 4;
--moz-tab-size: 4;
+    font-family: Consolas, Monaco, "Courier New", monospace;
+    white-space: pre !important;
+    overflow-x: auto !important;
+    tab-size: 4 !important;
+    -moz-tab-size: 4 !important;
+    line-height: 1.7 !important;
+    word-break: normal !important;
+    word-wrap: normal !important;
+}
+
+.code-display pre,
+.question-code pre,
+.code-block-dark {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 14px 16px;
+    margin: 0;
+    font-size: 13.5px;
+    border-radius: 6px;
+}
+
+.code-display code,
+.question-code code,
+.code-block-dark code {
+    font-family: inherit;
+    white-space: pre !important;
+    line-height: inherit;
+    word-break: normal !important;
+    word-wrap: normal !important;
 }
 
 /* Coding Question Sections */
 .coding-section {
-margin-bottom: 16px;
+margin-bottom: 18px;
 }
 
 .coding-section-label {
-font-size: 11.5px;
+font-size: 12px;
 font-weight: 700;
 text-transform: uppercase;
 letter-spacing: 0.5px;
 color: #475569;
-margin-bottom: 6px;
+margin-bottom: 8px;
 display: flex;
 align-items: center;
 gap: 6px;
@@ -179,31 +233,39 @@ gap: 6px;
 background: #e0f2fe;
 color: #0369a1;
 border: 1px solid #bae6fd;
-padding: 4px 10px;
+padding: 5px 12px;
 border-radius: 6px;
-font-size: 13px;
+font-size: 13.5px;
 font-weight: 600;
 }
 
 .io-grid {
 display: grid;
-grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-gap: 12px;
-margin-bottom: 16px;
-font-size: 13px;
+grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+gap: 14px;
+margin-bottom: 18px;
+font-size: 13.5px;
 }
 
 .io-card {
 background: #f8fafc;
 border: 1px solid #e2e8f0;
 border-radius: 8px;
-padding: 12px 14px;
+padding: 12px 16px;
 }
 
 .io-content {
-margin-top: 4px;
+margin-top: 6px;
 color: #1e293b;
-line-height: 1.5;
+line-height: 1.6;
+}
+
+.io-line {
+margin-bottom: 4px;
+}
+
+.io-line:last-child {
+margin-bottom: 0;
 }
 
 /* Constraints banner */
@@ -212,7 +274,7 @@ background: #fffbeb;
 border: 1px solid #fde68a;
 border-radius: 8px;
 padding: 10px 14px;
-margin-bottom: 16px;
+margin-bottom: 18px;
 font-size: 13px;
 color: #92400e;
 display: flex;
@@ -238,55 +300,82 @@ user-select: none;
 background: #f8fafc;
 border: 1px solid #e2e8f0;
 border-radius: 8px;
-padding: 12px;
-margin-bottom: 10px;
+padding: 14px 16px;
+margin-bottom: 12px;
+}
+
+.sample-case-index {
+font-size: 12px;
+font-weight: 700;
+color: #64748b;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+margin-bottom: 8px;
 }
 
 .sample-case-grid {
 display: grid;
 grid-template-columns: 1fr 1fr;
-gap: 10px;
+gap: 12px;
+}
+
+.sample-case-col {
+display: flex;
+flex-direction: column;
 }
 
 .sample-case-label {
 color: #64748b;
-font-size: 11px;
+font-size: 11.5px;
 font-weight: 700;
 text-transform: uppercase;
 display: block;
-margin-bottom: 3px;
+margin-bottom: 4px;
 }
 
 .sample-case-code {
-padding: 8px 10px;
+padding: 10px 12px;
 border-radius: 6px;
-font-family: 'Consolas', 'Monaco', monospace;
-font-size: 12.5px;
-line-height: 1.45;
+font-family: Consolas, Monaco, "Courier New", monospace;
+font-size: 13px;
+line-height: 1.6;
 margin: 0;
-white-space: pre-wrap;
-word-break: break-all;
+white-space: pre;
+word-break: normal;
+word-wrap: normal;
+overflow-x: auto;
 }
 
 .sample-input-code {
 background: #ffffff;
-border: 1px solid #cbd5e1;
+border: 1.5px solid #cbd5e1;
 color: #1e293b;
 }
 
 .sample-output-code {
-background: #ecfdf5;
-border: 1px solid #a7f3d0;
-color: #065f46;
+background: #f0fdf4;
+border: 1.5px solid #86efac;
+color: #14532d;
 font-weight: 600;
 }
 
 .sample-case-explanation {
-font-size: 12.5px;
-color: #475569;
-margin-top: 6px;
-font-style: italic;
-line-height: 1.45;
+margin-top: 10px;
+padding: 10px 14px;
+background: #eff6ff;
+border-left: 3.5px solid #3b82f6;
+border-radius: 4px;
+font-size: 13.5px;
+color: #1e3a8a;
+line-height: 1.55;
+font-style: normal;
+}
+
+.sample-case-explanation strong,
+.sample-case-explanation .explanation-tag {
+color: #1d4ed8;
+font-weight: 700;
+margin-right: 4px;
 }
 
 /* Starter Code */
@@ -345,6 +434,7 @@ border: 1px solid #bae6fd;
 }
 
 /* Enlarge coding editor to 420px comfortable height with sleek dark IDE theme */
+.coding-editor,
 .coding-answer-editor,
 .coding-answer-textarea {
 width: 100%;
@@ -352,9 +442,9 @@ max-width: 100%;
 min-height: 350px;
 height: 420px;
 box-sizing: border-box;
-font-family: 'Consolas', 'Monaco', 'Courier New', 'Fira Code', monospace;
+font-family: Consolas, Monaco, "Courier New", monospace;
 font-size: 14.5px;
-line-height: 1.6;
+line-height: 1.7;
 padding: 16px 18px;
 border: 1px solid #334155;
 border-radius: 8px;
@@ -368,9 +458,11 @@ white-space: pre;
 overflow-x: auto;
 overflow-y: auto;
 word-wrap: normal;
+word-break: normal;
 transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+.coding-editor:focus,
 .coding-answer-editor:focus,
 .coding-answer-textarea:focus {
 outline: none;
@@ -654,14 +746,85 @@ color: #6ee7b7;
 color: #fca5a5;
 }
 
-/* options */
+/* ===================================== */
+/* MCQ OPTIONS ALIGNMENT & STYLING */
+/* ===================================== */
 
-.options label{
-display:block;
-margin:12px 0;
-font-size:16px;
-white-space: pre-wrap;
-word-break: break-word;
+.options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 18px;
+    margin-bottom: 24px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.options label,
+.options .option-label {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    padding: 14px 18px !important;
+    margin: 0 !important;
+    font-size: 15.5px !important;
+    line-height: 1.5 !important;
+    color: #1e293b !important;
+    background: #ffffff !important;
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease !important;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.options label:hover,
+.options .option-label:hover {
+    background: #f8fafc !important;
+    border-color: #94a3b8 !important;
+}
+
+/* Selected option row styling */
+.options label.selected,
+.options .option-label.selected,
+.options label:has(input[type="radio"]:checked),
+.options .option-label:has(input[type="radio"]:checked) {
+    background: #eff6ff !important;
+    border-color: #3b82f6 !important;
+    color: #1d4ed8 !important;
+    box-shadow: 0 1px 4px rgba(59, 130, 246, 0.15) !important;
+}
+
+/* Radio button styling */
+.options input[type="radio"],
+.options .option-radio {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    max-width: 20px !important;
+    max-height: 20px !important;
+    flex: 0 0 20px !important;
+    flex-shrink: 0 !important;
+    cursor: pointer !important;
+    accent-color: #2563eb !important;
+    vertical-align: middle !important;
+}
+
+/* Option text container */
+.options .option-text {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    line-height: 1.5 !important;
+    font-size: 15.5px !important;
+    color: inherit !important;
 }
 
 /* navigation buttons */
@@ -839,6 +1002,41 @@ width:100%;
 top:10px;
 right:10px;
 font-size:16px;
+}
+
+.sample-case-grid,
+.io-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+/* Mobile options overrides */
+.options {
+    gap: 10px;
+    margin-top: 14px;
+    margin-bottom: 20px;
+}
+
+.options label,
+.options .option-label {
+    padding: 12px 14px !important;
+    font-size: 14.5px !important;
+    gap: 10px !important;
+}
+
+.options input[type="radio"],
+.options .option-radio {
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    min-height: 18px !important;
+    max-width: 18px !important;
+    max-height: 18px !important;
+    flex: 0 0 18px !important;
+}
+
+.options .option-text {
+    font-size: 14.5px !important;
 }
 
 }

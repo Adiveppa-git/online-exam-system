@@ -323,13 +323,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                         $explanation = $gq['explanation'] ?? '';
 
                         $progLang = $gq['programming_language'] ?? null;
-                        $starterCode = $gq['starter_code'] ?? null;
+                        $starterCode = !empty($gq['starter_code']) ? safe_unescape_exam_code($gq['starter_code']) : null;
                         $inputFmt = $gq['input_format'] ?? null;
                         $outputFmt = $gq['output_format'] ?? null;
                         $constraints = $gq['constraints'] ?? null;
                         $sampleCases = !empty($gq['sample_test_cases']) ? (is_string($gq['sample_test_cases']) ? $gq['sample_test_cases'] : json_encode($gq['sample_test_cases'], JSON_UNESCAPED_SLASHES)) : null;
                         $hiddenCases = !empty($gq['hidden_test_cases']) ? (is_string($gq['hidden_test_cases']) ? $gq['hidden_test_cases'] : json_encode($gq['hidden_test_cases'], JSON_UNESCAPED_SLASHES)) : null;
-                        $refSol = $gq['reference_solution'] ?? null;
+                        $refSol = !empty($gq['reference_solution']) ? safe_unescape_exam_code($gq['reference_solution']) : null;
                         $timeComp = $gq['time_complexity'] ?? null;
                         $spaceComp = $gq['space_complexity'] ?? null;
 

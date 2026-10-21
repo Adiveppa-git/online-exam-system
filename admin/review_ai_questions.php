@@ -155,13 +155,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 }
 
                 $cleanQ = clean_question_title($gq['question']);
-                $starterCode = $gq['starter_code'] ?? null;
+                $starterCode = !empty($gq['starter_code']) ? safe_unescape_exam_code($gq['starter_code']) : null;
+                $refSol = !empty($gq['reference_solution']) ? safe_unescape_exam_code($gq['reference_solution']) : null;
                 $insStmt->bind_param("isssssssssssssssssssss",
                     $eId, $cleanQ, $gq['option_a'], $gq['option_b'], $gq['option_c'], $gq['option_d'],
                     $gq['correct_option'], $subjToUse, $topicToUse, $diffToUse, $expToUse,
                     $qType, $gq['programming_language'], $starterCode, $gq['input_format'], $gq['output_format'],
                     $gq['constraints'], $gq['sample_test_cases'], $gq['hidden_test_cases'],
-                    $gq['reference_solution'], $gq['time_complexity'], $gq['space_complexity']
+                    $refSol, $gq['time_complexity'], $gq['space_complexity']
                 );
                 if (!$insStmt->execute()) {
                     throw new Exception("Failed to insert question #" . $gq['id'] . ": " . ($insStmt->error ?: $conn->error));
@@ -291,13 +292,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $qType = 'mcq';
             }
 
-            $starterCode = $gq['starter_code'] ?? null;
+            $starterCode = !empty($gq['starter_code']) ? safe_unescape_exam_code($gq['starter_code']) : null;
+            $refSol = !empty($gq['reference_solution']) ? safe_unescape_exam_code($gq['reference_solution']) : null;
             $insStmt->bind_param("isssssssssssssssssssss",
                 $eId, $cleanQ, $gq['option_a'], $gq['option_b'], $gq['option_c'], $gq['option_d'],
                 $gq['correct_option'], $subjToUse, $topicToUse, $difficultyToUse, $expToUse,
                 $qType, $gq['programming_language'], $starterCode, $gq['input_format'], $gq['output_format'],
                 $gq['constraints'], $gq['sample_test_cases'], $gq['hidden_test_cases'],
-                $gq['reference_solution'], $gq['time_complexity'], $gq['space_complexity']
+                $refSol, $gq['time_complexity'], $gq['space_complexity']
             );
 
             if (!$insStmt->execute()) {
@@ -481,13 +483,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $d = null;
             $correct = null;
             $progLang = trim($_POST['programming_language'] ?? '');
-            $starterCode = trim($_POST['starter_code'] ?? '');
+            $starterCode = !empty($_POST['starter_code']) ? safe_unescape_exam_code(trim($_POST['starter_code'])) : '';
             $inputFmt = trim($_POST['input_format'] ?? '');
             $outputFmt = trim($_POST['output_format'] ?? '');
             $constraints = trim($_POST['constraints'] ?? '');
             $sampleCases = trim($_POST['sample_test_cases'] ?? '');
             $hiddenCases = trim($_POST['hidden_test_cases'] ?? '');
-            $refSol = trim($_POST['reference_solution'] ?? '');
+            $refSol = !empty($_POST['reference_solution']) ? safe_unescape_exam_code(trim($_POST['reference_solution'])) : '';
             $timeComp = trim($_POST['time_complexity'] ?? '');
             $spaceComp = trim($_POST['space_complexity'] ?? '');
 
@@ -1008,9 +1010,7 @@ $cnt_unassigned_pending = count($unassigned_pending_ids);
                             <?php endif; ?>
 
                             <?php if (!empty($q['constraints'])): ?>
-                                <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; color: #92400e;">
-                                    ⚠️ <strong>Constraints:</strong> <code><?= htmlspecialchars($q['constraints']) ?></code>
-                                </div>
+                                <?= render_coding_constraints($q['constraints']) ?>
                             <?php endif; ?>
 
                             <?php
@@ -1058,14 +1058,14 @@ $cnt_unassigned_pending = count($unassigned_pending_ids);
                             <?php if (!empty($q['starter_code'])): ?>
                                 <div style="margin-top: 8px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px;">
                                     <strong style="color: #334155; font-size: 13px;">💻 Starter Code / Function Signature:</strong>
-                                    <pre style="background: #1e293b; color: #e2e8f0; padding: 10px; border-radius: 6px; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; overflow-x: auto; margin-top: 6px; white-space: pre-wrap;"><code><?= htmlspecialchars($q['starter_code']) ?></code></pre>
+                                    <pre class="code-display" style="background: #0f172a; color: #e2e8f0; padding: 12px 14px; border-radius: 6px; font-family: Consolas, Monaco, 'Courier New', monospace; font-size: 13px; line-height: 1.7; overflow-x: auto; margin-top: 6px; white-space: pre !important; word-break: normal !important;"><code class="code-display"><?= htmlspecialchars(safe_unescape_exam_code($q['starter_code'])) ?></code></pre>
                                 </div>
                             <?php endif; ?>
 
                             <?php if (!empty($q['reference_solution'])): ?>
                                 <details style="margin-top: 8px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px;">
                                     <summary style="font-weight: 600; color: #0284c7; cursor: pointer; font-size: 13px;">💻 View Reference Solution / Implementation</summary>
-                                    <pre style="background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; overflow-x: auto; margin-top: 8px; max-height: 280px; white-space: pre-wrap;"><code><?= htmlspecialchars($q['reference_solution']) ?></code></pre>
+                                    <pre class="code-display" style="background: #0f172a; color: #e2e8f0; padding: 12px 14px; border-radius: 6px; font-family: Consolas, Monaco, 'Courier New', monospace; font-size: 13px; line-height: 1.7; overflow-x: auto; margin-top: 8px; max-height: 320px; white-space: pre !important; word-break: normal !important;"><code class="code-display"><?= htmlspecialchars(safe_unescape_exam_code($q['reference_solution'])) ?></code></pre>
                                 </details>
                             <?php endif; ?>
 

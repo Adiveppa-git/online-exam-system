@@ -98,6 +98,25 @@ class LLMService:
         return any(kw in combined for kw in coding_keywords)
 
     @staticmethod
+    def _safe_normalize_code_newlines(val: Optional[str]) -> Optional[str]:
+        if not val or not isinstance(val, str):
+            return val
+        if r'\r\n' in val or r'\n' in val:
+            # Quote-aware tokenization to preserve in-string escapes like printf("Hello\n")
+            tokens = re.split(r'("(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\')', val)
+            res = []
+            for i, tok in enumerate(tokens):
+                if i % 2 == 1:
+                    # Inside string literal: keep intact
+                    res.append(tok)
+                else:
+                    tok = re.sub(r'(?<!\\)\\r\\n', '\r\n', tok)
+                    tok = re.sub(r'(?<!\\)\\n', '\n', tok)
+                    res.append(tok)
+            val = "".join(res)
+        return val.replace('\r\n', '\n')
+
+    @staticmethod
     def generate_questions(req: QuestionGenerationRequest) -> Dict[str, Any]:
         request_id = str(uuid.uuid4())
         model_name = getattr(settings, 'LLM_MODEL', 'gpt-4o-mini')
@@ -120,10 +139,12 @@ class LLMService:
 
         for idx, item in enumerate(raw_questions):
             try:
-                q_text = item.get("question", "").strip()
+                q_text = LLMService._safe_normalize_code_newlines(item.get("question", "")) or ""
+                q_text = q_text.strip()
                 # Narrowly strip any artificial trailing variant suffix (e.g., "(Variant 48)", "(variant 7)")
                 q_text = re.sub(r'\s*\([Vv]ariant\s+\d+\)\s*$', '', q_text).strip()
-                if q_text and q_text[-1] not in "?!.:":
+                q_text = re.sub(r'```\s*\?+$', '```', q_text)
+                if q_text and q_text[-1] not in "?!.:" and not q_text.endswith("```") and q_text[-1] not in "}`:;]>":
                     q_text += "?"
                 if not q_text or q_text in seen_questions:
                     continue
@@ -138,7 +159,9 @@ class LLMService:
 
                 # Preserve options whenever provided
                 opts = item.get("options") if item.get("options") else None
-                corr_ans = item.get("correct_answer") or item.get("reference_solution", "")
+                ref_sol_val = LLMService._safe_normalize_code_newlines(item.get("reference_solution"))
+                starter_code_val = LLMService._safe_normalize_code_newlines(item.get("starter_code"))
+                corr_ans = item.get("correct_answer") or ref_sol_val or ""
 
                 prog_lang = item.get("programming_language")
                 if not prog_lang and LLMService._is_coding_subject_or_topic(req.subject, req.topic or "", req.additional_context or ""):
@@ -159,8 +182,8 @@ class LLMService:
                     constraints=item.get("constraints"),
                     sample_test_cases=item.get("sample_test_cases") or [],
                     hidden_test_cases=item.get("hidden_test_cases") or [],
-                    reference_solution=item.get("reference_solution"),
-                    starter_code=item.get("starter_code"),
+                    reference_solution=ref_sol_val,
+                    starter_code=starter_code_val,
                     time_complexity=item.get("time_complexity"),
                     space_complexity=item.get("space_complexity")
                 )

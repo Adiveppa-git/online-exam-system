@@ -3,6 +3,39 @@
  * Text & Question Formatting Helpers
  */
 
+if (!function_exists('safe_unescape_exam_code')) {
+    /**
+     * Safely converts literal escaped newlines (\n, \r\n) to actual newlines,
+     * while preserving in-string escapes (e.g. printf("...\n")) by tokenizing quoted string literals.
+     *
+     * @param string|null $code
+     * @return string
+     */
+    function safe_unescape_exam_code(?string $code): string {
+        if ($code === null) {
+            return '';
+        }
+        if (!str_contains($code, '\r\n') && !str_contains($code, '\n')) {
+            return str_replace(["\r\n", "\r"], "\n", $code);
+        }
+
+        $tokens = preg_split('/("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')/s', $code, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $unescaped = '';
+        foreach ($tokens as $idx => $token) {
+            if ($idx % 2 === 1) {
+                // Inside string literal: keep untouched
+                $unescaped .= $token;
+            } else {
+                // Outside string literal: convert escaped newlines
+                $token = preg_replace('/(?<!\\\\)\\\\r\\\\n/', "\r\n", $token);
+                $token = preg_replace('/(?<!\\\\)\\\\n/', "\n", $token);
+                $unescaped .= $token;
+            }
+        }
+        return str_replace(["\r\n", "\r"], "\n", $unescaped);
+    }
+}
+
 if (!function_exists('clean_question_title')) {
     /**
      * Removes unwanted artificial variant suffixes (e.g. " (Variant 48)", " (Variant 6)", " (variant 1)")
@@ -20,6 +53,9 @@ if (!function_exists('clean_question_title')) {
             return '';
         }
 
+        // Unescape literal escaped newlines safely if stored/passed with literal \n
+        $trimmed = safe_unescape_exam_code($trimmed);
+
         // Narrowly targeted regex: removes only trailing "(Variant <digits>)" or "(variant <digits>)"
         $cleaned = preg_replace('/\s*\([Vv]ariant\s+\d+\)\s*$/u', '', $trimmed);
         $cleaned = trim($cleaned);
@@ -28,9 +64,10 @@ if (!function_exists('clean_question_title')) {
         $cleaned = preg_replace('/```\s*\?+$/u', '```', $cleaned);
 
         // Ensure clean punctuation at the end of question title if missing,
-        // but avoid appending '?' to closing markdown code block fences (```)
+        // but avoid appending '?' to closing markdown code block fences (```) or code statement terminators
         if ($cleaned !== '' 
             && !preg_match('/[?.!]$/u', $cleaned)
+            && !preg_match('/[`}:;>\]]$/u', $cleaned)
             && !str_ends_with($cleaned, '```')
         ) {
             $cleaned .= '?';
@@ -131,12 +168,13 @@ if (!function_exists('render_chat_markdown')) {
      * Renders Markdown text safely in the AI chat window.
      * All raw text is HTML-escaped to prevent XSS.
      * Supports bold (**text**), italic (*text*), inline code (`code`),
-     * bullet lists (- or *), and clean line/paragraph breaks.
+     * bullet lists (- or *), links ([label](url)), and clean line/paragraph breaks.
      *
      * @param string|null $text
+     * @param array $docLookup Optional lookup array for auto-linking document titles
      * @return string
      */
-    function render_chat_markdown(?string $text): string {
+    function render_chat_markdown(?string $text, array $docLookup = []): string {
         if ($text === null || trim($text) === '') {
             return '';
         }
@@ -145,7 +183,77 @@ if (!function_exists('render_chat_markdown')) {
         $html = [];
         $inList = false;
 
+        $resolveDocLink = function(string $rawTitle, int $page = 1) use ($docLookup): string {
+            $clean = trim($rawTitle, " `\"'\t\n\r");
+            if ($clean === '') {
+                return "view_course_material.php?page=" . max(1, $page);
+            }
+
+            // Check if title has explicit ID like (ID: #278) or #278
+            if (preg_match('/(?:ID:\s*#?|#)(\d+)/i', $clean, $mId)) {
+                $tid = (int)$mId[1];
+                return "view_course_material.php?id={$tid}" . ($page > 1 ? "&page={$page}" : "");
+            }
+
+            // Check lookup by ID
+            if (ctype_digit($clean)) {
+                $cid = (int)$clean;
+                if (isset($docLookup['by_id'][$cid])) {
+                    return "view_course_material.php?id={$cid}" . ($page > 1 ? "&page={$page}" : "");
+                }
+            }
+
+            // Check lookup by lowercase name / original_name / filename
+            $low = strtolower($clean);
+            if (isset($docLookup['by_name'][$low])) {
+                $cid = (int)$docLookup['by_name'][$low]['id'];
+                return "view_course_material.php?id={$cid}" . ($page > 1 ? "&page={$page}" : "");
+            }
+
+            // Check lookup with .md appended or stripped
+            if (isset($docLookup['by_name'][$low . '.md'])) {
+                $cid = (int)$docLookup['by_name'][$low . '.md']['id'];
+                return "view_course_material.php?id={$cid}" . ($page > 1 ? "&page={$page}" : "");
+            }
+            $noExt = preg_replace('/\.[a-zA-Z0-9]+$/', '', $low);
+            if (isset($docLookup['by_name'][$noExt])) {
+                $cid = (int)$docLookup['by_name'][$noExt]['id'];
+                return "view_course_material.php?id={$cid}" . ($page > 1 ? "&page={$page}" : "");
+            }
+
+            // Partial match in lookup
+            if (!empty($docLookup['by_name'])) {
+                foreach ($docLookup['by_name'] as $k => $item) {
+                    if (strpos($k, $low) !== false || strpos($low, $k) !== false) {
+                        $cid = (int)$item['id'];
+                        return "view_course_material.php?id={$cid}" . ($page > 1 ? "&page={$page}" : "");
+                    }
+                }
+            }
+
+            // Fallback: pass file query
+            return "view_course_material.php?file=" . urlencode($clean) . ($page > 1 ? "&page={$page}" : "");
+        };
+
         $formatInline = function(string $str): string {
+            // 1. Extract markdown links [label](url) and protect with tokens
+            $linkPlaceholders = [];
+            $str = preg_replace_callback('/\[([^\]]+)\]\(([^)]+)\)/', function($m) use (&$linkPlaceholders) {
+                $label = $m[1];
+                $url = trim($m[2]);
+                // Validate URL: only allow safe relative URLs or http/https
+                if (preg_match('#^(?:view_course_material\.php(?:\?[a-zA-Z0-9_=&.-]*)?|https?://[a-zA-Z0-9_.-]+|/[a-zA-Z0-9_.-]*)#i', $url) && !preg_match('#^(?:javascript|data|vbscript):#i', $url)) {
+                    $idx = count($linkPlaceholders);
+                    $token = "%%LINK_PLACEHOLDER_{$idx}%%";
+                    $linkPlaceholders[$token] = [
+                        'label' => $label,
+                        'url' => $url
+                    ];
+                    return $token;
+                }
+                return $label;
+            }, $str);
+
             $str = htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
             // Inline code: `code`
             $str = preg_replace('/`([^`]+)`/', '<code class="bg-light text-danger px-1 rounded border" style="font-size:0.9em;">$1</code>', $str);
@@ -153,6 +261,17 @@ if (!function_exists('render_chat_markdown')) {
             $str = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $str);
             // Italic: *text*
             $str = preg_replace('/(?<!\*)\*([^*]+)\*(?!\*)/', '<em>$1</em>', $str);
+
+            // Re-insert safe links
+            foreach ($linkPlaceholders as $token => $linkData) {
+                $safeUrl = htmlspecialchars($linkData['url'], ENT_QUOTES, 'UTF-8');
+                $labelFormatted = htmlspecialchars($linkData['label'], ENT_QUOTES, 'UTF-8');
+                $labelFormatted = preg_replace('/`([^`]+)`/', '<code class="bg-light text-danger px-1 rounded border" style="font-size:0.9em;">$1</code>', $labelFormatted);
+                $labelFormatted = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $labelFormatted);
+                $linkHtml = '<a href="' . $safeUrl . '" target="_blank" rel="noopener noreferrer" class="material-link text-primary fw-semibold text-decoration-underline">' . $labelFormatted . '</a>';
+                $str = str_replace($token, $linkHtml, $str);
+            }
+
             return $str;
         };
 
@@ -166,6 +285,30 @@ if (!function_exists('render_chat_markdown')) {
                 }
                 $html[] = '<div class="my-2"></div>';
                 continue;
+            }
+
+            // Auto-link study materials if line contains "Document Title"
+            if (preg_match('/^([-*]\s+\*\*Document Title:\*\*\s*)(`([^`]+)`|([^\(\r\n]+))(\s*\(ID:\s*#?(\d+)\))?/i', $trimmed, $mDoc)) {
+                if (!str_contains($trimmed, 'view_course_material.php')) {
+                    $docName = !empty($mDoc[3]) ? trim($mDoc[3]) : trim($mDoc[4]);
+                    $explicitId = !empty($mDoc[6]) ? (int)$mDoc[6] : 0;
+                    $linkUrl = $explicitId > 0 ? "view_course_material.php?id={$explicitId}&page=1" : $resolveDocLink($docName, 1);
+                    $displayTitle = !empty($mDoc[3]) ? "`{$docName}`" : $docName;
+                    $idPart = !empty($mDoc[5]) ? $mDoc[5] : "";
+                    $trimmed = $mDoc[1] . "[{$displayTitle}]({$linkUrl})" . $idPart;
+                }
+            }
+
+            // Auto-link study materials if line contains "Review Course Material"
+            if (preg_match('/^([-*]\s+)\*\*(Review Course Material:?\*\*)\s*(Read through\s+)?(`([^`]+)`|([A-Za-z0-9_.\-\(\)\s]+\.md))(.*)$/i', $trimmed, $mRev)) {
+                if (!str_contains($trimmed, 'view_course_material.php')) {
+                    $revDocName = !empty($mRev[5]) ? trim($mRev[5]) : trim($mRev[6]);
+                    $revUrl = $resolveDocLink($revDocName, 1);
+                    $readPart = !empty($mRev[3]) ? $mRev[3] : "";
+                    $dispDoc = !empty($mRev[5]) ? "`{$revDocName}`" : $revDocName;
+                    $remainder = $mRev[7] ?? "";
+                    $trimmed = $mRev[1] . "[**Review Course Material:**]({$revUrl}) " . $readPart . "[{$dispDoc}]({$revUrl})" . $remainder;
+                }
             }
 
             // Bullet list: starts with "- " or "* "
@@ -200,6 +343,230 @@ if (!function_exists('render_chat_markdown')) {
         return implode("\n", $html);
     }
 }
+
+if (!function_exists('renderStudyMaterialMarkdown')) {
+    /**
+     * Robust, XSS-safe Markdown to HTML parser for study materials.
+     * Escapes all text elements before wrapping in semantic HTML tags.
+     * Supports section and page anchors for targeted jumping.
+     *
+     * @param string $md
+     * @return string
+     */
+    function renderStudyMaterialMarkdown(string $md): string {
+        $md = str_replace(["\r\n", "\r"], "\n", $md);
+        $lines = explode("\n", $md);
+        $html = [];
+
+        $inCodeBlock = false;
+        $codeLines = [];
+        $inList = false;
+        $listType = '';
+        $inBlockquote = false;
+        $quoteLines = [];
+        $inTable = false;
+        $tableRows = [];
+        $sectionCounter = 0;
+
+        $flushBlockquote = function() use (&$html, &$inBlockquote, &$quoteLines) {
+            if ($inBlockquote) {
+                $quoteText = implode("<br>", $quoteLines);
+                $html[] = '<blockquote class="border-start border-4 border-primary ps-3 py-2 my-3 bg-light text-secondary rounded-end">' . $quoteText . '</blockquote>';
+                $quoteLines = [];
+                $inBlockquote = false;
+            }
+        };
+
+        $flushList = function() use (&$html, &$inList, &$listType) {
+            if ($inList) {
+                $html[] = ($listType === 'ol') ? '</ol>' : '</ul>';
+                $inList = false;
+                $listType = '';
+            }
+        };
+
+        $flushTable = function() use (&$html, &$inTable, &$tableRows) {
+            if ($inTable && !empty($tableRows)) {
+                $tableHtml = '<div class="table-responsive my-3"><table class="table table-bordered table-striped align-middle">';
+                foreach ($tableRows as $rIdx => $row) {
+                    if ($rIdx === 0) {
+                        $tableHtml .= '<thead class="table-light"><tr>';
+                        foreach ($row as $cell) {
+                            $tableHtml .= '<th class="fw-bold">' . htmlspecialchars(trim($cell), ENT_QUOTES, 'UTF-8') . '</th>';
+                        }
+                        $tableHtml .= '</tr></thead><tbody>';
+                    } else {
+                        $tableHtml .= '<tr>';
+                        foreach ($row as $cell) {
+                            $tableHtml .= '<td>' . htmlspecialchars(trim($cell), ENT_QUOTES, 'UTF-8') . '</td>';
+                        }
+                        $tableHtml .= '</tr>';
+                    }
+                }
+                $tableHtml .= '</tbody></table></div>';
+                $html[] = $tableHtml;
+                $tableRows = [];
+                $inTable = false;
+            }
+        };
+
+        $formatInline = function(string $text): string {
+            $text = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+            // Inline code: `code`
+            $text = preg_replace('/`([^`]+)`/', '<code class="bg-light text-danger px-1.5 py-0.5 rounded border" style="font-size:0.9em;">$1</code>', $text);
+            // Bold: **text**
+            $text = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $text);
+            // Italic: *text*
+            $text = preg_replace('/(?<!\*)\*([^*]+)\*(?!\*)/', '<em>$1</em>', $text);
+            // Markdown links: [label](url) - strictly sanitize scheme
+            $text = preg_replace_callback('/\[([^\]]+)\]\(([^)]+)\)/', function($m) {
+                $label = $m[1];
+                $url = $m[2];
+                if (preg_match('#^https?://#i', $url) || preg_match('#^[a-zA-Z0-9_.-]+\.php(?:\?[a-zA-Z0-9_=&.-]*)?#i', $url) || preg_match('#^/[a-zA-Z0-9_.-]*#i', $url)) {
+                    return '<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" target="_blank" rel="noopener noreferrer" class="text-primary fw-semibold">' . $label . '</a>';
+                }
+                return $label;
+            }, $text);
+            return $text;
+        };
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+
+            // Code block toggle: ```lang
+            if (preg_match('/^```([a-zA-Z0-9_-]*)/', $trimmed, $m)) {
+                if ($inCodeBlock) {
+                    $codeContent = htmlspecialchars(implode("\n", $codeLines), ENT_QUOTES, 'UTF-8');
+                    $html[] = '<pre class="bg-dark text-light p-3 rounded-3 my-3 overflow-auto" style="font-size: 0.9rem; line-height: 1.5;"><code>' . $codeContent . '</code></pre>';
+                    $codeLines = [];
+                    $inCodeBlock = false;
+                } else {
+                    $flushBlockquote();
+                    $flushList();
+                    $flushTable();
+                    $inCodeBlock = true;
+                }
+                continue;
+            }
+
+            if ($inCodeBlock) {
+                $codeLines[] = $line;
+                continue;
+            }
+
+            // Tables: | col1 | col2 |
+            if (preg_match('/^\|(.+)\|$/', $trimmed, $m)) {
+                if (preg_match('/^\|[\s\-:|]+\|$/', $trimmed)) {
+                    continue;
+                }
+                $flushBlockquote();
+                $flushList();
+                $inTable = true;
+                $cells = explode('|', trim($m[1]));
+                $tableRows[] = $cells;
+                continue;
+            } else {
+                $flushTable();
+            }
+
+            // Horizontal Rule: --- or ***
+            if (preg_match('/^(\*{3,}|-{3,}|_{3,})$/', $trimmed)) {
+                $flushBlockquote();
+                $flushList();
+                $sectionCounter++;
+                $html[] = '<hr class="my-4 text-muted opacity-25" id="section-' . $sectionCounter . '">';
+                continue;
+            }
+
+            // Blockquote: > text
+            if (preg_match('/^>\s?(.*)$/', $trimmed, $m)) {
+                $flushList();
+                $inBlockquote = true;
+                $quoteLines[] = $formatInline($m[1]);
+                continue;
+            } else {
+                $flushBlockquote();
+            }
+
+            // Headings: #, ##, ###, ####
+            if (preg_match('/^(#{1,6})\s+(.*)$/', $trimmed, $m)) {
+                $flushList();
+                $level = strlen($m[1]);
+                $titleText = $m[2];
+                $title = $formatInline($titleText);
+                $sectionCounter++;
+                $slug = 'heading-' . $sectionCounter;
+                // Check if heading has a number like "1.", "2.", "Question 1"
+                if (preg_match('/^(\d+)\.?\s+/i', $titleText, $mNum)) {
+                    $slug = 'page-' . $mNum[1];
+                }
+
+                $classes = [
+                    1 => 'h3 fw-bold text-dark border-bottom pb-2 mt-4 mb-3',
+                    2 => 'h4 fw-bold text-primary mt-4 mb-3',
+                    3 => 'h5 fw-semibold text-dark mt-3 mb-2',
+                    4 => 'h6 fw-bold text-secondary mt-3 mb-2',
+                    5 => 'h6 fw-semibold text-muted mt-2 mb-1',
+                    6 => 'small fw-bold text-muted mt-2 mb-1'
+                ];
+                $cls = $classes[$level] ?? 'h5 fw-bold';
+                $html[] = "<h{$level} id=\"{$slug}\" class=\"{$cls}\">{$title}</h{$level}>";
+                continue;
+            }
+
+            // Unordered List Items: - or *
+            if (preg_match('/^(\s*)([-*])\s+(.*)$/', $line, $m)) {
+                $indent = strlen($m[1]);
+                $itemText = $formatInline($m[3]);
+                if (!$inList || $listType !== 'ul') {
+                    $flushList();
+                    $html[] = '<ul class="mb-3 ps-4">';
+                    $inList = true;
+                    $listType = 'ul';
+                }
+                if ($indent >= 2) {
+                    $html[] = '<li class="ms-3 mb-1 text-dark">' . $itemText . '</li>';
+                } else {
+                    $html[] = '<li class="mb-1 text-dark">' . $itemText . '</li>';
+                }
+                continue;
+            }
+
+            // Ordered List Items: 1.
+            if (preg_match('/^\s*(\d+)\.\s+(.*)$/', $line, $m)) {
+                $itemText = $formatInline($m[2]);
+                if (!$inList || $listType !== 'ol') {
+                    $flushList();
+                    $html[] = '<ol class="mb-3 ps-4">';
+                    $inList = true;
+                    $listType = 'ol';
+                }
+                $html[] = '<li class="mb-1 text-dark">' . $itemText . '</li>';
+                continue;
+            }
+
+            // Empty line
+            if ($trimmed === '') {
+                $flushList();
+                continue;
+            }
+
+            // Normal paragraph
+            $flushList();
+            $html[] = '<p class="mb-2 text-dark lh-base">' . $formatInline($trimmed) . '</p>';
+        }
+
+        $flushBlockquote();
+        $flushList();
+        $flushTable();
+        if ($inCodeBlock) {
+            $html[] = '<pre class="bg-dark text-light p-3 rounded-3 my-3"><code>' . htmlspecialchars(implode("\n", $codeLines), ENT_QUOTES, 'UTF-8') . '</code></pre>';
+        }
+
+        return implode("\n", $html);
+    }
+}
+
 
 if (!function_exists('format_math_notation')) {
     /**
@@ -360,6 +727,48 @@ if (!function_exists('render_coding_constraints')) {
     }
 }
 
+if (!function_exists('format_question_code_block')) {
+    /**
+     * Formats question code blocks to ensure readability line by line like in a proper IDE:
+     * - Unescapes literal \n and \r\n safely if stored escaped
+     * - Preserves indentation, blank lines, braces, and spacing
+     * - In C-family languages (Java, C, C++), expands crammed single-line method definitions
+     *   (e.g. void show() { System.out.print("P "); }) onto their own lines
+     * - Ensures clean spacing between class definitions
+     *
+     * @param string $code
+     * @param string $lang
+     * @return string
+     */
+    function format_question_code_block(string $code, string $lang = ''): string {
+        // 1. Unescape literal escaped newlines safely while preserving string literals (e.g. printf("...\n"))
+        $code = safe_unescape_exam_code($code);
+
+        $normLang = strtolower(trim($lang));
+        $isCStyle = in_array($normLang, ['java', 'c', 'cpp', 'c++', 'cs', 'csharp', 'javascript', 'js', 'typescript', 'ts'], true)
+                    || $normLang === '';
+
+        if ($isCStyle) {
+            // Expand single-line method/function bodies: e.g. void show() { System.out.print("P "); }
+            $code = preg_replace_callback(
+                '/^([ \t]*)((?:public|protected|private|static|final|abstract|synchronized|native|void|[A-Za-z0-9_<>[\]]+)\s+[^;{}]*?\([^;{}]*?\)\s*)\{\s*([^;{}\r\n]+;)\s*\}/mu',
+                function ($m) {
+                    $indent = $m[1];
+                    $signature = rtrim($m[2]);
+                    $statement = trim($m[3]);
+                    return "{$indent}{$signature} {\n{$indent}    {$statement}\n{$indent}}";
+                },
+                $code
+            );
+
+            // Ensure clean blank line between top-level class definitions (e.g. "}\nclass" -> "}\n\nclass")
+            $code = preg_replace('/^(\})\n(?=(?:public\s+|class\s+|abstract\s+class\s+|interface\s+))/mu', "$1\n\n", $code);
+        }
+
+        return rtrim($code);
+    }
+}
+
 if (!function_exists('render_exam_question')) {
     /**
      * Renders a question with clean separation between the question title and problem statement/description.
@@ -377,8 +786,9 @@ if (!function_exists('render_exam_question')) {
             return '<h2 class="question-title">Q' . $questionNumber . '.</h2>';
         }
 
-        // 1. Normalize line endings and clean trailing artifacts
-        $text = str_replace(["\r\n", "\r"], "\n", trim($rawQuestion));
+        // 1. Handle \n, \r\n, and escaped newline sequences safely when loading stored code
+        $rawText = safe_unescape_exam_code($rawQuestion);
+        $text = str_replace(["\r\n", "\r"], "\n", $rawText);
         // Remove artificial variant suffix
         $text = preg_replace('/\s*\([Vv]ariant\s+\d+\)\s*$/u', '', $text);
         // Strip trailing question marks attached to code fences
@@ -392,7 +802,7 @@ if (!function_exists('render_exam_question')) {
             function ($m) use (&$codeBlocks) {
                 $token = '___CODEBLOCK_' . count($codeBlocks) . '___';
                 $lang = trim($m[1]);
-                $code = rtrim($m[2]);
+                $code = format_question_code_block(rtrim($m[2]), $lang);
                 $codeBlocks[$token] = [
                     'lang' => $lang,
                     'code' => $code
@@ -476,20 +886,141 @@ if (!function_exists('render_exam_question')) {
                     $langLabel = !empty($cb['lang']) ? htmlspecialchars(strtoupper($cb['lang']), ENT_QUOTES, 'UTF-8') : '';
                     $langClass = !empty($cb['lang']) ? ' language-' . htmlspecialchars(strtolower($cb['lang']), ENT_QUOTES, 'UTF-8') : '';
                     
-                    $descHtml .= '<div class="code-block-wrapper">';
+                    $descHtml .= '<div class="code-block-wrapper question-code code-display">';
                     if ($langLabel !== '') {
                         $descHtml .= '<div class="code-block-header"><span class="code-block-badge">' . $langLabel . '</span></div>';
                     }
-                    $descHtml .= '<pre class="code-block-dark"><code class="' . $langClass . '">' . htmlspecialchars($cb['code'], ENT_QUOTES, 'UTF-8') . '</code></pre>';
+                    $descHtml .= '<pre class="code-block-dark code-display"><code class="' . $langClass . ' code-display">' . htmlspecialchars($cb['code'], ENT_QUOTES, 'UTF-8') . '</code></pre>';
                     $descHtml .= '</div>';
                 } else {
-                    $descHtml .= '<p class="question-p">' . $formatParagraphInline($block) . '</p>';
+                    // Check for inline numbered instructions after punctuation: "detail: 1. ... 2. ..."
+                    if (preg_match('/(?<=[:.!?])\s+(?=\d+\.\s+)/u', $block) && preg_match_all('/\b\d+\.\s+/u', $block) >= 2) {
+                        $parts = preg_split('/(?<=[:.!?])\s+(?=\d+\.\s+)/u', $block);
+                        $intro = array_shift($parts);
+                        if (trim($intro) !== '') {
+                            $descHtml .= '<p class="question-p">' . $formatParagraphInline($intro) . '</p>';
+                        }
+                        $descHtml .= '<ol class="question-list question-ol">';
+                        foreach ($parts as $p) {
+                            $cleanItem = preg_replace('/^\d+\.\s*/u', '', trim($p));
+                            if ($cleanItem !== '') {
+                                $descHtml .= '<li class="question-li">' . $formatParagraphInline($cleanItem) . '</li>';
+                            }
+                        }
+                        $descHtml .= '</ol>';
+                        continue;
+                    }
+
+                    // Check for multiline lists (ordered or unordered)
+                    $lines = explode("\n", $block);
+                    $hasListItems = false;
+                    foreach ($lines as $line) {
+                        if (preg_match('/^(?:\d+\.|[-*•])\s+/u', trim($line))) {
+                            $hasListItems = true;
+                            break;
+                        }
+                    }
+
+                    if ($hasListItems && count($lines) > 1) {
+                        $output = [];
+                        $currentList = [];
+                        $currentListType = null;
+
+                        $flushCurrentList = function() use (&$output, &$currentList, &$currentListType, $formatParagraphInline) {
+                            if (!empty($currentList)) {
+                                $tag = ($currentListType === 'ol') ? 'ol' : 'ul';
+                                $cls = ($currentListType === 'ol') ? 'question-ol' : 'question-ul';
+                                $listHtml = '<' . $tag . ' class="question-list ' . $cls . '">';
+                                foreach ($currentList as $item) {
+                                    $listHtml .= '<li class="question-li">' . $formatParagraphInline($item) . '</li>';
+                                }
+                                $listHtml .= '</' . $tag . '>';
+                                $output[] = $listHtml;
+                                $currentList = [];
+                                $currentListType = null;
+                            }
+                        };
+
+                        $paraLines = [];
+                        $flushPara = function() use (&$output, &$paraLines, $formatParagraphInline) {
+                            if (!empty($paraLines)) {
+                                $output[] = '<p class="question-p">' . $formatParagraphInline(implode("\n", $paraLines)) . '</p>';
+                                $paraLines = [];
+                            }
+                        };
+
+                        foreach ($lines as $line) {
+                            $t = trim($line);
+                            if ($t === '') continue;
+
+                            if (preg_match('/^(\d+)\.\s+(.*)$/u', $t, $m)) {
+                                $flushPara();
+                                if ($currentListType !== 'ol') {
+                                    $flushCurrentList();
+                                    $currentListType = 'ol';
+                                }
+                                $currentList[] = $m[2];
+                            } elseif (preg_match('/^[-*•]\s+(.*)$/u', $t, $m)) {
+                                $flushPara();
+                                if ($currentListType !== 'ul') {
+                                    $flushCurrentList();
+                                    $currentListType = 'ul';
+                                }
+                                $currentList[] = $m[1];
+                            } else {
+                                $flushCurrentList();
+                                $paraLines[] = $line;
+                            }
+                        }
+                        $flushPara();
+                        $flushCurrentList();
+
+                        $descHtml .= implode("\n", $output);
+                    } else {
+                        $descHtml .= '<p class="question-p">' . $formatParagraphInline($block) . '</p>';
+                    }
                 }
             }
             $descHtml .= '</div>';
         }
 
         return $titleHtml . ($descHtml !== '' ? "\n" . $descHtml : '');
+    }
+}
+
+if (!function_exists('format_io_format_lines')) {
+    /**
+     * Formats input and output format specifications line by line.
+     * Splits sentences introducing sequential lines (e.g. Line 1: / Line 2:, First line: / Second line:),
+     * highlights code/variable references safely, and wraps in clean .io-line containers.
+     *
+     * @param string|null $str
+     * @return string
+     */
+    function format_io_format_lines(?string $str): string {
+        if ($str === null) return '';
+        $trimmed = trim($str);
+        if ($trimmed === '') return '';
+
+        // If string already has newlines, split on newlines
+        if (str_contains($trimmed, "\n")) {
+            $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", $trimmed));
+        } else {
+            // Split on sentences that introduce subsequent lines
+            $lines = preg_split('/(?<=[.!?])\s+(?=(?:Line\s*\d+|First\s+line|Second\s+line|Next\s*(?:\w+\s*)?lines?|\d+\.)\b)/iu', $trimmed);
+        }
+
+        $formatted = [];
+        foreach ($lines as $line) {
+            $lTrim = trim($line);
+            if ($lTrim === '') continue;
+            $escaped = htmlspecialchars($lTrim, ENT_QUOTES, 'UTF-8');
+            $escaped = preg_replace('/`([^`]+)`/u', '<code class="inline-code-pill">$1</code>', $escaped);
+            $escaped = preg_replace('/&#039;([^&#039;]+)&#039;/u', '<code class="inline-code-pill">$1</code>', $escaped);
+            $formatted[] = '<div class="io-line">' . $escaped . '</div>';
+        }
+
+        return implode("\n", $formatted);
     }
 }
 
@@ -505,7 +1036,7 @@ if (!function_exists('get_coding_starter_code')) {
      */
     function get_coding_starter_code(array $q): string {
         $lang = strtolower(trim($q['programming_language'] ?? 'python'));
-        $starter = trim($q['starter_code'] ?? '');
+        $starter = safe_unescape_exam_code($q['starter_code'] ?? '');
 
         // Determine comment syntax for language
         $commentPrefix = '//';

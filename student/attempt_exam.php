@@ -74,9 +74,34 @@ $duration = $exam['duration'] * 60;
 <link rel="stylesheet" href="../assets/css/attempt_exam.css?v=<?= file_exists(__DIR__ . '/../assets/css/attempt_exam.css') ? filemtime(__DIR__ . '/../assets/css/attempt_exam.css') : time() ?>">
 
 <style>
-/* GUARANTEED FULL-WIDTH CODING ANSWER EDITOR */
+/* GUARANTEED FULL-WIDTH CODING ANSWER EDITOR & CODE DISPLAY */
+.code-display,
+.code-display pre,
+.code-display code,
+.question-code,
+.question-code pre,
+.question-code code,
+.starter-code-block,
+.coding-editor,
 .coding-answer-editor,
 .coding-answer-textarea,
+textarea.coding-editor,
+textarea.coding-answer-editor,
+textarea.coding-answer-textarea {
+    font-family: Consolas, Monaco, "Courier New", monospace !important;
+    white-space: pre !important;
+    overflow-x: auto !important;
+    tab-size: 4 !important;
+    -moz-tab-size: 4 !important;
+    line-height: 1.7 !important;
+    word-break: normal !important;
+    word-wrap: normal !important;
+}
+
+.coding-editor,
+.coding-answer-editor,
+.coding-answer-textarea,
+textarea.coding-editor,
 textarea.coding-answer-editor,
 textarea.coding-answer-textarea {
     display: block !important;
@@ -84,22 +109,15 @@ textarea.coding-answer-textarea {
     min-height: 350px !important;
     height: 420px !important;
     box-sizing: border-box !important;
-    font-family: 'Consolas', 'Monaco', 'Courier New', 'Fira Code', monospace !important;
     font-size: 14.5px !important;
-    line-height: 1.6 !important;
     padding: 16px 18px !important;
     background: #0f172a !important;
     color: #f8fafc !important;
     caret-color: #38bdf8 !important;
     border: 1px solid #334155 !important;
     border-radius: 8px !important;
-    tab-size: 4 !important;
-    -moz-tab-size: 4 !important;
     resize: vertical !important;
-    white-space: pre !important;
-    overflow-x: auto !important;
     overflow-y: auto !important;
-    word-wrap: normal !important;
 }
 
 .coding-answer-editor:focus,
@@ -123,6 +141,262 @@ textarea.coding-answer-textarea {
     box-sizing: border-box !important;
 }
 
+/* ===================================== */
+/* MCQ OPTIONS ALIGNMENT & STYLING */
+/* ===================================== */
+.options {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    margin-top: 18px !important;
+    margin-bottom: 24px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+.options label,
+.options .option-label {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    padding: 14px 18px !important;
+    margin: 0 !important;
+    font-size: 15.5px !important;
+    line-height: 1.5 !important;
+    color: #1e293b !important;
+    background: #ffffff !important;
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    cursor: pointer !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease !important;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.options label:hover,
+.options .option-label:hover {
+    background: #f8fafc !important;
+    border-color: #94a3b8 !important;
+}
+
+/* Selected option row styling */
+.options label.selected,
+.options .option-label.selected,
+.options label:has(input[type="radio"]:checked),
+.options .option-label:has(input[type="radio"]:checked) {
+    background: #eff6ff !important;
+    border-color: #3b82f6 !important;
+    color: #1d4ed8 !important;
+    box-shadow: 0 1px 4px rgba(59, 130, 246, 0.15) !important;
+}
+
+/* Radio button styling */
+.options input[type="radio"],
+.options .option-radio {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    max-width: 20px !important;
+    max-height: 20px !important;
+    flex: 0 0 20px !important;
+    flex-shrink: 0 !important;
+    cursor: pointer !important;
+    accent-color: #2563eb !important;
+    vertical-align: middle !important;
+}
+
+/* Option text container */
+.options .option-text {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    line-height: 1.5 !important;
+    font-size: 15.5px !important;
+    color: inherit !important;
+}
+
+/* Coding Question Readability Improvements */
+.question-title {
+    font-size: 20px !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
+    margin: 0 0 14px 0 !important;
+    line-height: 1.4 !important;
+}
+.question-description {
+    font-size: 15px !important;
+    color: #334155 !important;
+    line-height: 1.65 !important;
+    margin-bottom: 20px !important;
+}
+.question-p {
+    margin: 0 0 12px 0 !important;
+    line-height: 1.65 !important;
+}
+.question-list {
+    margin: 8px 0 14px 24px !important;
+    padding-left: 8px !important;
+    color: #334155 !important;
+    line-height: 1.65 !important;
+    font-size: 15px !important;
+}
+.question-ol {
+    list-style-type: decimal !important;
+}
+.question-ul {
+    list-style-type: disc !important;
+}
+.question-li {
+    margin-bottom: 6px !important;
+    padding-left: 4px !important;
+}
+.code-block-wrapper {
+    margin: 14px 0 18px 0 !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+    border: 1px solid #334155 !important;
+    background: #0f172a !important;
+}
+.code-block-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    background: #1e293b !important;
+    padding: 6px 14px !important;
+    border-bottom: 1px solid #334155 !important;
+}
+.code-block-badge {
+    font-family: 'Consolas', monospace !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    color: #94a3b8 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+}
+.code-block-dark {
+    background: #0f172a !important;
+    color: #e2e8f0 !important;
+    padding: 14px 16px !important;
+    margin: 0 !important;
+    font-family: Consolas, Monaco, "Courier New", monospace !important;
+    font-size: 13.5px !important;
+    line-height: 1.7 !important;
+    overflow-x: auto !important;
+    white-space: pre !important;
+    tab-size: 4 !important;
+    -moz-tab-size: 4 !important;
+    word-break: normal !important;
+    word-wrap: normal !important;
+}
+.question-code code,
+.code-block-dark code {
+    font-family: inherit !important;
+    white-space: pre !important;
+    line-height: inherit !important;
+}
+.io-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
+    gap: 14px !important;
+    margin-bottom: 18px !important;
+    font-size: 13.5px !important;
+}
+.io-card {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    padding: 12px 16px !important;
+}
+.io-content {
+    margin-top: 6px !important;
+    color: #1e293b !important;
+    line-height: 1.6 !important;
+}
+.io-line {
+    margin-bottom: 4px !important;
+}
+.io-line:last-child {
+    margin-bottom: 0 !important;
+}
+.sample-case-card {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    padding: 14px 16px !important;
+    margin-bottom: 12px !important;
+}
+.sample-case-index {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    color: #64748b !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    margin-bottom: 8px !important;
+}
+.sample-case-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+}
+.sample-case-col {
+    display: flex !important;
+    flex-direction: column !important;
+}
+.sample-case-label {
+    color: #64748b !important;
+    font-size: 11.5px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    display: block !important;
+    margin-bottom: 4px !important;
+}
+.sample-case-code {
+    padding: 10px 12px !important;
+    border-radius: 6px !important;
+    font-family: Consolas, Monaco, "Courier New", monospace !important;
+    font-size: 13px !important;
+    line-height: 1.6 !important;
+    margin: 0 !important;
+    white-space: pre !important;
+    word-break: normal !important;
+    word-wrap: normal !important;
+    overflow-x: auto !important;
+}
+.sample-input-code {
+    background: #ffffff !important;
+    border: 1.5px solid #cbd5e1 !important;
+    color: #1e293b !important;
+}
+.sample-output-code {
+    background: #f0fdf4 !important;
+    border: 1.5px solid #86efac !important;
+    color: #14532d !important;
+    font-weight: 600 !important;
+}
+.sample-case-explanation {
+    margin-top: 10px !important;
+    padding: 10px 14px !important;
+    background: #eff6ff !important;
+    border-left: 3.5px solid #3b82f6 !important;
+    border-radius: 4px !important;
+    font-size: 13.5px !important;
+    color: #1e3a8a !important;
+    line-height: 1.55 !important;
+    font-style: normal !important;
+}
+.sample-case-explanation strong,
+.sample-case-explanation .explanation-tag {
+    color: #1d4ed8 !important;
+    font-weight: 700 !important;
+    margin-right: 4px !important;
+}
+
 @media (max-width: 768px) {
     .coding-answer-editor,
     .coding-answer-textarea,
@@ -138,6 +412,35 @@ textarea.coding-answer-textarea {
     }
     .exam-content {
         padding: 15px !important;
+    }
+    .sample-case-grid,
+    .io-grid {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+    }
+    .options {
+        gap: 10px !important;
+        margin-top: 14px !important;
+        margin-bottom: 20px !important;
+    }
+    .options label,
+    .options .option-label {
+        padding: 12px 14px !important;
+        font-size: 14.5px !important;
+        gap: 10px !important;
+    }
+    .options input[type="radio"],
+    .options .option-radio {
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important;
+        min-height: 18px !important;
+        max-width: 18px !important;
+        max-height: 18px !important;
+        flex: 0 0 18px !important;
+    }
+    .options .option-text {
+        font-size: 14.5px !important;
     }
 }
 </style>
@@ -206,9 +509,15 @@ onclick="showQuestion(<?= $i ?>)">
 id="q<?= $index ?>"
 style="<?= $index!==0?'display:none':'' ?>">
 
+<?php
+$qType = strtolower(trim($q['question_type'] ?? ''));
+$has_mcq_options = (!empty($q['option_a']) || !empty($q['option_b']));
+$is_coding = ($qType === 'coding') || (!empty($q['programming_language']) && $qType !== 'mcq' && $qType !== 'short_answer' && $qType !== 'descriptive');
+?>
+
 <?= render_exam_question($q['question'], $index + 1) ?>
 
-<?php if (!empty($q['programming_language'])): ?>
+<?php if ($is_coding && !empty($q['programming_language'])): ?>
     <div class="coding-section">
         <span class="coding-lang-badge">
             💻 Programming Language: <?= htmlspecialchars($q['programming_language']) ?>
@@ -216,24 +525,24 @@ style="<?= $index!==0?'display:none':'' ?>">
     </div>
 <?php endif; ?>
 
-<?php if (!empty($q['input_format']) || !empty($q['output_format'])): ?>
+<?php if ($is_coding && (!empty($q['input_format']) || !empty($q['output_format']))): ?>
     <div class="io-grid">
         <?php if (!empty($q['input_format'])): ?>
             <div class="io-card">
                 <div class="coding-section-label">📥 Input Format</div>
-                <div class="io-content"><?= nl2br(htmlspecialchars($q['input_format'])) ?></div>
+                <div class="io-content"><?= format_io_format_lines($q['input_format']) ?></div>
             </div>
         <?php endif; ?>
         <?php if (!empty($q['output_format'])): ?>
             <div class="io-card">
                 <div class="coding-section-label">📤 Output Format</div>
-                <div class="io-content"><?= nl2br(htmlspecialchars($q['output_format'])) ?></div>
+                <div class="io-content"><?= format_io_format_lines($q['output_format']) ?></div>
             </div>
         <?php endif; ?>
     </div>
 <?php endif; ?>
 
-<?php if (!empty($q['constraints'])): ?>
+<?php if ($is_coding && !empty($q['constraints'])): ?>
     <div class="coding-section">
         <?= render_coding_constraints($q['constraints']) ?>
     </div>
@@ -241,32 +550,44 @@ style="<?= $index!==0?'display:none':'' ?>">
 
 <?php
 $sampleCases = [];
-if (!empty($q['sample_test_cases'])) {
+if ($is_coding && !empty($q['sample_test_cases'])) {
     $decodedSamples = is_string($q['sample_test_cases']) ? json_decode($q['sample_test_cases'], true) : $q['sample_test_cases'];
     if (is_array($decodedSamples)) {
         $sampleCases = $decodedSamples;
     }
 }
+$hasSampleExplanations = false;
+foreach ($sampleCases as $stc) {
+    if (!empty($stc['explanation'])) {
+        $hasSampleExplanations = true;
+        break;
+    }
+}
+$generalExplanation = trim($q['explanation'] ?? '');
+$cleanGeneralExplanation = preg_replace('/\s*\(Evaluated for [^)]+\)\.?$/i', '', $generalExplanation);
 ?>
-<?php if (!empty($sampleCases)): ?>
+<?php if ($is_coding && !empty($sampleCases)): ?>
     <div class="coding-section">
         <div class="coding-section-label">🧪 Sample Test Cases</div>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
             <?php foreach ($sampleCases as $sIdx => $stc): ?>
                 <div class="sample-case-card">
+                    <?php if (count($sampleCases) > 1): ?>
+                        <div class="sample-case-index">Sample Case #<?= $sIdx + 1 ?></div>
+                    <?php endif; ?>
                     <div class="sample-case-grid">
-                        <div>
+                        <div class="sample-case-col">
                             <span class="sample-case-label">Sample Input:</span>
-                            <pre class="sample-case-code sample-input-code"><?= htmlspecialchars(is_scalar($stc['input'] ?? '') ? (string)$stc['input'] : json_encode($stc['input'])) ?></pre>
+                            <pre class="sample-case-code sample-input-code code-display"><?= htmlspecialchars(is_scalar($stc['input'] ?? '') ? (string)$stc['input'] : json_encode($stc['input'])) ?></pre>
                         </div>
-                        <div>
+                        <div class="sample-case-col">
                             <span class="sample-case-label">Sample Output:</span>
-                            <pre class="sample-case-code sample-output-code"><?= htmlspecialchars(is_scalar($stc['output'] ?? '') ? (string)$stc['output'] : json_encode($stc['output'])) ?></pre>
+                            <pre class="sample-case-code sample-output-code code-display"><?= htmlspecialchars(is_scalar($stc['output'] ?? '') ? (string)$stc['output'] : json_encode($stc['output'])) ?></pre>
                         </div>
                     </div>
                     <?php if (!empty($stc['explanation'])): ?>
                         <div class="sample-case-explanation">
-                            <strong>Explanation:</strong> <?= htmlspecialchars($stc['explanation']) ?>
+                            <strong class="explanation-tag">💡 Explanation:</strong> <span class="explanation-text"><?= htmlspecialchars($stc['explanation']) ?></span>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -275,11 +596,16 @@ if (!empty($q['sample_test_cases'])) {
     </div>
 <?php endif; ?>
 
-<?php
-$qType = strtolower(trim($q['question_type'] ?? ''));
-$has_mcq_options = (!empty($q['option_a']) || !empty($q['option_b']));
-$is_coding = ($qType === 'coding') || (!empty($q['programming_language']) && $qType !== 'mcq' && $qType !== 'short_answer' && $qType !== 'descriptive');
+<?php if ($is_coding && !$hasSampleExplanations && !empty($cleanGeneralExplanation)): ?>
+    <div class="coding-section coding-explanation-section">
+        <div class="coding-section-label">💡 Explanation</div>
+        <div class="sample-case-explanation" style="margin-top: 0;">
+            <span class="explanation-text"><?= htmlspecialchars($cleanGeneralExplanation) ?></span>
+        </div>
+    </div>
+<?php endif; ?>
 
+<?php
 if ($is_coding):
     $existingAnswer = $saved_answers[(int)$q['id']] ?? null;
     if ($existingAnswer !== null && $existingAnswer !== '') {
@@ -287,6 +613,7 @@ if ($is_coding):
     } else {
         $editorInitialCode = get_coding_starter_code($q);
     }
+    $editorInitialCode = safe_unescape_exam_code($editorInitialCode);
 ?>
 <div class="coding-answer-box" style="width: 100% !important; box-sizing: border-box !important;">
     <div class="coding-answer-header">
@@ -305,11 +632,11 @@ if ($is_coding):
         data-lang="<?= htmlspecialchars($q['programming_language'] ?? 'python') ?>"
         rows="18"
         class="coding-answer-editor coding-answer-textarea"
-        style="display: block !important; width: 100% !important; min-height: 350px !important; height: 420px; box-sizing: border-box !important; font-family: 'Consolas', 'Monaco', 'Courier New', 'Fira Code', monospace !important; font-size: 14.5px !important; line-height: 1.6 !important; padding: 16px 18px !important; background: #0f172a !important; color: #f8fafc !important; caret-color: #38bdf8 !important; border: 1px solid #334155 !important; border-radius: 8px !important; tab-size: 4 !important; -moz-tab-size: 4 !important; resize: vertical !important; white-space: pre !important; overflow-x: auto !important; overflow-y: auto !important; word-wrap: normal !important;"
+        style="display: block !important; width: 100% !important; min-height: 350px !important; height: 420px; box-sizing: border-box !important; font-family: Consolas, Monaco, 'Courier New', monospace !important; font-size: 14.5px !important; line-height: 1.7 !important; padding: 16px 18px !important; background: #0f172a !important; color: #f8fafc !important; caret-color: #38bdf8 !important; border: 1px solid #334155 !important; border-radius: 8px !important; tab-size: 4 !important; -moz-tab-size: 4 !important; resize: vertical !important; white-space: pre !important; overflow-x: auto !important; overflow-y: auto !important; word-wrap: normal !important; word-break: normal !important;"
         placeholder="Enter your code solution or answer here..."
         spellcheck="false"
         oninput="handleAnswerInput(<?= $index ?>, <?= $q['id'] ?>, this.value)"
-        onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, this.value)"><?= htmlspecialchars($editorInitialCode) ?></textarea>
+        onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, this.value)"><?= htmlspecialchars($editorInitialCode, ENT_QUOTES, 'UTF-8') ?></textarea>
 
     <!-- Coding Execution Toolbar -->
     <div class="coding-toolbar">
@@ -386,14 +713,13 @@ if ($is_coding):
     $optText = $q['option_'.strtolower($opt)] ?? '';
     if ($optText === '') continue;
 ?>
-<label>
+<label class="option-label <?= $isChecked ? 'selected' : '' ?>">
 <input type="radio"
+class="option-radio"
 name="answer[<?= $q['id'] ?>]"
 value="<?= $opt ?>"
 <?= $isChecked ?>
-onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, '<?= $opt ?>')">
-<?= htmlspecialchars($optText) ?>
-</label>
+onchange="handleOptionSelect(this); markAnswered(<?= $index ?>, <?= $q['id'] ?>, '<?= $opt ?>')"><span class="option-text"><?= htmlspecialchars($optText) ?></span></label>
 <?php endforeach; ?>
 </div>
 <?php endif; ?>
@@ -965,6 +1291,29 @@ document.getElementById("examForm").submit();
 
 }
 
+});
+
+/* OPTION SELECTION SYNC */
+function handleOptionSelect(radio) {
+    if (!radio) return;
+    const container = radio.closest('.options');
+    if (container) {
+        container.querySelectorAll('label').forEach(lbl => {
+            const r = lbl.querySelector('input[type="radio"]');
+            if (r && r.checked) {
+                lbl.classList.add('selected');
+            } else {
+                lbl.classList.remove('selected');
+            }
+        });
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.options input[type="radio"]:checked').forEach(r => {
+        const lbl = r.closest('label');
+        if (lbl) lbl.classList.add('selected');
+    });
 });
 
 </script>
