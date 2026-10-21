@@ -48,6 +48,11 @@ for ($i = 1; $i <= 10; $i++) {
     $stmtQ->bind_param("is", $testExamId, $qText);
     $stmtQ->execute();
     $stmtQ->close();
+
+    $stmtAct = $conn->prepare("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option) VALUES (?, ?, 'Noun', 'Verb', 'Adjective', 'Adverb', 'A')");
+    $stmtAct->bind_param("is", $testExamId, $qText);
+    $stmtAct->execute();
+    $stmtAct->close();
 }
 
 try {
@@ -67,7 +72,7 @@ try {
     // Check that counts match database approved counts
     $countsValid = true;
     foreach ($approvedSubjects as $s) {
-        $checkStmt = $conn->prepare("SELECT COUNT(*) as cnt FROM ai_generated_questions q INNER JOIN exams e ON q.exam_id = e.id WHERE q.status = 'approved' AND q.subject = ?");
+        $checkStmt = $conn->prepare("SELECT COUNT(DISTINCT act.id) as cnt FROM questions act INNER JOIN exams e ON act.exam_id = e.id INNER JOIN ai_generated_questions q ON q.exam_id = act.exam_id AND (act.question = q.question OR TRIM(act.question) = TRIM(q.question)) WHERE q.status = 'approved' AND q.subject = ?");
         $checkStmt->bind_param("s", $s['subject']);
         $checkStmt->execute();
         $dbCount = (int)$checkStmt->get_result()->fetch_assoc()['cnt'];
@@ -435,6 +440,7 @@ try {
     // --------------------------------------------------------------------------
     if (!empty($testExamId)) {
         StudyMaterialService::deleteMaterialsForExam($conn, $testExamId);
+        $conn->query("DELETE FROM questions WHERE exam_id = {$testExamId}");
         $conn->query("DELETE FROM ai_generated_questions WHERE exam_id = {$testExamId}");
         $conn->query("DELETE FROM exams WHERE id = {$testExamId}");
     }

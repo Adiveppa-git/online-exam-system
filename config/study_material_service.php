@@ -90,7 +90,8 @@ class StudyMaterialService {
         $sql = "SELECT DISTINCT q.subject"
              . " FROM ai_generated_questions q"
              . " INNER JOIN exams e ON q.exam_id = e.id"
-             . " WHERE q.subject IS NOT NULL AND TRIM(q.subject) != ''";
+             . " INNER JOIN questions act ON act.exam_id = q.exam_id AND (act.question = q.question OR TRIM(act.question) = TRIM(q.question))"
+             . " WHERE q.status = 'approved' AND q.subject IS NOT NULL AND TRIM(q.subject) != ''";
         if ($examId !== null && $examId > 0) {
             $sql .= " AND q.exam_id = " . (int)$examId;
         }
@@ -112,7 +113,10 @@ class StudyMaterialService {
      */
     public static function getTopics($conn, ?int $examId = null, ?string $subject = null): array {
         $topics = [];
-        $where = ["q.topic IS NOT NULL AND TRIM(q.topic) != ''"];
+        $where = [
+            "q.topic IS NOT NULL AND TRIM(q.topic) != ''",
+            "q.status = 'approved'"
+        ];
         if ($examId !== null && $examId > 0) {
             $where[] = "q.exam_id = " . (int)$examId;
         }
@@ -123,6 +127,7 @@ class StudyMaterialService {
         $sql = "SELECT DISTINCT q.topic"
              . " FROM ai_generated_questions q"
              . " INNER JOIN exams e ON q.exam_id = e.id"
+             . " INNER JOIN questions act ON act.exam_id = q.exam_id AND (act.question = q.question OR TRIM(act.question) = TRIM(q.question))"
              . " WHERE " . implode(' AND ', $where)
              . " ORDER BY q.topic ASC";
         $res = $conn->query($sql);
@@ -188,10 +193,23 @@ class StudyMaterialService {
             }
         }
 
-        $sql = "SELECT id, exam_id, subject, topic, difficulty, question, option_a, option_b, option_c, option_d, correct_option, explanation, status 
-                FROM ai_generated_questions 
+        $join = "INNER JOIN exams e ON q.exam_id = e.id";
+        if (strtolower($status) === 'approved') {
+            $join .= " INNER JOIN ("
+                   . "     SELECT MAX(q2.id) AS max_id, act.id AS act_id"
+                   . "     FROM questions act"
+                   . "     INNER JOIN exams e2 ON act.exam_id = e2.id"
+                   . "     INNER JOIN ai_generated_questions q2 ON q2.exam_id = act.exam_id AND (act.question = q2.question OR TRIM(act.question) = TRIM(q2.question))"
+                   . "     WHERE q2.status = 'approved'"
+                   . "     GROUP BY act.id"
+                   . " ) matched ON q.id = matched.max_id";
+        }
+
+        $sql = "SELECT DISTINCT q.id, q.exam_id, q.subject, q.topic, q.difficulty, q.question, q.option_a, q.option_b, q.option_c, q.option_d, q.correct_option, q.explanation, q.status 
+                FROM ai_generated_questions q 
+                {$join}
                 WHERE " . implode(" AND ", $where) . " 
-                ORDER BY id ASC";
+                ORDER BY q.id ASC";
 
         $stmt = $conn->prepare($sql);
         if (!$stmt) {
@@ -561,9 +579,10 @@ class StudyMaterialService {
      */
     public static function getSubjectsWithApprovedQuestions($conn): array {
         $subjects = [];
-        $sql = "SELECT q.subject, COUNT(*) as count"
-             . " FROM ai_generated_questions q"
-             . " INNER JOIN exams e ON q.exam_id = e.id"
+        $sql = "SELECT q.subject, COUNT(DISTINCT act.id) as count"
+             . " FROM questions act"
+             . " INNER JOIN exams e ON act.exam_id = e.id"
+             . " INNER JOIN ai_generated_questions q ON q.exam_id = act.exam_id AND (act.question = q.question OR TRIM(act.question) = TRIM(q.question))"
              . " WHERE q.status = 'approved'"
              . " AND q.subject IS NOT NULL"
              . " AND TRIM(q.subject) != ''"
@@ -583,12 +602,18 @@ class StudyMaterialService {
 
     /**
      * Retrieve approved questions for a specific subject, strictly excluding
-     * pending and rejected questions, and excluding questions from other subjects.
+     * pending and rejected questions, deleted questions, and duplicate records.
      */
-    public static function getApprovedQuestionsForSubject($conn, string $subject, ?array $questionIds = null): array {
+    public static function getApprovedQuestionsForSubject($conn, string $subject, ?array $questionIds = null, ?int $examId = null): array {
         $where = ["q.status = 'approved'", "q.subject = ?"];
         $params = [$subject];
         $types = "s";
+
+        if ($examId !== null && $examId > 0) {
+            $where[] = "q.exam_id = ?";
+            $params[] = $examId;
+            $types .= "i";
+        }
 
         if (!empty($questionIds) && is_array($questionIds)) {
             $intIds = array_values(array_filter(array_map('intval', $questionIds)));
@@ -602,11 +627,43 @@ class StudyMaterialService {
             }
         }
 
+        $subWhere = ["q2.status = 'approved'", "q2.subject = ?"];
+        $subParams = [$subject];
+        $subTypes = "s";
+        if ($examId !== null && $examId > 0) {
+            $subWhere[] = "q2.exam_id = ?";
+            $subParams[] = $examId;
+            $subTypes .= "i";
+        }
+        if (!empty($questionIds) && is_array($questionIds)) {
+            $intIds = array_values(array_filter(array_map('intval', $questionIds)));
+            if (!empty($intIds)) {
+                $placeholders = implode(',', array_fill(0, count($intIds), '?'));
+                $subWhere[] = "q2.id IN ({$placeholders})";
+                foreach ($intIds as $qId) {
+                    $subParams[] = $qId;
+                    $subTypes .= "i";
+                }
+            }
+        }
+
+        $allParams = array_merge($subParams, $params);
+        $allTypes = $subTypes . $types;
+
         $sql = "SELECT q.id, q.exam_id, q.subject, q.topic, q.difficulty, q.question,"
              . " q.option_a, q.option_b, q.option_c, q.option_d, q.correct_option,"
              . " q.explanation, q.status"
              . " FROM ai_generated_questions q"
-             . " INNER JOIN exams e ON q.exam_id = e.id"
+             . " INNER JOIN ("
+             . "     SELECT MAX(q2.id) AS max_id, act.id AS act_id"
+             . "     FROM questions act"
+             . "     INNER JOIN exams e ON act.exam_id = e.id"
+             . "     INNER JOIN ai_generated_questions q2"
+             . "         ON q2.exam_id = act.exam_id"
+             . "         AND (act.question = q2.question OR TRIM(act.question) = TRIM(q2.question))"
+             . "     WHERE " . implode(" AND ", $subWhere)
+             . "     GROUP BY act.id"
+             . " ) matched ON q.id = matched.max_id"
              . " WHERE " . implode(" AND ", $where)
              . " ORDER BY q.topic ASC, q.id ASC";
 
@@ -615,7 +672,7 @@ class StudyMaterialService {
             return [];
         }
 
-        $stmt->bind_param($types, ...$params);
+        $stmt->bind_param($allTypes, ...$allParams);
         $stmt->execute();
         $res = $stmt->get_result();
         $questions = [];
@@ -807,7 +864,8 @@ class StudyMaterialService {
         $conn,
         string $subject,
         int $adminId = 1,
-        ?array $specificQuestionIds = null
+        ?array $specificQuestionIds = null,
+        ?int $examId = null
     ): array {
         self::ensureSchema($conn);
 
@@ -819,8 +877,8 @@ class StudyMaterialService {
             ];
         }
 
-        // 1. Fetch only approved questions for this subject
-        $questions = self::getApprovedQuestionsForSubject($conn, $subject, $specificQuestionIds);
+        // 1. Fetch only approved, active questions for this subject (and exam if provided)
+        $questions = self::getApprovedQuestionsForSubject($conn, $subject, $specificQuestionIds, $examId);
         $qCount = count($questions);
 
         if ($qCount === 0) {
@@ -847,17 +905,18 @@ class StudyMaterialService {
         $storedTopic = mb_strimwidth($topicList, 0, 100, '...');
 
         // Detect primary exam ID if present:
-        // Use real relationships across questions rather than just the first item.
-        // If all questions that have an exam_id point to a single exam, use that exam_id.
-        // If questions point to multiple different exams, or have no exam_id, leave null (Subject-level).
-        $nonNullExamIds = [];
-        foreach ($questions as $q) {
-            if (!empty($q['exam_id'])) {
-                $nonNullExamIds[] = (int)$q['exam_id'];
+        if ($examId !== null && $examId > 0) {
+            $primaryExamId = $examId;
+        } else {
+            $nonNullExamIds = [];
+            foreach ($questions as $q) {
+                if (!empty($q['exam_id'])) {
+                    $nonNullExamIds[] = (int)$q['exam_id'];
+                }
             }
+            $uniqueExamIds = array_values(array_unique($nonNullExamIds));
+            $primaryExamId = (count($uniqueExamIds) === 1) ? $uniqueExamIds[0] : null;
         }
-        $uniqueExamIds = array_values(array_unique($nonNullExamIds));
-        $primaryExamId = (count($uniqueExamIds) === 1) ? $uniqueExamIds[0] : null;
 
         // 2. Synthesize Markdown strictly grounded in the approved questions
         $markdownContent = self::buildStudyNotesMarkdownForSubject($subject, $questions);
@@ -872,13 +931,23 @@ class StudyMaterialService {
         $timestamp = time();
 
         // 4. Check for existing generated document for this subject to prevent accidental duplication
-        $chkStmt = $conn->prepare("
-            SELECT id, filename, file_path, original_name, source_question_ids 
-            FROM ai_documents 
-            WHERE is_generated = 1 AND subject = ? 
-            ORDER BY id DESC LIMIT 1
-        ");
-        $chkStmt->bind_param("s", $subject);
+        if ($primaryExamId !== null) {
+            $chkStmt = $conn->prepare("
+                SELECT id, filename, file_path, original_name, source_question_ids 
+                FROM ai_documents 
+                WHERE is_generated = 1 AND subject = ? AND (exam_id = ? OR exam_id IS NULL)
+                ORDER BY (exam_id = ?) DESC, id DESC LIMIT 1
+            ");
+            $chkStmt->bind_param("sii", $subject, $primaryExamId, $primaryExamId);
+        } else {
+            $chkStmt = $conn->prepare("
+                SELECT id, filename, file_path, original_name, source_question_ids 
+                FROM ai_documents 
+                WHERE is_generated = 1 AND subject = ? 
+                ORDER BY id DESC LIMIT 1
+            ");
+            $chkStmt->bind_param("s", $subject);
+        }
         $chkStmt->execute();
         $existing = $chkStmt->get_result()->fetch_assoc();
         $chkStmt->close();
@@ -1100,12 +1169,14 @@ class StudyMaterialService {
             ];
         }
 
+        // If it's an auto-generated document, regenerate freshly from currently eligible questions
+        if (!empty($doc['is_generated']) && !empty($doc['subject'])) {
+            $exId = !empty($doc['exam_id']) ? (int)$doc['exam_id'] : null;
+            return self::generateSubjectStudyMaterial($conn, $doc['subject'], $adminId, null, $exId);
+        }
+
         $filePath = $doc['file_path'];
         if (empty($filePath) || !file_exists($filePath)) {
-            // If it's a generated document and markdown file is missing, regenerate it
-            if (!empty($doc['is_generated']) && !empty($doc['subject'])) {
-                return self::generateSubjectStudyMaterial($conn, $doc['subject'], $adminId);
-            }
             return [
                 'success' => false,
                 'message' => "Document file not found on disk: " . htmlspecialchars(basename($filePath ?? 'unknown'))

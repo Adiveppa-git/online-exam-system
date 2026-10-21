@@ -137,16 +137,21 @@ try {
 // TEST 3: Subjects with no approved questions are excluded
 // --------------------------------------------------------------------------
 try {
-    // Exam 'Java' exists in exams (#331) but has no approved questions
+    $emptyExamSubj = "EmptySubject_" . uniqid();
+    $conn->query("INSERT INTO exams (title, duration, total_marks, marks_per_question) VALUES ('{$emptyExamSubj}', 30, 10, 1)");
+    $emptyExamId = (int)$conn->insert_id;
+
     $approvedSubjects = StudyMaterialService::getSubjectsWithApprovedQuestions($conn);
     $subjectNames = array_column($approvedSubjects, 'subject');
 
-    $javaExcluded = !in_array('Java', $subjectNames, true);
+    $emptySubjExcluded = !in_array($emptyExamSubj, $subjectNames, true);
+
+    $conn->query("DELETE FROM exams WHERE id = {$emptyExamId}");
 
     report(
         "3. Subjects with no approved questions are excluded (even if exam exists)",
-        $javaExcluded,
-        "Java has exam but 0 approved questions; excluded from dropdown"
+        $emptySubjExcluded,
+        "Exam exists but 0 approved questions; excluded from dropdown"
     );
 } catch (Throwable $e) {
     report("3. Subjects with no approved questions excluded", false, $e->getMessage());
@@ -164,6 +169,9 @@ try {
     $conn->query("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_tmp', 1, {$tempExamId}, '{$testSubj}', 'TopicX', 'Q1', 'A', 'B', 'C', 'D', 'A', 'Exp', 'easy', 'approved')");
     $tempQId = (int)$conn->insert_id;
 
+    $conn->query("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option) VALUES ({$tempExamId}, 'Q1', 'A', 'B', 'C', 'D', 'A')");
+    $tempActId = (int)$conn->insert_id;
+
     // Verify it appears while exam exists
     $subjsBefore = StudyMaterialService::getSubjectsWithApprovedQuestions($conn);
     $namesBefore = array_column($subjsBefore, 'subject');
@@ -179,6 +187,7 @@ try {
 
     // Clean up temporary question
     $conn->query("DELETE FROM ai_generated_questions WHERE id = {$tempQId}");
+    $conn->query("DELETE FROM questions WHERE id = {$tempActId}");
 
     report(
         "4. Subjects linked only to deleted/nonexistent exams are strictly excluded",
@@ -204,9 +213,11 @@ try {
 
     $conn->query("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_a', 1, {$examA}, '{$subjAlpha}', 'TopicA', 'QA', 'A', 'B', 'C', 'D', 'A', 'Exp', 'easy', 'approved')");
     $qA = (int)$conn->insert_id;
+    $conn->query("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option) VALUES ({$examA}, 'QA', 'A', 'B', 'C', 'D', 'A')");
 
     $conn->query("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_b', 1, {$examB}, '{$subjBeta}', 'TopicB', 'QB', 'A', 'B', 'C', 'D', 'A', 'Exp', 'easy', 'approved')");
     $qB = (int)$conn->insert_id;
+    $conn->query("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option) VALUES ({$examB}, 'QB', 'A', 'B', 'C', 'D', 'A')");
 
     // Delete Exam A
     $conn->query("DELETE FROM exams WHERE id = {$examA}");
@@ -220,6 +231,7 @@ try {
 
     // Clean up
     $conn->query("DELETE FROM ai_generated_questions WHERE id IN ({$qA}, {$qB})");
+    $conn->query("DELETE FROM questions WHERE exam_id IN ({$examA}, {$examB})");
     $conn->query("DELETE FROM exams WHERE id = {$examB}");
 
     report(
@@ -242,8 +254,11 @@ try {
     // 2 approved under this valid exam
     $conn->query("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_c', 1, {$cExamId}, '{$cSubj}', 'TopicC', 'Q1', 'A', 'B', 'C', 'D', 'A', 'Exp', 'easy', 'approved')");
     $cQ1 = (int)$conn->insert_id;
+    $conn->query("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option) VALUES ({$cExamId}, 'Q1', 'A', 'B', 'C', 'D', 'A')");
+
     $conn->query("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_c', 1, {$cExamId}, '{$cSubj}', 'TopicC', 'Q2', 'A', 'B', 'C', 'D', 'A', 'Exp', 'easy', 'approved')");
     $cQ2 = (int)$conn->insert_id;
+    $conn->query("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option) VALUES ({$cExamId}, 'Q2', 'A', 'B', 'C', 'D', 'A')");
 
     // 1 pending under this exam (should NOT count)
     $conn->query("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_c', 1, {$cExamId}, '{$cSubj}', 'TopicC', 'QP', 'A', 'B', 'C', 'D', 'A', 'Exp', 'easy', 'pending')");
@@ -266,6 +281,7 @@ try {
 
     // Clean up
     $conn->query("DELETE FROM ai_generated_questions WHERE id IN ({$cQ1}, {$cQ2}, {$cQP}, {$cQO})");
+    $conn->query("DELETE FROM questions WHERE exam_id = {$cExamId}");
     $conn->query("DELETE FROM exams WHERE id = {$cExamId}");
 
     report(
@@ -397,12 +413,14 @@ try {
     // Approve questions
     $conn->query("INSERT INTO ai_generated_questions (request_id, admin_id, exam_id, subject, topic, question, option_a, option_b, option_c, option_d, correct_option, explanation, difficulty, status) VALUES ('req_dyn', 1, {$dynExamId}, '{$dynSubj}', 'DynTopic', 'DQ', 'A', 'B', 'C', 'D', 'A', 'Exp', 'easy', 'approved')");
     $dynQId = (int)$conn->insert_id;
+    $conn->query("INSERT INTO questions (exam_id, question, option_a, option_b, option_c, option_d, correct_option) VALUES ({$dynExamId}, 'DQ', 'A', 'B', 'C', 'D', 'A')");
 
     $afterAdd = StudyMaterialService::getSubjectsWithApprovedQuestions($conn);
     $hasDynamic = in_array($dynSubj, array_column($afterAdd, 'subject'), true);
 
     // Delete exam
     $conn->query("DELETE FROM ai_generated_questions WHERE id = {$dynQId}");
+    $conn->query("DELETE FROM questions WHERE exam_id = {$dynExamId}");
     $conn->query("DELETE FROM exams WHERE id = {$dynExamId}");
 
     $afterDel = StudyMaterialService::getSubjectsWithApprovedQuestions($conn);
