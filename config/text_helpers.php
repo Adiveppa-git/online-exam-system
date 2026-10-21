@@ -493,5 +493,78 @@ if (!function_exists('render_exam_question')) {
     }
 }
 
+if (!function_exists('get_coding_starter_code')) {
+    /**
+     * Resolves the language-appropriate boilerplate / starter code for a coding question.
+     * Preserves existing question-specific starter code, declarations, and signatures,
+     * while replacing placeholder implementations (TODO / pass) with a single '# Start code here'
+     * or '// Start code here' comment directly inside the editor.
+     *
+     * @param array $q Question record array
+     * @return string
+     */
+    function get_coding_starter_code(array $q): string {
+        $lang = strtolower(trim($q['programming_language'] ?? 'python'));
+        $starter = trim($q['starter_code'] ?? '');
+
+        // Determine comment syntax for language
+        $commentPrefix = '//';
+        if (in_array($lang, ['python', 'py', 'python3', 'ruby', 'bash', 'sh'], true)) {
+            $commentPrefix = '#';
+        } elseif ($lang === 'sql') {
+            $commentPrefix = '--';
+        }
+
+        $placeholderComment = "{$commentPrefix} Start code here";
+
+        if ($starter === '') {
+            switch ($lang) {
+                case 'java':
+                    return "public class Solution {\n    public static void main(String[] args) {\n        // Start code here\n    }\n}";
+                case 'c':
+                    return "#include <stdio.h>\n\nint main() {\n    // Start code here\n    return 0;\n}";
+                case 'cpp':
+                case 'c++':
+                    return "#include <iostream>\n\nusing namespace std;\n\nint main() {\n    // Start code here\n    return 0;\n}";
+                case 'sql':
+                    return "-- Start code here";
+                case 'javascript':
+                case 'js':
+                    return "function solve() {\n    // Start code here\n}";
+                case 'python':
+                case 'python3':
+                case 'py':
+                default:
+                    return "def solve():\n    # Start code here";
+            }
+        }
+
+        // 1. Remove obsolete top-level banner comment if present
+        // e.g. "# Solution template for ...", "// Solution template for ...", or previous "# Start code here: write your solution below"
+        $starter = preg_replace('/^(\/\/|#|--)\s*(Solution template for|Start code here: write your solution below)[^\r\n]*(\r?\n)+/i', '', $starter);
+
+        // 2. If it already has the exact placeholder comment and no remaining TODO or pass, return it
+        if (str_contains($starter, $placeholderComment) && !preg_match('/(TODO:|(\bpass\b))/i', $starter)) {
+            return trim($starter);
+        }
+
+        // 3. Replace placeholder implementation (TODO comments and/or pass) with the single placeholder comment
+        if (preg_match('/([ \t]*)(\/\/|#|--)\s*TODO:[^\r\n]*(\r?\n[ \t]*pass)?/i', $starter, $m)) {
+            $indent = $m[1] ?? '    ';
+            $starter = preg_replace('/[ \t]*(\/\/|#|--)\s*TODO:[^\r\n]*(\r?\n[ \t]*pass)?/i', $indent . $placeholderComment, $starter);
+        } elseif (preg_match('/([ \t]*)\bpass\b/i', $starter, $m)) {
+            $indent = $m[1] ?? '    ';
+            $starter = preg_replace('/[ \t]*\bpass\b/i', $indent . $placeholderComment, $starter);
+        }
+
+        // 4. If placeholder comment is still not in the code, append it cleanly
+        if (!str_contains($starter, $placeholderComment)) {
+            $starter .= "\n    " . $placeholderComment;
+        }
+
+        return trim($starter);
+    }
+}
+
 
 

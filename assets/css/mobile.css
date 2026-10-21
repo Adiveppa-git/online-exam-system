@@ -233,5 +233,17 @@ margin-left:0 !important;
 padding:15px !important;
 }
 
+/* CODING CONSTRAINTS RESPONSIVE */
+.coding-constraints-box {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 8px !important;
 }
+
+.coding-constraints-box .constraints-divider {
+    display: none !important;
+}
+
+}
+
 

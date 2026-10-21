@@ -57,7 +57,7 @@ box-sizing:border-box;
 background:#fff;
 padding:30px;
 border-radius:10px;
-max-width:880px;
+max-width:980px;
 margin:auto;
 box-shadow:0 2px 8px rgba(0,0,0,0.06);
 }
@@ -302,34 +302,62 @@ margin: 6px 0 0 0;
 .coding-answer-box {
 margin-top: 20px;
 padding-top: 16px;
-border-top: 1px dashed #cbd5e1;
+border-top: 1px solid #e2e8f0;
+width: 100%;
+box-sizing: border-box;
+}
+
+.coding-answer-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-bottom: 8px;
 }
 
 .coding-answer-label {
-display: block;
+display: inline-flex;
+align-items: center;
+gap: 6px;
 font-weight: 700;
 font-size: 14px;
-margin-bottom: 8px;
+margin-bottom: 0;
 color: #0f172a;
 }
 
-/* Enlarge coding editor to 380-400px min-height with sleek dark IDE theme */
+.coding-lang-badge-sm {
+font-size: 11px;
+font-weight: 700;
+color: #0284c7;
+background: #e0f2fe;
+padding: 3px 10px;
+border-radius: 4px;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+border: 1px solid #bae6fd;
+}
+
+/* Enlarge coding editor to 400px comfortable height with sleek dark IDE theme */
 .coding-answer-textarea {
 width: 100%;
 min-height: 380px;
+height: 410px;
+box-sizing: border-box;
 font-family: 'Consolas', 'Monaco', 'Courier New', 'Fira Code', monospace;
 font-size: 14px;
 line-height: 1.6;
-padding: 14px 16px;
+padding: 16px 18px;
 border: 1px solid #334155;
 border-radius: 8px;
-box-sizing: border-box;
 background: #0f172a;
 color: #f8fafc;
 caret-color: #38bdf8;
 tab-size: 4;
 -moz-tab-size: 4;
 resize: vertical;
+white-space: pre;
+overflow-x: auto;
+overflow-y: auto;
+word-wrap: normal;
 transition: border-color 0.15s, box-shadow 0.15s;
 }
 
@@ -751,7 +779,13 @@ display: none;
 }
 
 .coding-answer-textarea {
-min-height: 280px;
+min-height: 320px;
+height: 360px;
+width: 100%;
+padding: 12px 14px;
+font-size: 13px;
+white-space: pre;
+overflow-x: auto;
 }
 
 .coding-toolbar {

@@ -206,16 +206,6 @@ if (!empty($q['sample_test_cases'])) {
     </div>
 <?php endif; ?>
 
-<?php if (!empty($q['starter_code'])): ?>
-    <div class="coding-section">
-        <div class="coding-section-label" style="display: flex; justify-content: space-between; align-items: center;">
-            <span>💻 Starter Code</span>
-            <button type="button" class="btn-copy-starter" onclick="copyStarterCode(<?= $q['id'] ?>)">📋 Copy to Editor</button>
-        </div>
-        <pre class="starter-code-block" id="starterCode_<?= $q['id'] ?>"><code><?= htmlspecialchars($q['starter_code']) ?></code></pre>
-    </div>
-<?php endif; ?>
-
 <?php
 $has_mcq_options = (!empty($q['option_a']) || !empty($q['option_b']));
 if ($has_mcq_options):
@@ -238,11 +228,19 @@ onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, '<?= $opt ?>')">
 <?php endforeach; ?>
 </div>
 <?php else: ?>
+<?php
+$existingAnswer = $saved_answers[(int)$q['id']] ?? null;
+if ($existingAnswer !== null && $existingAnswer !== '') {
+    $editorInitialCode = $existingAnswer;
+} else {
+    $editorInitialCode = get_coding_starter_code($q);
+}
+?>
 <div class="coding-answer-box">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-        <label class="coding-answer-label" style="margin-bottom: 0;">Your Solution / Answer:</label>
+    <div class="coding-answer-header">
+        <label class="coding-answer-label">💻 Your Solution / Answer Editor:</label>
         <?php if (!empty($q['programming_language'])): ?>
-            <span style="font-size: 11px; font-weight: 700; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;">
+            <span class="coding-lang-badge-sm">
                 <?= htmlspecialchars($q['programming_language']) ?>
             </span>
         <?php endif; ?>
@@ -253,12 +251,12 @@ onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, '<?= $opt ?>')">
         data-qid="<?= $q['id'] ?>"
         data-idx="<?= $index ?>"
         data-lang="<?= htmlspecialchars($q['programming_language'] ?? 'python') ?>"
-        rows="15"
+        rows="18"
         class="coding-answer-textarea"
         placeholder="Enter your code solution or answer here..."
         spellcheck="false"
         oninput="handleAnswerInput(<?= $index ?>, <?= $q['id'] ?>, this.value)"
-        onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, this.value)"><?= htmlspecialchars($saved_answers[(int)$q['id']] ?? '') ?></textarea>
+        onchange="markAnswered(<?= $index ?>, <?= $q['id'] ?>, this.value)"><?= htmlspecialchars($editorInitialCode) ?></textarea>
 
     <!-- Coding Execution Toolbar -->
     <div class="coding-toolbar">
@@ -515,18 +513,7 @@ function closeOutputPanel(qid) {
 }
 
 function copyStarterCode(qid) {
-    const starterPre = document.getElementById("starterCode_" + qid);
-    const editor = document.getElementById("ans_" + qid);
-    if (!starterPre || !editor) return;
-    const starterText = starterPre.innerText || starterPre.textContent;
-    if (editor.value.trim() !== "" && editor.value.trim() !== starterText.trim()) {
-        if (!confirm("Replace current editor contents with starter code?")) {
-            return;
-        }
-    }
-    editor.value = starterText;
-    editor.dispatchEvent(new Event('input'));
-    editor.focus();
+    // Deprecated: Starter code is now automatically initialized inside the answer editor
 }
 
 function runStudentCode(index, qid) {
@@ -538,6 +525,9 @@ function runStudentCode(index, qid) {
         editor.focus();
         return;
     }
+
+    // Persist current code before execution
+    markAnswered(index, qid, code);
 
     const panel = document.getElementById("outputPanel_" + qid);
     const badge = document.getElementById("outputBadge_" + qid);
@@ -665,6 +655,9 @@ function runAndCheckSampleCases(index, qid) {
         editor.focus();
         return;
     }
+
+    // Persist current code before execution
+    markAnswered(index, qid, code);
 
     const panel = document.getElementById("outputPanel_" + qid);
     const badge = document.getElementById("outputBadge_" + qid);
