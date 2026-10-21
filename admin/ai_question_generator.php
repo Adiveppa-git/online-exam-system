@@ -237,8 +237,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                 }
                 $stmtExQ->close();
 
-                // 2b. From AI generated review records for this exam
-                $stmtExAI = $conn->prepare("SELECT question FROM ai_generated_questions WHERE exam_id = ?");
+                // 2b. From AI generated pending review records for this exam
+                $stmtExAI = $conn->prepare("SELECT question FROM ai_generated_questions WHERE exam_id = ? AND status = 'pending'");
                 $stmtExAI->bind_param("i", $exam_id);
                 $stmtExAI->execute();
                 $resExAI = $stmtExAI->get_result();
@@ -251,6 +251,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                 $stmtExAI->close();
 
                 $existingNormalized = array_values(array_unique($existingNormalized));
+                $existingCount = count($existingNormalized);
+                error_log("[AI Question Gen] Diagnostic: Target exam_id={$exam_id}, subject='{$subject}', topic='{$topic}', difficulty='{$difficulty}'. Active/pending questions loaded for deduplication: {$existingCount}.");
 
                 $conn->commit();
 
@@ -274,6 +276,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                     $request_id = $data['request_id'] ?? ("req_" . uniqid());
                     $model_used = $data['model_used'] ?? 'gpt-4o-mini';
                     $generated_questions = $data['questions'] ?? [];
+                    $generated_total = count($generated_questions);
+                    error_log("[AI Question Gen] Diagnostic: Target exam_id={$exam_id}, request_id='{$request_id}'. AI service returned {$generated_total} question(s).");
 
                     $conn->begin_transaction();
 
@@ -344,6 +348,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                     $stmtIns->close();
 
                     $conn->commit();
+
+                    error_log("[AI Question Gen] Diagnostic: Target exam_id={$exam_id}, request_id='{$request_id}'. Results -> Total generated: {$generated_total}, Duplicates skipped: {$skipped_duplicate_count}, Successfully staged (pending): {$inserted_count}.");
 
                     if ($inserted_count > 0) {
                         if ($skipped_duplicate_count > 0) {
@@ -784,9 +790,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['generate_ques
                                 <?php endif; ?>
 
                                 <?php if (!empty($vq['constraints'])): ?>
-                                    <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 6px 10px; margin-bottom: 10px; font-size: 12px; color: #92400e;">
-                                        ⚠️ <strong>Constraints:</strong> <code><?= htmlspecialchars($vq['constraints']) ?></code>
-                                    </div>
+                                    <?= render_coding_constraints($vq['constraints']) ?>
                                 <?php endif; ?>
 
                                 <?php
