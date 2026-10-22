@@ -15,6 +15,16 @@ class SubjectResolver {
         'java' => 'Java',
         'c++' => 'C++',
         'cpp' => 'C++',
+        'c' => 'C',
+        'c programming' => 'C',
+        'c language' => 'C',
+        'javascript' => 'JavaScript',
+        'js' => 'JavaScript',
+        'typescript' => 'JavaScript',
+        'ts' => 'JavaScript',
+        'c#' => 'C#',
+        'csharp' => 'C#',
+        'php' => 'PHP',
         'math' => 'Maths',
         'maths' => 'Maths',
         'mathematics' => 'Maths',
@@ -42,13 +52,14 @@ class SubjectResolver {
      *     'subject' => string|null,
      *     'subjects' => array,
      *     'exam_id' => int|null,
-     *     'exam_title' => string|null
+     *     'exam_title' => string|null,
+     *     'is_comparison' => bool
      * ]
      */
     public static function resolve(mysqli $conn, string $query): array {
         $cleanQuery = trim($query);
         if ($cleanQuery === '') {
-            return ['status' => 'none', 'subject' => null, 'subjects' => [], 'exam_id' => null, 'exam_title' => null];
+            return ['status' => 'none', 'subject' => null, 'subjects' => [], 'exam_id' => null, 'exam_title' => null, 'is_comparison' => false];
         }
 
         // 1. Fetch authoritative subjects and exams from database
@@ -89,35 +100,66 @@ class SubjectResolver {
             $aliasMap[strtolower(trim($authSubj))] = $authSubj;
         }
 
+        // Sort aliases by length descending so longer tokens (e.g. 'c++', 'c programming') match first
+        uksort($aliasMap, function($a, $b) {
+            return strlen($b) <=> strlen($a);
+        });
+
         // 5. Match query against subjects and aliases
         $qLower = strtolower($cleanQuery);
 
         foreach ($aliasMap as $alias => $canonicalSubject) {
             $quotedAlias = preg_quote($alias, '/');
-            if (preg_match('/\b' . $quotedAlias . '\b/i', $qLower)) {
+            // For single-letter 'c', do not match if followed by '+' (e.g. C++) or '#' (e.g. C#)
+            if ($alias === 'c') {
+                $pattern = '/(?<![a-zA-Z0-9_])c(?![a-zA-Z0-9_+#])/i';
+            } else {
+                $pattern = '/(?<![a-zA-Z0-9_])' . $quotedAlias . '(?![a-zA-Z0-9_])/i';
+            }
+            if (preg_match($pattern, $qLower)) {
                 if (!in_array($canonicalSubject, $matchedSubjects, true)) {
                     $matchedSubjects[] = $canonicalSubject;
                 }
             }
         }
 
+        // If C++ was matched, do not allow 'C' unless specifically mentioned as 'c programming' or 'c language'
+        if (in_array('C++', $matchedSubjects, true) && in_array('C', $matchedSubjects, true)) {
+            if (!preg_match('/\b(c\s+programming|c\s+language|language\s+c)\b/i', $qLower)) {
+                $matchedSubjects = array_values(array_diff($matchedSubjects, ['C']));
+            }
+        }
+
         // If a specific language or discipline was matched (e.g. Java, Python, C++, OS, DB),
         // do not let general "Computer Science" trigger ambiguity unless "computer science" or "cs" was specifically typed
         if (count($matchedSubjects) > 1 && in_array('Computer Science', $matchedSubjects, true)) {
-            $specifics = array_intersect($matchedSubjects, ['Java', 'Python', 'C++', 'Database', 'Operating Systems']);
+            $specifics = array_intersect($matchedSubjects, ['Java', 'Python', 'C++', 'C', 'JavaScript', 'Database', 'Operating Systems']);
             if (!empty($specifics) && !preg_match('/\b(computer science|cs)\b/i', $qLower)) {
                 $matchedSubjects = array_values(array_diff($matchedSubjects, ['Computer Science']));
             }
         }
 
-        // 6. Handle Ambiguity
+        $isComparison = (bool)preg_match('/\b(compare|comparison|difference\s+between|vs|versus|compared\s+to|differ\s+from)\b/i', $qLower);
+
+        // 6. Handle Ambiguity vs Explicit Comparison
         if (count($matchedSubjects) > 1) {
+            if ($isComparison) {
+                return [
+                    'status' => 'resolved',
+                    'subject' => implode(' and ', $matchedSubjects),
+                    'subjects' => $matchedSubjects,
+                    'exam_id' => null,
+                    'exam_title' => null,
+                    'is_comparison' => true
+                ];
+            }
             return [
                 'status' => 'ambiguous',
                 'subject' => null,
                 'subjects' => $matchedSubjects,
                 'exam_id' => null,
-                'exam_title' => null
+                'exam_title' => null,
+                'is_comparison' => false
             ];
         }
 
@@ -129,7 +171,8 @@ class SubjectResolver {
                 'subject' => $subj,
                 'subjects' => [$subj],
                 'exam_id' => $matchedExam ? $matchedExam['id'] : null,
-                'exam_title' => $matchedExam ? $matchedExam['title'] : null
+                'exam_title' => $matchedExam ? $matchedExam['title'] : null,
+                'is_comparison' => $isComparison
             ];
         }
 
@@ -139,7 +182,8 @@ class SubjectResolver {
             'subject' => null,
             'subjects' => [],
             'exam_id' => null,
-            'exam_title' => null
+            'exam_title' => null,
+            'is_comparison' => $isComparison
         ];
     }
 

@@ -40,6 +40,7 @@ class AskRequest(BaseModel):
     threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     student_id: Optional[int] = Field(default=None)
     history: Optional[List[Dict[str, Any]]] = Field(default=None)
+    conversation_history: Optional[List[Dict[str, Any]]] = Field(default=None)
     user_context: Optional[Dict[str, Any]] = Field(default=None)
     system_stats: Optional[Dict[str, Any]] = Field(default=None)
     other_users_info: Optional[List[Dict[str, Any]]] = Field(default=None)
@@ -112,6 +113,7 @@ def ask_rag(request: AskRequest):
             threshold=request.threshold,
             student_id=request.student_id,
             history=request.history,
+            conversation_history=request.conversation_history,
             user_context=request.user_context,
             system_stats=request.system_stats,
             other_users_info=request.other_users_info

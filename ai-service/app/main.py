@@ -1,3 +1,5 @@
+import os
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
 import time
 import logging
 from fastapi import FastAPI, Request, HTTPException, Depends
