@@ -77,7 +77,7 @@ class RAGService:
         threshold = threshold if threshold is not None else settings.RAG_RELEVANCE_THRESHOLD
 
         detected_subj, detected_top = SubjectDetector.detect(query)
-        target_subject = SubjectDetector.normalize_subject(subject) or detected_subj
+        target_subject = detected_subj or SubjectDetector.normalize_subject(subject)
         target_topic = topic or detected_top
         clean_target_subject = target_subject.strip() if target_subject else None
 
@@ -149,18 +149,35 @@ class RAGService:
         threshold: Optional[float] = None,
         student_id: Optional[int] = None,
         history: Optional[List[Dict[str, Any]]] = None,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
         user_context: Optional[Dict[str, Any]] = None,
         system_stats: Optional[Dict[str, Any]] = None,
         other_users_info: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Executes Whole-System AI Assistant Pipeline across User Context, Performance, Admin Stats, and Grounded RAG.
-        Enforces strict Subject Isolation (Mode A vs Mode B).
+        Enforces strict Subject Isolation (Mode A vs Mode B) and intelligent conversational intent handling.
         """
         # Detect Subject/Topic upfront for strict subject isolation
         detected_subj, detected_top = SubjectDetector.detect(question)
-        target_subject = SubjectDetector.normalize_subject(subject) or detected_subj
+        # Explicit language/subject in current query takes priority over passed subject or conversation history
+        target_subject = detected_subj or SubjectDetector.normalize_subject(subject)
         target_topic = topic or detected_top
+
+        # If subject is not yet identified, infer from conversation history if available
+        if not target_subject and conversation_history:
+            for msg in reversed(conversation_history):
+                if not isinstance(msg, dict):
+                    continue
+                content = str(msg.get("content") or "").strip()
+                if not content:
+                    continue
+                prev_subj, prev_top = SubjectDetector.detect(content)
+                if prev_subj:
+                    target_subject = prev_subj
+                    if not target_topic and prev_top:
+                        target_topic = prev_top
+                    break
 
         # Check for ambiguous subjects when subject was not explicitly specified
         if not subject:
@@ -182,7 +199,7 @@ class RAGService:
                     "is_conversational": True
                 }
 
-        intent, direct_response = IntentClassifier.classify(question)
+        intent, direct_response = IntentClassifier.classify(question, conversation_history)
 
         # 1. Casual / Conversational / Assistant Identity intents (No RAG)
         if direct_response:
@@ -275,7 +292,7 @@ class RAGService:
             }
 
         # 5. Student Performance Intent
-        if intent == "performance":
+        if intent in ["performance", "performance_analysis"]:
             if target_subject:
                 subj_summary = (user_context or {}).get("subject_summary", {})
                 attempts_count = subj_summary.get("student_attempts_count", 0)
@@ -332,25 +349,25 @@ class RAGService:
                 "has_sufficient_context": False,
                 "sources": [],
                 "retrieved_chunks": [],
-                "intent": intent,
+                "intent": "performance",
                 "is_conversational": True
             }
 
-        # 6. Exam Information
-        if intent == "exam_information":
-            ans = "You can view available exams from your Student Dashboard. Exams cover various course subjects including English, Maths, and Computer Science."
+        # 6. Examination System Support & Exam Information
+        if intent in ["system_support", "exam_information"]:
+            sys_ans = llm_service.generate_system_support_response(question)
             return {
                 "question": question,
-                "answer": ans,
+                "answer": sys_ans,
                 "has_sufficient_context": False,
                 "sources": [],
                 "retrieved_chunks": [],
-                "intent": intent,
+                "intent": "system_support",
                 "is_conversational": True
             }
 
         # 7. Personalized Recommendation Intent
-        if intent == "recommendation":
+        if intent in ["recommendation", "personalized_recommendations"]:
             if target_subject:
                 # Execute Subject-Isolated RAG Search
                 search_res = cls.search_context(
@@ -378,7 +395,222 @@ class RAGService:
                     "is_conversational": False
                 }
 
-        # 8. Academic RAG Question
+        # 8. Exam Preparation & Study Planning
+        if intent == "exam_preparation":
+            search_res = cls.search_context(
+                query=question,
+                top_k=top_k,
+                subject=target_subject,
+                topic=target_topic,
+                threshold=threshold
+            )
+            chunks = search_res.get("chunks", [])
+            subj_summary = (user_context or {}).get("subject_summary", {})
+            course_mats = subj_summary.get("course_materials") or subj_summary.get("document_details") or []
+
+            prep_ans = llm_service.generate_exam_preparation_guide(
+                question=question,
+                subject=target_subject or "General",
+                user_context=user_context,
+                study_materials=course_mats,
+                chunks=chunks,
+                conversation_history=conversation_history
+            )
+            sources = []
+            for c in chunks:
+                fn = c.get("filename")
+                pnum = c.get("page_number", 1)
+                doc_id = c.get("document_id")
+                if fn and not any(s["filename"] == fn and s["page_number"] == pnum for s in sources):
+                    sources.append({"filename": fn, "page_number": pnum, "document_id": doc_id})
+
+            return {
+                "question": question,
+                "answer": prep_ans,
+                "has_sufficient_context": len(chunks) > 0,
+                "sources": sources,
+                "retrieved_chunks": chunks,
+                "intent": "exam_preparation",
+                "is_conversational": False
+            }
+
+        # 9. Concept Explanation
+        if intent == "concept_explanation":
+            search_res = cls.search_context(
+                query=question,
+                top_k=top_k,
+                subject=target_subject,
+                topic=target_topic,
+                threshold=threshold
+            )
+            chunks = search_res.get("chunks", [])
+            exp_ans = llm_service.generate_concept_explanation(
+                question=question,
+                subject=target_subject,
+                topic=target_topic,
+                chunks=chunks,
+                conversation_history=conversation_history
+            )
+            sources = []
+            for c in chunks:
+                fn = c.get("filename")
+                pnum = c.get("page_number", 1)
+                doc_id = c.get("document_id")
+                if fn and not any(s["filename"] == fn and s["page_number"] == pnum for s in sources):
+                    sources.append({"filename": fn, "page_number": pnum, "document_id": doc_id})
+
+            return {
+                "question": question,
+                "answer": exp_ans,
+                "has_sufficient_context": len(chunks) > 0,
+                "sources": sources,
+                "retrieved_chunks": chunks,
+                "intent": "concept_explanation",
+                "is_conversational": False
+            }
+
+        # 10. Coding Help & Debugging
+        if intent == "coding_help":
+            search_res = cls.search_context(
+                query=question,
+                top_k=top_k,
+                subject=target_subject,
+                topic=target_topic,
+                threshold=threshold
+            )
+            chunks = search_res.get("chunks", [])
+            code_ans = llm_service.generate_coding_help(
+                question=question,
+                subject=target_subject,
+                chunks=chunks,
+                conversation_history=conversation_history
+            )
+            sources = []
+            for c in chunks:
+                fn = c.get("filename")
+                pnum = c.get("page_number", 1)
+                doc_id = c.get("document_id")
+                if fn and not any(s["filename"] == fn and s["page_number"] == pnum for s in sources):
+                    sources.append({"filename": fn, "page_number": pnum, "document_id": doc_id})
+
+            return {
+                "question": question,
+                "answer": code_ans,
+                "has_sufficient_context": len(chunks) > 0,
+                "sources": sources,
+                "retrieved_chunks": chunks,
+                "intent": "coding_help",
+                "is_conversational": False
+            }
+
+        # 11. Practice Questions & Quizzes
+        if intent == "practice_questions":
+            search_res = cls.search_context(
+                query=question,
+                top_k=top_k,
+                subject=target_subject,
+                topic=target_topic,
+                threshold=threshold
+            )
+            chunks = search_res.get("chunks", [])
+            pq_ans = llm_service.generate_practice_questions_response(
+                question=question,
+                subject=target_subject,
+                chunks=chunks,
+                conversation_history=conversation_history
+            )
+            sources = []
+            for c in chunks:
+                fn = c.get("filename")
+                pnum = c.get("page_number", 1)
+                doc_id = c.get("document_id")
+                if fn and not any(s["filename"] == fn and s["page_number"] == pnum for s in sources):
+                    sources.append({"filename": fn, "page_number": pnum, "document_id": doc_id})
+
+            return {
+                "question": question,
+                "answer": pq_ans,
+                "has_sufficient_context": len(chunks) > 0,
+                "sources": sources,
+                "retrieved_chunks": chunks,
+                "intent": "practice_questions",
+                "is_conversational": False
+            }
+
+        # 12. Follow-Up Questions
+        if intent == "follow_up":
+            search_res = cls.search_context(
+                query=question,
+                top_k=top_k,
+                subject=target_subject,
+                topic=target_topic,
+                threshold=threshold
+            )
+            chunks = search_res.get("chunks", [])
+            fu_ans = llm_service.generate_follow_up_response(
+                question=question,
+                conversation_history=conversation_history or [],
+                subject=target_subject,
+                chunks=chunks
+            )
+            sources = []
+            for c in chunks:
+                fn = c.get("filename")
+                pnum = c.get("page_number", 1)
+                doc_id = c.get("document_id")
+                if fn and not any(s["filename"] == fn and s["page_number"] == pnum for s in sources):
+                    sources.append({"filename": fn, "page_number": pnum, "document_id": doc_id})
+
+            return {
+                "question": question,
+                "answer": fu_ans,
+                "has_sufficient_context": len(chunks) > 0,
+                "sources": sources,
+                "retrieved_chunks": chunks,
+                "intent": "follow_up",
+                "is_conversational": True
+            }
+
+        # 13. Study Material Search & Summarization
+        if intent == "material_search":
+            search_res = cls.search_context(
+                query=question,
+                top_k=top_k,
+                subject=target_subject,
+                topic=target_topic,
+                threshold=threshold
+            )
+            chunks = search_res.get("chunks", [])
+            subj_summary = (user_context or {}).get("subject_summary", {})
+            course_mats = subj_summary.get("course_materials") or subj_summary.get("document_details") or []
+            mat_ans = llm_service.generate_material_summary_response(
+                subject=target_subject or "General",
+                question=question,
+                materials=course_mats if course_mats else chunks,
+                chunks=chunks
+            )
+            sources = []
+            for c in chunks:
+                c_subj = c.get("subject", "")
+                if target_subject and c_subj and c_subj.strip().lower() != target_subject.strip().lower():
+                    continue
+                fn = c.get("filename")
+                pnum = c.get("page_number", 1)
+                doc_id = c.get("document_id")
+                if fn and not any(s["filename"] == fn and s["page_number"] == pnum for s in sources):
+                    sources.append({"filename": fn, "page_number": pnum, "document_id": doc_id})
+
+            return {
+                "question": question,
+                "answer": mat_ans,
+                "has_sufficient_context": len(chunks) > 0,
+                "sources": sources,
+                "retrieved_chunks": chunks,
+                "intent": "material_search",
+                "is_conversational": False
+            }
+
+        # 14. Academic RAG & General Educational Questions
         search_res = cls.search_context(
             query=question,
             top_k=top_k,
@@ -387,36 +619,59 @@ class RAGService:
             threshold=threshold
         )
 
-        if not search_res["has_sufficient_context"]:
-            if target_subject:
-                subj_sum = (user_context or {}).get("subject_summary", {})
-                course_materials = subj_sum.get("course_materials", [])
-                has_failed = subj_sum.get("has_failed_material", False)
-                failed_errors = subj_sum.get("failed_errors", [])
-                has_ingested = subj_sum.get("has_ingested_material", False)
-                if has_failed and course_materials:
-                    err_text = "; ".join(failed_errors) or "Indexing error"
-                    missing_msg = (
-                        f"Course material for {target_subject} ('{course_materials[0].get('original_name', 'Course Material')}') "
-                        f"is recorded in the database, but its indexing failed ({err_text}). "
-                        f"An administrator can re-index this material by navigating to Course Material Management and clicking Retry Indexing."
-                    )
-                elif course_materials and has_ingested:
-                    missing_msg = f"I couldn't find specific information about that in the approved {target_subject} course materials."
-                else:
-                    missing_msg = f"I couldn't find enough information about {target_subject} in the uploaded course materials."
-            else:
-                missing_msg = "I couldn't find enough information about this in the uploaded course materials."
+        is_explicit_mat = bool(re.search(
+            r"\b(uploaded|course material|study material|notes|syllabus|document|slide|pdf|my material|approved material)\b",
+            question.lower()
+        ))
 
-            return {
-                "question": question,
-                "answer": missing_msg,
-                "has_sufficient_context": False,
-                "sources": [],
-                "retrieved_chunks": [],
-                "intent": "academic_question",
-                "is_conversational": False
-            }
+        if not search_res["has_sufficient_context"]:
+            if is_explicit_mat:
+                if target_subject:
+                    subj_sum = (user_context or {}).get("subject_summary", {})
+                    course_materials = subj_sum.get("course_materials", [])
+                    has_failed = subj_sum.get("has_failed_material", False)
+                    failed_errors = subj_sum.get("failed_errors", [])
+                    has_ingested = subj_sum.get("has_ingested_material", False)
+                    if has_failed and course_materials:
+                        err_text = "; ".join(failed_errors) or "Indexing error"
+                        missing_msg = (
+                            f"Course material for {target_subject} ('{course_materials[0].get('original_name', 'Course Material')}') "
+                            f"is recorded in the database, but its indexing failed ({err_text}). "
+                            f"An administrator can re-index this material by navigating to Course Material Management and clicking Retry Indexing."
+                        )
+                    elif course_materials and has_ingested:
+                        missing_msg = f"I don't have enough information about that in the approved {target_subject} course materials."
+                    else:
+                        missing_msg = f"I don't have enough information about {target_subject} in the uploaded course materials."
+                else:
+                    missing_msg = "I couldn't find enough information about this in the uploaded course materials."
+
+                return {
+                    "question": question,
+                    "answer": missing_msg,
+                    "has_sufficient_context": False,
+                    "sources": [],
+                    "retrieved_chunks": [],
+                    "intent": "academic_question",
+                    "is_conversational": False
+                }
+            else:
+                edu_ans = llm_service.generate_concept_explanation(
+                    question=question,
+                    subject=target_subject or "General",
+                    topic=target_topic,
+                    chunks=[],
+                    conversation_history=conversation_history
+                )
+                return {
+                    "question": question,
+                    "answer": edu_ans,
+                    "has_sufficient_context": False,
+                    "sources": [],
+                    "retrieved_chunks": [],
+                    "intent": "academic_question",
+                    "is_conversational": False
+                }
 
         # Check if query started with a greeting prefix (e.g. "hi explain grammar")
         greeting_prefix = ""
@@ -426,19 +681,37 @@ class RAGService:
 
         rag_data = cls._build_grounded_answer(question, search_res["chunks"], target_subject=target_subject)
         if not rag_data.get("has_sufficient_context", True):
-            if target_subject:
-                missing_msg = f"I couldn't find enough information about {target_subject} in the uploaded course materials."
+            if is_explicit_mat:
+                if target_subject:
+                    missing_msg = f"I don't have enough information about {target_subject} in the uploaded course materials."
+                else:
+                    missing_msg = "I couldn't find enough information about this in the uploaded course materials."
+                return {
+                    "question": question,
+                    "answer": missing_msg,
+                    "has_sufficient_context": False,
+                    "sources": [],
+                    "retrieved_chunks": [],
+                    "intent": "academic_question",
+                    "is_conversational": False
+                }
             else:
-                missing_msg = "I couldn't find enough information about this in the uploaded course materials."
-            return {
-                "question": question,
-                "answer": missing_msg,
-                "has_sufficient_context": False,
-                "sources": [],
-                "retrieved_chunks": [],
-                "intent": "academic_question",
-                "is_conversational": False
-            }
+                edu_ans = llm_service.generate_concept_explanation(
+                    question=question,
+                    subject=target_subject or "General",
+                    topic=target_topic,
+                    chunks=[],
+                    conversation_history=conversation_history
+                )
+                return {
+                    "question": question,
+                    "answer": edu_ans,
+                    "has_sufficient_context": False,
+                    "sources": [],
+                    "retrieved_chunks": [],
+                    "intent": "academic_question",
+                    "is_conversational": False
+                }
 
         final_answer = f"{greeting_prefix}{rag_data['answer']}" if greeting_prefix else rag_data["answer"]
 
@@ -587,20 +860,28 @@ class RAGService:
                 fn = c.get("filename", f"{norm_subject}_Notes.md")
                 pnum = c.get("page_number", 1)
                 top = c.get("topic", "Core Principles")
+                doc_id = c.get("document_id")
                 doc_key = (fn, top)
                 if doc_key not in seen_docs:
                     seen_docs.add(doc_key)
-                    mat_lines.append(f"- **Document Title:** `{fn}`")
+                    if doc_id:
+                        mat_lines.append(f"- **Document Title:** [`{fn}`](view_course_material.php?id={doc_id}&page={pnum}) (ID: #{doc_id})")
+                    else:
+                        mat_lines.append(f"- **Document Title:** [`{fn}`](view_course_material.php?file={fn}&page={pnum})")
                     mat_lines.append(f"  - **Topic / Focus Area:** {top}")
                     mat_lines.append(f"  - **Status:** Approved and indexed in study repository")
 
                 if not any(cit["filename"] == fn and cit["page_number"] == pnum for cit in citations):
-                    citations.append({"filename": fn, "page_number": pnum})
+                    cit_entry = {"filename": fn, "page_number": pnum}
+                    if doc_id:
+                        cit_entry["document_id"] = doc_id
+                    citations.append(cit_entry)
 
                 retrieved_out.append({
                     "chunk_id": c.get("chunk_id", ""),
                     "filename": fn,
                     "page_number": pnum,
+                    "document_id": doc_id,
                     "similarity_score": c.get("similarity_score", 0.0)
                 })
 
@@ -632,7 +913,7 @@ class RAGService:
                 mat_lines.append(f"  - **Topic / Focus Area:** {doc_top}")
                 mat_lines.append(f"  - **Indexing Status:** ⏳ **Pending ingestion**")
             else:
-                mat_lines.append(f"- **Document Title:** `{fn}` (ID: #{doc_id})")
+                mat_lines.append(f"- **Document Title:** [`{fn}`](view_course_material.php?id={doc_id}&page=1) (ID: #{doc_id})")
                 mat_lines.append(f"  - **Topic / Focus Area:** {doc_top}")
                 mat_lines.append(f"  - **Indexing Status:** Verified in database ({first_doc.get('total_chunks', 0)} chunks)")
         else:
@@ -653,12 +934,19 @@ class RAGService:
                         if cl and cl not in concept_snippets and len(cl) > 10:
                             concept_snippets.append(cl)
 
+            first_c = valid_chunks[0]
+            first_fn = first_c.get("filename", f"{norm_subject}_Notes.md")
+            first_doc_id = first_c.get("document_id")
+            first_pnum = first_c.get("page_number", 1)
+            first_top = first_c.get("topic", "Core Principles")
+            rev_link = f"view_course_material.php?id={first_doc_id}&page={first_pnum}" if first_doc_id else f"view_course_material.php?file={first_fn}&page={first_pnum}"
+
             if concept_snippets:
-                step_lines.append(f"- **Review Key Concepts:** Study the verified {norm_subject} material focusing on:")
+                step_lines.append(f"- [**Review Key Concepts:**]({rev_link}) Study the verified {norm_subject} material focusing on:")
                 for cs in concept_snippets[:3]:
                     step_lines.append(f"  - {cs}")
             else:
-                step_lines.append(f"- **Review Course Material:** Read through `{valid_chunks[0]['filename']}` to consolidate your understanding of {valid_chunks[0].get('topic', 'Core Principles')}.")
+                step_lines.append(f"- [**Review Course Material:**]({rev_link}) Read through [`{first_fn}`]({rev_link}) to consolidate your understanding of {first_top}.")
 
             q_bank_total = total_exam_questions or approved_ai_questions or 50
             step_lines.append(f"- **Targeted Question Practice:** Practice with the {q_bank_total} approved {norm_subject} questions available in the question bank.")
@@ -929,12 +1217,13 @@ class RAGService:
             fname = chunk.get("filename", "Course_Material.pdf")
             pnum = chunk.get("page_number", 1)
             c_subj = chunk.get("subject", norm_target or "General")
+            c_doc_id = chunk.get("document_id")
             cit_key = f"{fname} - Page {pnum}"
-            citations_map[cit_key] = {"filename": fname, "page_number": pnum, "subject": c_subj}
+            citations_map[cit_key] = {"filename": fname, "page_number": pnum, "subject": c_subj, "document_id": c_doc_id}
             context_blocks.append(f"[Document Chunk {idx} ({cit_key}) (Subject: {c_subj})]:\n{chunk['chunk_text']}")
 
         context_str = "\n\n".join(context_blocks)
-        sources_list = [{"filename": v["filename"], "page_number": v["page_number"]} for v in citations_map.values()]
+        sources_list = [{"filename": v["filename"], "page_number": v["page_number"], "document_id": v.get("document_id")} for v in citations_map.values()]
 
         system_prompt = (
             "You are a strict, helpful AI System Assistant. Your task is to answer the user's question "
@@ -987,15 +1276,40 @@ class RAGService:
     @classmethod
     def _generate_grounded_fallback_answer(cls, question: str, chunks: List[Dict[str, Any]]) -> str:
         """
-        Creates a grounded, extractive summary directly from the retrieved context blocks.
+        Creates a grounded, clean extractive summary directly from the retrieved context blocks.
+        Ensures snippets are properly cleaned, shortened, and linked without exposing raw serialized dumps.
         """
         summary_lines = []
-        for c in chunks[:2]:
-            text_snippet = c['chunk_text'].replace("\n", " ")
-            if len(text_snippet) > 200:
-                text_snippet = text_snippet[:200] + "..."
-            summary_lines.append(f"- According to {c['filename']} (Page {c['page_number']}): \"{text_snippet}\"")
+        seen_snippets = set()
+        for c in chunks[:3]:
+            raw_text = c.get('chunk_text', '')
+            # Clean raw text: remove multiple newlines, strip leading markdown headers/fences
+            cleaned = re.sub(r'#{1,6}\s*', '', raw_text)
+            cleaned = re.sub(r'```[a-zA-Z]*', '', cleaned)
+            cleaned = re.sub(r'\s+', ' ', cleaned).strip(" `\"'")
+            if not cleaned or cleaned in seen_snippets:
+                continue
+            seen_snippets.add(cleaned)
+            # Truncate concisely at 160 chars
+            if len(cleaned) > 160:
+                truncated = cleaned[:160].rsplit(' ', 1)[0] + '...'
+            else:
+                truncated = cleaned
+
+            fname = c.get('filename', 'Course Document')
+            pnum = max(1, int(c.get('page_number', 1)))
+            doc_id = c.get('document_id')
+            if doc_id:
+                link = f"[`{fname}`](view_course_material.php?id={doc_id}&page={pnum}&source=assistant)"
+            else:
+                link = f"[`{fname}`](view_course_material.php?file={fname}&page={pnum}&source=assistant)"
+
+            summary_lines.append(f"- **From {link} (Page {pnum}):** \"{truncated}\"")
+
+        if not summary_lines:
+            return "Based on the uploaded course materials, no specific excerpts directly answer this query."
 
         return (
-            f"Based on the uploaded course materials:\n" + "\n".join(summary_lines)
+            f"### 📚 Course Material Insights\n\n"
+            f"Based on your approved course materials:\n\n" + "\n".join(summary_lines)
         )

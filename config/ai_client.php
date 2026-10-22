@@ -147,7 +147,8 @@ class AiClient {
         array $history = [],
         ?array $userContext = null,
         ?array $systemStats = null,
-        ?array $otherUsersInfo = null
+        ?array $otherUsersInfo = null,
+        array $conversationHistory = []
     ): array {
         $payload = ['question' => $question];
         if ($subject !== null) $payload['subject'] = $subject;
@@ -159,6 +160,7 @@ class AiClient {
         if (!empty($userContext)) $payload['user_context'] = $userContext;
         if (!empty($systemStats)) $payload['system_stats'] = $systemStats;
         if (!empty($otherUsersInfo)) $payload['other_users_info'] = $otherUsersInfo;
+        if (!empty($conversationHistory)) $payload['conversation_history'] = $conversationHistory;
         return $this->request('POST', '/api/v1/rag/ask', $payload);
     }
 

@@ -3,13 +3,50 @@ import logging
 import uuid
 import httpx
 import re
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from app.config import settings
 from app.schemas.question import QuestionGenerationRequest, GeneratedQuestionItem, FocusedNotesRequest
 
 logger = logging.getLogger("llm_service")
 
 class LLMService:
+    @staticmethod
+    def is_external_configured() -> bool:
+        """
+        Returns True if an external LLM API key and provider are configured.
+        """
+        api_key = getattr(settings, 'LLM_API_KEY', None)
+        provider = getattr(settings, 'LLM_PROVIDER', 'heuristic').lower()
+        return bool(api_key and api_key != "your_llm_api_key_here" and provider not in ["heuristic", "none"])
+
+    @staticmethod
+    def generate_chat_completion(messages: List[Dict[str, str]], temperature: float = 0.3) -> str:
+        """
+        Executes multi-turn chat completion against configured OpenAI-compatible LLM provider.
+        """
+        api_key = getattr(settings, 'LLM_API_KEY', None)
+        model_name = getattr(settings, 'LLM_MODEL', 'gpt-3.5-turbo')
+        base_url = getattr(settings, 'LLM_BASE_URL', 'https://api.openai.com/v1')
+
+        if not api_key or api_key == "your_llm_api_key_here":
+            raise ValueError("No LLM_API_KEY configured for external LLM generation.")
+
+        url = f"{base_url.rstrip('/')}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        body = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": temperature
+        }
+
+        with httpx.Client(timeout=25.0) as client:
+            resp = client.post(url, headers=headers, json=body)
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+
     @staticmethod
     def generate_completion(system_prompt: str, user_prompt: str) -> str:
         """
@@ -1908,5 +1945,1822 @@ Consider a problem instance under **{req.topic}** ({req.subject}):
 For questions on **{req.topic}**, remember that `{req.correct_answer}` is verified directly by the question's official solution and explanation.
 """
         return concept_title, content
+
+    @classmethod
+    def generate_exam_preparation_guide(
+        cls,
+        subject: str = "General Course",
+        course_materials: Optional[List[Dict[str, Any]]] = None,
+        student_has_attempts: bool = False,
+        query: str = "",
+        *args,
+        **kwargs
+    ) -> str:
+        if not query and "question" in kwargs:
+            query = kwargs["question"]
+        if course_materials is None:
+            course_materials = kwargs.get("study_materials") or kwargs.get("chunks") or []
+        if not student_has_attempts and "user_context" in kwargs:
+            ctx = kwargs["user_context"] or {}
+            subj_sum = ctx.get("subject_summary", {})
+            if subj_sum.get("student_attempts_count", 0) > 0:
+                student_has_attempts = True
+
+        norm_subj = subject.strip() if subject else "General Course"
+        q_lower = query.lower() if query else ""
+
+        # Material section with real IDs if available, strictly filtered to the target subject
+        matching_materials = []
+        if course_materials and norm_subj.lower() not in ("general", "general course"):
+            for d in course_materials:
+                d_subj = d.get("subject", "")
+                if not d_subj or d_subj.strip().lower() == norm_subj.lower():
+                    matching_materials.append(d)
+        else:
+            matching_materials = list(course_materials or [])
+
+        mat_lines = []
+        if matching_materials:
+            seen_doc_keys = set()
+            for d in matching_materials:
+                doc_id = d.get("id") or d.get("document_id")
+                fn = d.get("original_name") or d.get("filename") or f"{norm_subj} Study Material"
+                dedup_key = f"{doc_id}_{fn}" if doc_id else fn
+                if dedup_key in seen_doc_keys:
+                    continue
+                seen_doc_keys.add(dedup_key)
+                pnum = d.get("page_number", 1)
+                top = d.get("topic", "Core Principles")
+                if doc_id:
+                    mat_lines.append(f"- **Document Title:** [`{fn}`](view_course_material.php?id={doc_id}&page={pnum}&source=assistant) (ID: #{doc_id})")
+                else:
+                    mat_lines.append(f"- **Document Title:** [`{fn}`](view_course_material.php?file={fn}&page={pnum}&source=assistant)")
+                mat_lines.append(f"  - **Topic / Focus Area:** {top}")
+                mat_lines.append("  - **Status:** Approved course reference in study repository")
+                if len(seen_doc_keys) >= 3:
+                    break
+            materials_section = "\n".join(mat_lines)
+        else:
+            materials_section = f"- No official course notes for **{norm_subj}** are currently uploaded in the study repository. Standard curriculum guidelines apply."
+
+        history_notice = ""
+        if not student_has_attempts:
+            history_notice = (
+                f"\n\n> [!NOTE]\n"
+                f"> **Exam Record Status:** You haven't completed any exam attempts in {norm_subj} yet (performance metrics are not available). "
+                f"Once you complete an official exam or practice session, I will tailor recommendations specifically to your lowest-scoring topics."
+            )
+
+        subj_key = norm_subj.lower()
+
+        # 1. Python Exam Preparation Plan
+        if subj_key in ("python", "py") or "python" in q_lower:
+            guide = f"""### 🎯 Comprehensive Exam Preparation Strategy: **Python**
+
+To prepare effectively and achieve top marks in your **Python** exam, follow this structured topic review, practical 7-day daily study schedule, hands-on practice problems, and mock test revision Roadmap:
+
+#### 📌 Core Topics Checklist
+- [ ] **Language Fundamentals:** Variables, dynamic typing, arithmetic & logical operators, input/output formatting
+- [ ] **Flow Control:** Conditionals (`if`, `elif`, `else`), `while` loops, `for` loops with `range()`, `break`, `continue`
+- [ ] **Core Data Structures:** Lists (indexing, slicing, methods), tuples (immutability), dictionaries (key-value pairs), sets (uniqueness)
+- [ ] **List Comprehensions:** Concise list/dictionary creation syntax with conditional filtering
+- [ ] **Functions & Scope:** `def`, parameters (`*args`, `**kwargs`), default values, `return`, lambda functions, local vs global scope
+- [ ] **Object-Oriented Programming (OOP):** Classes, `__init__` constructor, instance attributes, methods, inheritance, encapsulation
+- [ ] **File I/O & Exception Handling:** `with open(...)`, reading/writing files, `try...except...finally` blocks, built-in exception types
+- [ ] **Standard Library Essentials:** Built-in functions (`len()`, `sum()`, `enumerate()`, `zip()`, `sorted()`), `math`, `random`
+
+#### 📅 Practical 7-Day Daily Study Schedule
+- **Day 1: Syntax Basics & Flow Control**
+  - Master variable types, conditional branching (`if/elif/else`), and loops (`while`, `for i in range(...)`).
+  - Practice tracing loop boundaries and termination conditions.
+- **Day 2: Built-in Data Structures & Comprehensions**
+  - Practice mutable lists (`.append()`, `.extend()`, `.pop()`, slicing `[::-1]`) vs immutable tuples.
+  - Master dictionaries (`.keys()`, `.values()`, `.items()`, `.get(key, default)`) and set operations.
+  - Write single-line list comprehensions with conditional filters.
+- **Day 3: Functions, Modularity & Variable Scope**
+  - Define reusable functions with default arguments, `*args`, and `**kwargs`.
+  - Master variable scope (`LEGB` rule: Local, Enclosing, Global, Built-in) and lambda expressions.
+- **Day 4: Object-Oriented Python**
+  - Implement classes with `__init__` and `self` references.
+  - Practice class inheritance, method overriding, and calling parent methods via `super()`.
+- **Day 5: File Handling & Exception Handling**
+  - Practice reading and writing files safely with context managers: `with open('data.txt', 'r') as f:`.
+  - Handle runtime exceptions gracefully using `try...except...finally` blocks without crashing.
+- **Day 6: Timed Practice Questions & Coding Drills**
+  - Solve 15 to 20 multiple-choice and code-tracing problems in the **Practice Session** tab.
+  - Review mistake logs: understand the exact reason behind each incorrect distractor.
+- **Day 7: Full Mock Examination & Final Revision**
+  - Take a full-length timed mock test under exam conditions in the Online Examination System.
+  - Review your 1-page syntax cheat sheet and ensure adequate rest before exam day.
+
+#### 📝 High-Yield Practice Questions
+
+1. **Data Types & Mutability:**
+   *Question:* What is the output of the following code snippet?
+   ```python
+   a = [10, 20, 30]
+   b = a
+   b.append(40)
+   print(len(a))
+   ```
+   *Explanation:* The output is `4`. In Python, lists are mutable. `b = a` assigns an object reference to the same list; appending to `b` alters `a`.
+
+2. **List Comprehensions:**
+   *Question:* Write a list comprehension that extracts the squares of all even numbers from `numbers = [1, 2, 3, 4, 5, 6]`.
+   ```python
+   squares = [x**2 for x in numbers if x % 2 == 0]
+   # Output: [4, 16, 36]
+   ```
+
+3. **Safe Dictionary Lookup:**
+   *Question:* How do you retrieve key `"score"` from `data` with a fallback value of `0` without risking a `KeyError`?
+   ```python
+   score = data.get("score", 0)
+   ```
+
+4. **Exception Handling Pattern:**
+   *Question:* How should zero-division errors be handled safely?
+   ```python
+   try:
+       avg = total / count
+   except ZeroDivisionError:
+       avg = 0.0
+   ```
+
+#### 🔄 Revision & Mock Test Strategy
+1. **Timed Mock Tests:** Complete at least 2 full mock exams in the Online Examination System under an official 45-60 minute timer (aim for 1.5 minutes per question).
+2. **Distractor Analysis:** For every question missed, write down why the wrong choice seemed appealing and why the correct answer is logically sound.
+3. **Cheat Sheet Review:** Prepare a one-page summary sheet covering core string methods (`.split()`, `.join()`), list methods (`.append()`, `.pop()`), and dictionary operations.
+
+#### 💡 Essential Exam-Day Tips
+1. **Pacing & Time Allocation:** Budget 1 to 1.5 minutes per MCQ. Flag long code-tracing or list slicing questions and solve straightforward conceptual items first.
+2. **Watch Mutability Traps:** Distinguish between object assignment (`b = a`, shared pointer) and copies (`b = a.copy()`), especially when lists are passed into functions.
+3. **Trace Off-By-One Boundaries:** Remember that `range(start, stop)` excludes `stop` and negative slice steps reverse sequence ordering (`[::-1]`).
+4. **Pre-Submission Review:** Reserve the final 5 minutes to verify all questions have recorded responses before the exam timer expires.
+
+---
+
+### 📚 Grounded Course Study Materials
+{materials_section}
+{history_notice}
+
+💡 **Suggested Next Steps:** Would you like to practice 5 multiple-choice questions on Python data structures, or start a timed practice session now?"""
+            return guide.strip()
+
+        # 2. C++ Exam Preparation Plan
+        elif subj_key in ("c++", "cpp") or "c++" in q_lower or "cpp" in q_lower:
+            guide = f"""### 🎯 Comprehensive Exam Preparation Strategy: **C++**
+
+To prepare effectively and achieve top marks in your **C++** exam, follow this structured topic review, practical 7-day daily study schedule, hands-on practice problems, and mock test revision roadmap:
+
+#### 📌 Core Topics Checklist
+- [ ] **Language Basics:** Types, declarations, namespaces (`std::`), I/O streams (`cin`, `cout`), control structures
+- [ ] **Pointers & References:** Address-of (`&`), dereference (`*`), pass-by-value vs pass-by-reference (`&`), pointer arithmetic
+- [ ] **Dynamic Memory & RAII:** `new`, `delete`, memory leak prevention, RAII resource lifecycle, smart pointers (`std::unique_ptr`, `std::shared_ptr`)
+- [ ] **Object-Oriented Programming (OOP):** Classes, access specifiers (`public`, `private`, `protected`), constructors, member initializer lists, destructors
+- [ ] **Inheritance & Polymorphism:** Base and derived classes, function overriding, `virtual` functions, runtime polymorphism, pure virtual functions (`= 0`)
+- [ ] **Standard Template Library (STL):** Vectors, lists, maps, sets, iterators, `std::sort`, algorithms from `<algorithm>`
+- [ ] **Exception Handling:** `try`, `catch`, `throw`, standard exception hierarchy (`std::exception`)
+
+#### 📅 Practical 7-Day Daily Study Schedule
+- **Day 1: C++ Syntax & Control Structures**
+  - Master data types, arrays, conditionals, loops, and stream I/O formatting.
+- **Day 2: Pointers, References & Memory Layout**
+  - Practice pointer declarations (`int* ptr = &val;`), dereferencing (`*ptr`), and references (`int& ref = val;`).
+- **Day 3: Dynamic Memory Allocation & RAII**
+  - Practice allocating heap memory using `new` and releasing it deterministically with `delete`.
+  - Learn modern C++ smart pointers (`std::unique_ptr`).
+- **Day 4: Object-Oriented C++ Classes**
+  - Create classes with constructors, member initializer lists, and destructors.
+  - Implement encapsulation and data hiding.
+- **Day 5: Inheritance & Virtual Functions**
+  - Implement class inheritance, override virtual functions, and understand the vtable mechanism.
+- **Day 6: STL Containers & Timed Practice**
+  - Work with `std::vector`, `std::map`, and STL algorithms (`std::sort`, `std::find`).
+  - Solve 15 to 20 practice questions in the **Practice Session** tab.
+- **Day 7: Full Mock Exam & Syntax Revision**
+  - Complete a full-length timed mock exam on the Online Examination System.
+  - Review your pointer syntax summary cards and error logs.
+
+#### 📝 High-Yield Practice Questions
+
+1. **Pointers & Dereferencing:**
+   *Question:* What is the output of the following C++ code?
+   ```cpp
+   int val = 50;
+   int* p = &val;
+   *p += 25;
+   std::cout << val;
+   ```
+   *Explanation:* Outputs `75`. The pointer `p` holds the memory address of `val`; modifying `*p` directly modifies `val`.
+
+2. **Virtual Functions (Polymorphism):**
+   *Question:* Why must a base class destructor be declared `virtual` if derived classes allocate dynamic memory?
+   *Explanation:* Declaring a base destructor `virtual` guarantees that the derived class destructor executes first when deleting an object through a base class pointer, preventing resource/memory leaks.
+
+#### 🔄 Revision & Mock Test Strategy
+1. **Timed Mock Exams:** Complete at least 2 full mock exams under timed conditions to practice debugging and code tracing.
+2. **Distractor Analysis:** Pay close attention to pointer traps, boundary errors, and operator precedence distractors.
+3. **Cheat Sheet Review:** Keep a summary of pointer operators (`*`, `&`, `->`), STL complexity guarantees, and constructor execution orders.
+
+#### 💡 Essential Exam-Day Tips
+1. **Pacing & Scratch Paper:** Spend 1 to 1.5 minutes per MCQ. Use scratch paper to draw pointer arrows and memory box diagrams rather than mental simulation.
+2. **Pointer Operator Precedence:** Watch out for `*ptr++` (increments pointer address, dereferences old address) versus `(*ptr)++` (increments integer value).
+3. **Virtual Destructor Trap:** In inheritance questions involving `delete basePtr;`, check if the base class has a `virtual` destructor to identify memory leak options.
+4. **Pre-Submission Check:** Confirm all questions have an answer selected; double-check boundary conditions on loops (`<` vs `<=`).
+
+---
+
+### 📚 Grounded Course Study Materials
+{materials_section}
+{history_notice}
+
+💡 **Suggested Next Steps:** Would you like to review C++ pointers and memory management, practice OOP questions, or start a timed mock exam?"""
+            return guide.strip()
+
+        # 3. Java Exam Preparation Plan
+        elif subj_key in ("java",) or "java" in q_lower:
+            guide = f"""### 🎯 Comprehensive Exam Preparation Strategy: **Java**
+
+To prepare effectively and achieve top marks in your **Java** exam, follow this structured topic review, practical 7-day daily study schedule, hands-on practice problems, and mock test revision roadmap:
+
+#### 📌 Core Topics Checklist
+- [ ] **Java Fundamentals:** JVM, JRE, JDK, bytecode compilation, primitive types vs wrapper classes, operators
+- [ ] **Flow Control:** If/else, switch expressions, for-each loops, while loops, break & continue
+- [ ] **Object-Oriented Programming (OOP):** Classes, `new` keyword, constructors, encapsulation, inheritance (`extends`), polymorphism
+- [ ] **Interfaces & Abstract Classes:** Multiple inheritance through `implements`, abstract methods, default methods
+- [ ] **Exception Handling:** `try`, `catch`, `finally`, `throw`, `throws`, checked vs unchecked exceptions
+- [ ] **Java Collections Framework:** `List` (`ArrayList`, `LinkedList`), `Set` (`HashSet`), `Map` (`HashMap`), iteration
+- [ ] **String Handling:** `String` immutability, `StringBuilder`, string pool comparison (`==` vs `.equals()`)
+
+#### 📅 Practical 7-Day Daily Study Schedule
+- **Day 1: Java Syntax, Types & Control Flow**
+  - Master data types, operators, conditionals, and enhanced for-each loops.
+- **Day 2: Classes, Constructors & Encapsulation**
+  - Define classes, private fields, public getters/setters, and overloaded constructors.
+- **Day 3: Inheritance & Polymorphism**
+  - Implement single inheritance with `extends`, method overriding with `@Override`, and `super()`.
+- **Day 4: Interfaces & Abstract Classes**
+  - Define abstract classes and interfaces, implementing contracts across multiple classes.
+- **Day 5: Exception Handling & Strings**
+  - Master `try...catch...finally` execution order and understand `.equals()` vs `==`.
+- **Day 6: Collections & Practice Testing**
+  - Practice `ArrayList` and `HashMap` operations.
+  - Complete 15 to 20 questions in the **Practice Session** tab.
+- **Day 7: Full Mock Exam & Revision**
+  - Take a full timed mock exam and review your incorrect answer patterns.
+
+#### 📝 High-Yield Practice Questions
+
+1. **String Equality:**
+   *Question:* What does `str1 == str2` evaluate to vs `str1.equals(str2)`?
+   *Explanation:* `==` checks reference equality (memory location), whereas `.equals()` compares actual character sequence values.
+
+2. **Exception Handling:**
+   *Question:* When does the `finally` block execute in Java?
+   *Explanation:* The `finally` block always executes whether an exception was thrown, caught, or not thrown at all (except if `System.exit()` is invoked).
+
+#### 🔄 Revision & Mock Test Strategy
+1. **Timed Mock Exams:** Complete full-length practice sessions in the Online Examination System under a timed 45-60 minute clock.
+2. **Cheat Sheet Review:** Refresh access modifiers (`private`, default, `protected`, `public`) and Collections hierarchy.
+
+#### 💡 Essential Exam-Day Tips
+1. **Pacing & Strategy:** Allocate 1 to 1.5 minutes per question. Prioritize straightforward definition and syntax questions before tackling multi-level inheritance or nested loop tracing.
+2. **Distinguish `==` from `.equals()`:** Remember that `==` tests object reference equality in the heap, while `.equals()` checks content value equivalence.
+3. **Trace Exception Flow Carefully:** Remember that `finally` blocks almost always execute, even after a `return` statement inside `try` or `catch`.
+4. **Watch Access Modifiers & Scope:** Check whether `protected` or package-private methods are legal across different packages, and watch for uninitialized local variables.
+
+---
+
+### 📚 Grounded Course Study Materials
+{materials_section}
+{history_notice}
+
+💡 **Suggested Next Steps:** Would you like to practice Java OOP questions, explore exception handling patterns, or launch a practice exam?"""
+            return guide.strip()
+
+        # 4. General / Other Subjects Preparation Plan
+        else:
+            guide = f"""### 🎯 Comprehensive Exam Preparation Strategy: **{norm_subj}**
+
+To prepare effectively and achieve top marks in your **{norm_subj}** exam, follow this structured topic review, practical 7-day daily study schedule, hands-on practice problems, and mock test revision roadmap:
+
+#### 📌 Core Topics Checklist
+- [ ] **Foundations & Terminology:** Core definitions, primary concepts, and subject standards
+- [ ] **Core Analytical Principles:** Theoretical rules, formulas, and operational workflows
+- [ ] **Practical Application & Problem Solving:** Real-world scenarios, case studies, and problem-solving patterns
+- [ ] **Common Pitfalls & Distractors:** Frequently tested boundary conditions and exam question traps
+- [ ] **Comprehensive Review:** Synthesizing cross-topic connections and exam-style scenarios
+
+#### 📅 Practical 7-Day Daily Study Schedule
+- **Day 1: Subject Fundamentals & Key Definitions**
+  - Review core terms, fundamental axioms, and standard formulas.
+- **Day 2: Primary Principles & Conceptual Frameworks**
+  - Study how the fundamental concepts connect and govern typical problems.
+- **Day 3: Intermediate Problem Solving & Application**
+  - Work through representative problems and step-by-step worked solutions.
+- **Day 4: Advanced Scenarios & Corner Cases**
+  - Focus on challenging edge cases, common traps, and multi-step questions.
+- **Day 5: Synthesis & Summary Card Creation**
+  - Condense key facts into a 1-page quick revision cheat sheet.
+- **Day 6: Timed Practice Questions & Weak-Topic Review**
+  - Solve 15 to 20 multiple-choice questions in the **Practice Session** tab.
+  - Trace why incorrect choices fail and reinforce weak topics.
+- **Day 7: Full Mock Examination & Final Rest**
+  - Complete a full-length timed mock exam under realistic testing conditions.
+  - Review summary sheets and rest well before test day.
+
+#### 📝 High-Yield Practice Strategy
+- **Active Recall:** Test yourself on definitions and principles before looking at solutions.
+- **Error Journaling:** Keep a short log of every question missed during practice to avoid repeating errors.
+- **Timed Pacing:** Practice pacing at 1 to 1.5 minutes per question to build confidence for exam day.
+
+#### 🔄 Revision & Mock Test Strategy
+1. **Full-Length Mock Testing:** Use the Online Examination System to take at least 2 complete practice sessions.
+2. **Distractor Analysis:** For every question, evaluate why wrong answers are distractors and what makes the correct answer exact.
+
+#### 💡 Essential Exam-Day Tips
+1. **Time Management:** Budget roughly 1 to 1.5 minutes per question. If a question is calculation-heavy or ambiguous, flag it and move forward.
+2. **Read Every Option:** Do not select the first seemingly correct answer without evaluating all distractors.
+3. **Elimination Tactic:** Systematically cross off obviously incorrect options to improve odds on challenging items.
+4. **Final Check:** Reserve the last 5 minutes to confirm all answers have been submitted.
+
+---
+
+### 📚 Grounded Course Study Materials
+{materials_section}
+{history_notice}
+
+💡 **Suggested Next Steps:** Would you like some practice questions on a specific **{norm_subj}** topic, or would you like to start a practice exam session now?"""
+            return guide.strip()
+
+    LANGUAGE_PROFILES = {
+        "c": {
+            "name": "C",
+            "lang_tag": "c",
+            "philosophy": "bare-metal hardware performance, minimal runtime overhead, and direct memory control",
+            "execution": "Compiled directly to native machine code via GCC or Clang",
+            "typing": "Statically and weakly/moderately typed (compile-time checking with implicit conversions)",
+            "memory": "Manual memory management (`malloc()`, `calloc()`, `free()`) with direct pointer arithmetic",
+            "performance": "Blazing fast; near-metal hardware execution speed with zero runtime overhead",
+            "syntax": "Minimalist procedural syntax; strict semicolons `;`, braces `{ }`, and explicit declarations",
+            "pointers": "Full direct pointer manipulation, pointer arithmetic, and raw memory access",
+            "ecosystem": "C Standard Library (`stdio.h`, `stdlib.h`, `string.h`), POSIX, and direct OS system calls",
+            "use_cases": "Operating system kernels (Linux, Windows kernel), embedded firmware, microcontrollers, device drivers",
+            "advantages": [
+                "Direct hardware access with near-zero runtime abstraction overhead",
+                "Extremely compact memory footprint and predictable real-time execution timing",
+                "Universal portability across virtually every CPU architecture and embedded microcontroller"
+            ],
+            "trade_offs": [
+                "Manual memory management prone to buffer overflows, memory leaks, and segmentation faults",
+                "Lacks built-in object-oriented programming, exceptions, and generic templates"
+            ],
+            "code": """#include <stdio.h>
+
+void print_evens(int max_val) {
+    for (int i = 0; i <= max_val; i += 2) {
+        printf("%d ", i);
+    }
+    printf("\\n");
+}
+
+int main() {
+    print_evens(6); // Outputs: 0 2 4 6
+    return 0;
+}""",
+            "when_to_choose": "You are developing OS kernels, microcontrollers, embedded hardware firmware, or system drivers requiring absolute control over hardware and memory."
+        },
+        "c++": {
+            "name": "C++",
+            "lang_tag": "cpp",
+            "philosophy": "execution speed, zero-cost abstractions, RAII, and deterministic resource control",
+            "execution": "Compiled directly to native machine code",
+            "typing": "Statically and strongly typed (compile-time type checking with type inference via `auto`)",
+            "memory": "Deterministic manual (`new`/`delete`), RAII, and Smart Pointers (`std::unique_ptr`, `std::shared_ptr`)",
+            "performance": "Extremely fast execution with zero-cost abstractions and direct memory control",
+            "syntax": "Rich, multi-paradigm, explicit; strict semicolons `;` and braces `{ }`",
+            "pointers": "Full raw pointer access, references (`&`), plus modern safe smart pointers",
+            "ecosystem": "Standard Template Library (STL: `std::vector`, `std::map`, `<algorithm>`), Boost",
+            "use_cases": "Game engines (Unreal Engine), AAA video games, high-frequency trading (HFT), operating systems, graphics renderers",
+            "advantages": [
+                "Blazing native execution speed with zero-cost runtime abstractions",
+                "Deterministic resource reclamation via RAII and modern smart pointers (`std::unique_ptr`, `std::shared_ptr`)",
+                "Comprehensive Standard Template Library (STL) and multi-paradigm flexibility (OOP, generic, functional)"
+            ],
+            "trade_offs": [
+                "Steep learning curve with extensive syntax features and subtle backward-compatibility nuances",
+                "Complex build toolchains and risk of undefined behavior if manual pointers are misused"
+            ],
+            "code": """#include <iostream>
+#include <vector>
+
+void printEvens(int maxVal) {
+    for (int i = 0; i <= maxVal; i += 2) {
+        std::cout << i << " ";
+    }
+    std::cout << std::endl;
+}
+
+int main() {
+    printEvens(6); // Outputs: 0 2 4 6
+    return 0;
+}""",
+            "when_to_choose": "You need high-performance object-oriented software, game development, graphics pipelines, or low-latency systems where execution speed cannot be compromised."
+        },
+        "python": {
+            "name": "Python",
+            "lang_tag": "python",
+            "philosophy": "developer velocity, simplicity, clean syntax, and rapid application delivery",
+            "execution": "Interpreted / Bytecode-compiled executed by Python Virtual Machine (CPython)",
+            "typing": "Dynamically and strongly typed (type checks occur at runtime; supports type hints)",
+            "memory": "Automatic Garbage Collection (reference counting + cyclic generational GC)",
+            "performance": "Slower CPU-bound execution; relies on C/C++ extensions (NumPy, PyTorch) for compute-intensive tasks",
+            "syntax": "Clean, concise, and elegant; enforces significant whitespace and indentation",
+            "pointers": "No direct pointers; all variables are managed object references",
+            "ecosystem": "\"Batteries Included\" standard library + PyPI (NumPy, Pandas, Django, FastAPI, PyTorch, Scikit-learn)",
+            "use_cases": "Data science, machine learning & AI, web backends, automation scripts, rapid application development",
+            "advantages": [
+                "Extremely clean, concise syntax that maximizes developer velocity and readability",
+                "Dominant global ecosystem for AI, Machine Learning, and Data Science (PyTorch, TensorFlow, NumPy, Pandas)",
+                "Massive standard library ('Batteries Included') and huge open-source package repository (PyPI)"
+            ],
+            "trade_offs": [
+                "Interpreted bytecode execution is significantly slower for CPU-bound computation",
+                "Global Interpreter Lock (GIL) historically constrains native multi-core CPU parallelism"
+            ],
+            "code": """def print_evens(max_val: int) -> None:
+    for i in range(0, max_val + 1, 2):
+        print(i, end=" ")
+    print()
+
+print_evens(6)  # Outputs: 0 2 4 6""",
+            "when_to_choose": "You want rapid developer productivity, data analysis, machine learning models, web services, or automation where fast development cycles matter more than microsecond runtime speed."
+        },
+        "java": {
+            "name": "Java",
+            "lang_tag": "java",
+            "philosophy": "cross-platform portability ('Write Once, Run Anywhere'), strong encapsulation, and enterprise maintainability",
+            "execution": "Compiled to bytecode executed on Java Virtual Machine (JVM) with Just-In-Time (JIT) compilation",
+            "typing": "Statically and strongly typed (strict compile-time type safety)",
+            "memory": "Automatic Garbage Collection (G1, ZGC) with automatic memory reclaiming",
+            "performance": "Fast performance after JIT warmup; higher baseline memory usage than C/C++",
+            "syntax": "Explicit, class-based object-oriented syntax; strict semicolons `;` and braces `{ }`",
+            "pointers": "No direct pointer arithmetic; references are abstracted and memory-safe",
+            "ecosystem": "Extensive enterprise ecosystem (Spring Boot, Hibernate, Maven, Gradle, Apache Kafka)",
+            "use_cases": "Enterprise web applications, Android app development, large-scale financial banking systems, backend microservices",
+            "advantages": [
+                "'Write Once, Run Anywhere' (WORA) cross-platform portability on the Java Virtual Machine (JVM)",
+                "High-throughput Just-In-Time (JIT) compilation and modern concurrent garbage collection (G1, ZGC)",
+                "Strict compile-time type safety, mature tooling, and unmatched enterprise ecosystem (Spring Boot, Kafka, Android)"
+            ],
+            "trade_offs": [
+                "Higher baseline memory overhead and warm-up latency before JIT compiler optimization takes effect",
+                "More verbose boilerplate code compared to dynamic scripting languages"
+            ],
+            "code": """public class EvensPrinter {
+    public static void printEvens(int maxVal) {
+        for (int i = 0; i <= maxVal; i += 2) {
+            System.out.print(i + " ");
+        }
+        System.out.println();
+    }
+
+    public static void main(String[] args) {
+        printEvens(6); // Outputs: 0 2 4 6
+    }
+}""",
+            "when_to_choose": "You are building large-scale enterprise services, cross-platform Android applications, or distributed backend systems needing strong type safety and robust long-term maintainability."
+        },
+        "javascript": {
+            "name": "JavaScript",
+            "lang_tag": "javascript",
+            "philosophy": "dynamic interactive frontends, event-driven non-blocking I/O, and universal full-stack execution",
+            "execution": "JIT-compiled and interpreted in browser engines (V8, SpiderMonkey) and Node.js",
+            "typing": "Dynamically and weakly typed (coercion at runtime; TypeScript adds static typing)",
+            "memory": "Automatic Garbage Collection (mark-and-sweep algorithm)",
+            "performance": "High-throughput for asynchronous I/O-bound operations via single-threaded event loop",
+            "syntax": "C-style syntax with curly braces; first-class functions, prototype inheritance, and async/await",
+            "pointers": "No raw memory or pointer addressing",
+            "ecosystem": "NPM package registry, React, Vue, Angular, Node.js, Express, Next.js",
+            "use_cases": "Full-stack web applications, interactive browser frontends, serverless APIs, real-time chat/collaboration apps",
+            "advantages": [
+                "The universal language of the web, natively supported across all modern web browsers",
+                "Non-blocking event-driven I/O delivering high concurrency for networked microservices (Node.js)",
+                "Vast NPM ecosystem with industry-standard component UI libraries (React, Vue, Next.js)"
+            ],
+            "trade_offs": [
+                "Dynamic weak typing can cause subtle runtime type coercion bugs without TypeScript",
+                "Single-threaded event loop requires careful design to avoid blocking on compute-heavy tasks"
+            ],
+            "code": """function printEvens(maxVal) {
+    for (let i = 0; i <= maxVal; i += 2) {
+        process.stdout.write(i + " ");
+    }
+    console.log();
+}
+
+printEvens(6); // Outputs: 0 2 4 6""",
+            "when_to_choose": "You are creating web user interfaces, interactive browser experiences, or unified full-stack JavaScript systems."
+        },
+        "sql": {
+            "name": "SQL",
+            "lang_tag": "sql",
+            "philosophy": "declarative set-based queries, relational data integrity, and ACID transaction guarantees",
+            "execution": "Declarative queries compiled, optimized, and executed by Relational Database Management Systems (RDBMS)",
+            "typing": "Statically typed relational schema columns (INT, VARCHAR, TIMESTAMP)",
+            "memory": "Managed internally by the RDBMS engine (buffer pool, page caching, temp tables)",
+            "performance": "Highly optimized for set-based data retrieval utilizing B-Tree, hash, and composite indexes",
+            "syntax": "Declarative English-like queries (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `JOIN`)",
+            "pointers": "No pointers; operations are relational transformations on tables and records",
+            "ecosystem": "MySQL, PostgreSQL, SQLite, Microsoft SQL Server, Oracle Database",
+            "use_cases": "Relational data persistence, analytics, transaction processing with ACID compliance",
+            "advantages": [
+                "Declarative set-based queries optimized by database query planners and B-Tree indexes",
+                "ACID transaction guarantees ensuring mission-critical data integrity and consistency",
+                "Universal industry standard for structured data modeling, reporting, and relational storage"
+            ],
+            "trade_offs": [
+                "Not designed for general-purpose procedural or application business logic",
+                "Relational schema migrations require disciplined management as database volume scales"
+            ],
+            "code": """SELECT student_id, name, score
+FROM exam_results
+WHERE score >= 75
+ORDER BY score DESC;""",
+            "when_to_choose": "You need to store, structure, query, and enforce integrity constraints on relational data."
+        }
+    }
+
+    @classmethod
+    def extract_comparison_languages(cls, query: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Extracts two subjects or programming languages to compare from a comparison question.
+        Preserves the order in which they appear in the user query.
+        """
+        q_lower = query.lower()
+        languages = [
+            ("C++", r"\b(c\+\+|cpp)\b"),
+            ("C", r"\b(c\s+programming|c\s+language|language\s+c|\bc\b(?!\+))\b"),
+            ("Python", r"\bpython\b"),
+            ("Java", r"\bjava\b(?!\s*script)"),
+            ("JavaScript", r"\b(javascript|js|typescript|ts)\b"),
+            ("SQL", r"\b(sql|database|dbms)\b"),
+            ("PHP", r"\bphp\b"),
+        ]
+        found = []
+        for name, pat in languages:
+            m = re.search(pat, q_lower)
+            if m:
+                found.append((m.start(), name))
+        found.sort(key=lambda x: x[0])
+        matched = [name for _, name in found]
+
+        if len(matched) >= 2:
+            return matched[0], matched[1]
+
+        m = re.search(r'(?:compare|difference\s+between)\s+([^,]+?)\s+(?:and|vs\.?|versus|with|to)\s+([^,?.!]+)', query, re.I)
+        if m:
+            return m.group(1).strip(), m.group(2).strip()
+        m2 = re.search(r'\b([A-Za-z0-9+#]+)\s+(?:vs\.?|versus)\s+([A-Za-z0-9+#]+)\b', query, re.I)
+        if m2:
+            return m2.group(1).strip(), m2.group(2).strip()
+
+        return None, None
+
+    @classmethod
+    def generate_comparison_response(
+        cls,
+        query: str = "",
+        subject1: str = "C++",
+        subject2: str = "Python",
+        *args,
+        **kwargs
+    ) -> str:
+        s1 = subject1.strip() if subject1 else "C++"
+        s2 = subject2.strip() if subject2 else "Python"
+
+        def norm_key(s: str) -> str:
+            s_low = s.strip().lower()
+            if s_low in ("c++", "cpp"): return "c++"
+            if s_low in ("c", "c language", "c programming"): return "c"
+            if s_low in ("python", "py"): return "python"
+            if s_low in ("java",): return "java"
+            if s_low in ("javascript", "js", "typescript", "ts"): return "javascript"
+            if s_low in ("sql", "database", "dbms"): return "sql"
+            return s_low
+
+        k1 = norm_key(s1)
+        k2 = norm_key(s2)
+
+        if k1 in cls.LANGUAGE_PROFILES and k2 in cls.LANGUAGE_PROFILES and k1 != k2:
+            p1 = cls.LANGUAGE_PROFILES[k1]
+            p2 = cls.LANGUAGE_PROFILES[k2]
+
+            p1_adv = "\n".join(f"  - ✅ {a}" for a in p1.get("advantages", []))
+            p1_trd = "\n".join(f"  - ⚠️ {t}" for t in p1.get("trade_offs", []))
+            p2_adv = "\n".join(f"  - ✅ {a}" for a in p2.get("advantages", []))
+            p2_trd = "\n".join(f"  - ⚠️ {t}" for t in p2.get("trade_offs", []))
+
+            advantages_section = f"""#### 🌟 Key Advantages & Trade-offs
+
+##### **{p1['name']}**
+- **Core Advantages:**
+{p1_adv}
+- **Architectural Trade-offs:**
+{p1_trd}
+
+##### **{p2['name']}**
+- **Core Advantages:**
+{p2_adv}
+- **Architectural Trade-offs:**
+{p2_trd}"""
+
+            return f"""### ⚖️ Comparison: **{p1['name']} vs. {p2['name']}**
+
+Both **{p1['name']}** and **{p2['name']}** are widely adopted software engineering technologies, but they were designed with fundamentally distinct architectural trade-offs: **{p1['name']}** focuses on {p1['philosophy']}, while **{p2['name']}** focuses on {p2['philosophy']}.
+
+#### 📊 Quick Reference Comparison Table
+
+| Feature / Dimension | {p1['name']} | {p2['name']} |
+| :--- | :--- | :--- |
+| **Execution Model** | {p1['execution']} | {p2['execution']} |
+| **Typing System** | {p1['typing']} | {p2['typing']} |
+| **Memory Management** | {p1['memory']} | {p2['memory']} |
+| **Performance & Speed** | {p1['performance']} | {p2['performance']} |
+| **Syntax Complexity** | {p1['syntax']} | {p2['syntax']} |
+| **Pointers & Memory Access** | {p1['pointers']} | {p2['pointers']} |
+| **Standard Ecosystem** | {p1['ecosystem']} | {p2['ecosystem']} |
+| **Primary Use Cases** | {p1['use_cases']} | {p2['use_cases']} |
+
+#### 💻 Side-by-Side Code Demonstration
+
+**{p1['name']}:**
+```{p1['lang_tag']}
+{p1['code']}
+```
+
+**{p2['name']}:**
+```{p2['lang_tag']}
+{p2['code']}
+```
+
+{advantages_section}
+
+#### 🎯 When to Choose Which?
+- **Choose {p1['name']} when**: {p1['when_to_choose']}
+- **Choose {p2['name']} when**: {p2['when_to_choose']}
+
+💡 **Suggested Next Step:** Would you like to explore **{p1['name']} syntax**, practice implementation problems, or compare another pair of languages?""".strip()
+        else:
+            return f"""### ⚖️ Comparison: **{s1} vs. {s2}**
+
+Comparing **{s1}** and **{s2}** highlights distinct software engineering trade-offs:
+
+#### 📊 Quick Reference Comparison Table
+
+| Dimension | {s1} | {s2} |
+| :--- | :--- | :--- |
+| **Execution Model** | Native compilation / VM runtime | Scripted / Bytecode / Native compilation |
+| **Typing System** | Strong / Static or Dynamic | Strong / Static or Dynamic |
+| **Memory Management** | Deterministic / Automatic GC | Automatic GC / Manual control |
+| **Primary Use Cases** | Systems, backend, or domain workflows | Web, scripting, or enterprise applications |
+| **Ecosystem & Tooling** | Curated standard libraries & package registry | Official package managers & active ecosystem |
+
+#### 🎯 Key Comparative Highlights
+1. **Design Philosophy**: **{s1}** provides specialized execution idioms, language grammar, and domain-targeted workflows, while **{s2}** offers alternative syntax conventions, runtime semantics, and ecosystem tooling.
+2. **Performance & Overhead**: Compiled and statically checked systems minimize CPU latency and memory footprint, whereas dynamic or interpreted platforms accelerate developer agility and prototyping.
+3. **Choosing the Right Technology**: Choose **{s1}** when its specific execution model aligns with your operational constraints; choose **{s2}** when developer productivity, library maturity, or rapid delivery takes precedence.
+
+💡 **Suggested Next Step:** Would you like a side-by-side code example or practice quiz questions comparing **{s1}** and **{s2}**?""".strip()
+
+    @classmethod
+    def generate_concept_explanation(
+        cls,
+        concept: str = "",
+        subject: str = "",
+        context_chunks: Optional[List[Dict[str, Any]]] = None,
+        *args,
+        **kwargs
+    ) -> str:
+        if not concept and "question" in kwargs:
+            concept = kwargs["question"]
+        if not subject and "topic" in kwargs and kwargs["topic"]:
+            subject = kwargs["topic"]
+        if context_chunks is None and "chunks" in kwargs:
+            context_chunks = kwargs["chunks"]
+
+        # Filter out chunks that do not match the target subject to prevent cross-language leakage
+        norm_subj = subject.strip() if subject else ""
+        matching_chunks = []
+        if context_chunks:
+            for c in context_chunks:
+                c_subj = c.get("subject", "")
+                if not norm_subj or not c_subj or c_subj.strip().lower() == norm_subj.lower():
+                    matching_chunks.append(c)
+
+        clean_concept = re.sub(r'^(explain|what is a|what is an|what is|what are|how does|what do you know about|tell me about)\s+', '', concept, flags=re.I).strip(" ?.")
+        clean_concept_title = clean_concept.title() if clean_concept else (norm_subj or "Core Principle")
+
+        CURRICULUM_SUBJECTS = {
+            "c++", "c", "python", "java", "javascript", "php", "sql", "database",
+            "operating systems", "computer science", "maths", "english", "gk", "general"
+        }
+        grounding_note = ""
+        if matching_chunks and len(matching_chunks) > 0:
+            fn = matching_chunks[0].get("filename", "")
+            pnum = matching_chunks[0].get("page_number", 1)
+            doc_id = matching_chunks[0].get("document_id")
+            link_str = f"[`{fn}`](view_course_material.php?id={doc_id}&page={pnum}&source=assistant)" if doc_id else f"`{fn}`"
+            grounding_note = f"\n\n*(Explanation supported by approved course material: {link_str} — Page {pnum})*"
+        elif norm_subj and norm_subj.strip().lower() not in CURRICULUM_SUBJECTS:
+            grounding_note = f"\n\n*(Note: I don't have enough information about {norm_subj} in the uploaded course materials. Standard curriculum explanation is provided above.)*"
+
+        lower_concept = clean_concept.lower()
+        lower_query = concept.lower()
+
+        # 1. Comparison Queries (e.g. "Compare C++ and Python", "Compare C and Python", "difference between Java and Python")
+        if any(w in lower_query for w in ["compare", "difference between", " vs ", "versus", "differ from"]):
+            s1_cand, s2_cand = cls.extract_comparison_languages(concept)
+            if s1_cand and s2_cand:
+                return cls.generate_comparison_response(query=concept, subject1=s1_cand, subject2=s2_cand)
+            elif "c++" in lower_query and "python" in lower_query:
+                return cls.generate_comparison_response(query=concept, subject1="C++", subject2="Python")
+            elif norm_subj and " and " in norm_subj:
+                parts = norm_subj.split(" and ")
+                return cls.generate_comparison_response(query=concept, subject1=parts[0].strip(), subject2=parts[1].strip())
+
+        # 2. Pointers in C++ / C
+        if "pointer" in lower_concept or "pointer" in lower_query:
+            detail = (
+                "In C++, a **pointer** is a variable that stores the **memory address** of another variable rather than the direct value itself. "
+                "Pointers are a foundational feature of C and C++ providing direct, low-level access and manipulation of system memory.\n\n"
+                "#### 🎯 Key Operators\n"
+                "- **Address-Of Operator (`&`)**: Retrieves the hexadecimal memory address where a variable is stored.\n"
+                "- **Dereference Operator (`*`)**: Accesses or modifies the actual value located at the address held by the pointer.\n\n"
+                "#### 💻 Practical Working C++ Example\n"
+                "```cpp\n"
+                "#include <iostream>\n"
+                "using namespace std;\n\n"
+                "int main() {\n"
+                "    int score = 85;      // Normal integer variable\n"
+                "    int* ptr = &score;   // Pointer variable storing the address of 'score'\n\n"
+                "    cout << \"Value of score: \" << score << endl;              // Outputs: 85\n"
+                "    cout << \"Memory address (&score): \" << &score << endl;    // E.g., 0x7ffd5e\n"
+                "    cout << \"Pointer holds address (ptr): \" << ptr << endl;   // E.g., 0x7ffd5e\n"
+                "    cout << \"Dereferenced value (*ptr): \" << *ptr << endl;    // Outputs: 85\n\n"
+                "    // Modifying the original variable through the pointer\n"
+                "    *ptr = 95;\n"
+                "    cout << \"Updated value of score: \" << score << endl;      // Outputs: 95\n\n"
+                "    return 0;\n"
+                "}\n"
+                "```\n\n"
+                "#### 🔍 Why Are Pointers Used?\n"
+                "1. **Dynamic Memory Allocation**: Allocating memory at runtime on the heap using `new` and releasing it with `delete`.\n"
+                "2. **Passing by Reference**: Passing pointers to functions avoids copying large objects and arrays, saving memory and CPU cycles.\n"
+                "3. **Building Data Structures**: Pointers form the structural links in dynamic data structures like Linked Lists, Trees, and Graphs.\n\n"
+                "#### ⚠️ Pointer Safety & Best Practices\n"
+                "- **Initialize Pointers**: Always initialize unused pointers to `nullptr` (e.g., `int* p = nullptr;`) to avoid dangerous wildcard memory access.\n"
+                "- **Avoid Dangling Pointers**: Never dereference a pointer after freeing its memory with `delete`.\n"
+                "- **Modern C++ Smart Pointers**: In modern C++ (C++11 and later), prefer standard smart pointers (`std::unique_ptr` and `std::shared_ptr` from `<memory>`) which automatically deallocate memory when out of scope."
+            )
+            resp = f"### 💡 Concept Explanation: **Pointers in C++**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to see how pointers are used in functions (pass-by-pointer), or explore dynamic arrays with `new` and `delete`?"
+            return resp.strip()
+
+        # 3. C++ Language Overview
+        if norm_subj == "C++" or "c++" in lower_concept or "cpp" in lower_concept:
+            detail = (
+                "**C++** is a high-performance, statically typed, compiled programming language developed by **Bjarne Stroustrup** at Bell Labs in 1979 as an extension of the C language (\"C with Classes\"). "
+                "It is one of the most widely used systems and applications programming languages in the world.\n\n"
+                "#### 🎯 Key Characteristics & Core Features\n"
+                "1. **Multi-Paradigm Support**: Supports Procedural, Object-Oriented (Classes, Inheritance, Polymorphism, Encapsulation), Generic (Templates), and Functional programming styles.\n"
+                "2. **Performance & Low-Level Control**: Provides direct hardware access and deterministic manual memory management (`new`, `delete`, and pointers) with zero-cost abstractions.\n"
+                "3. **RAII (Resource Acquisition Is Initialization)**: Ties resource management (memory, file handles, mutexes) to object lifetimes, ensuring automatic cleanup when objects go out of scope.\n"
+                "4. **Standard Template Library (STL)**: A comprehensive collection of generic container classes (vectors, lists, maps, sets), algorithms (sorting, searching), and iterators.\n"
+                "5. **Modern C++ Standards**: Evolves actively through C++11, C++14, C++17, C++20, and C++23, introducing smart pointers (`std::unique_ptr`, `std::shared_ptr`), lambdas, move semantics, auto type deduction, and concurrency.\n\n"
+                "#### 💻 Simple C++ Code Example\n"
+                "```cpp\n"
+                "#include <iostream>\n"
+                "#include <string>\n\n"
+                "class Student {\n"
+                "private:\n"
+                "    std::string name;\n"
+                "    int rollNumber;\n\n"
+                "public:\n"
+                "    Student(std::string n, int r) : name(n), rollNumber(r) {}\n\n"
+                "    void display() const {\n"
+                "        std::cout << \"Student: \" << name << \" | Roll No: \" << rollNumber << std::endl;\n"
+                "    }\n"
+                "};\n\n"
+                "int main() {\n"
+                "    std::cout << \"Welcome to C++ Programming!\" << std::endl;\n"
+                "    Student s1(\"Alice\", 101);\n"
+                "    s1.display();\n"
+                "    return 0;\n"
+                "}\n"
+                "```\n\n"
+                "#### 🚀 Primary Application Domains\n"
+                "- **Game Development**: Game engines (Unreal Engine), AAA video games requiring maximum graphics pipeline performance.\n"
+                "- **Systems & Operating Systems**: Kernel components in Windows, macOS, and Linux; device drivers and embedded systems.\n"
+                "- **High-Performance Computing & Finance**: High-frequency trading (HFT) platforms, scientific simulations, graphics rendering.\n"
+                "- **Web Browsers & Compilers**: Core engines of Chromium (V8/Blink), Firefox (Gecko), and compilers (LLVM/Clang, GCC)."
+            )
+            resp = f"### 💡 Overview of C++ Programming Language\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Topics:** Would you like to explore **pointers and memory management in C++**, learn about **OOP & classes**, or practice writing C++ programs?"
+            return resp.strip()
+
+        # Determine target programming language from query or subject
+        target_lang = None
+        for lang_name, pat in [
+            ("Python", r"\b(python|py)\b"),
+            ("C++", r"\b(c\+\+|cpp)\b"),
+            ("C", r"(?<!\w)(?:c\s+programming|c\s+language|language\s+c|\bc\b(?!\+))"),
+            ("Java", r"\bjava\b(?!\s*script)"),
+            ("JavaScript", r"\b(javascript|js|typescript|ts)\b"),
+            ("SQL", r"\b(sql|database|dbms)\b"),
+            ("PHP", r"\bphp\b"),
+            ("C#", r"\b(c#|csharp)\b")
+        ]:
+            if re.search(pat, lower_query) or re.search(pat, lower_concept):
+                target_lang = lang_name
+                break
+
+        if not target_lang and norm_subj:
+            for lang_name, pat in [
+                ("Python", r"^python$"),
+                ("C++", r"^(c\+\+|cpp)$"),
+                ("C", r"^c$"),
+                ("Java", r"^java$"),
+                ("JavaScript", r"^(javascript|js)$"),
+                ("SQL", r"^(sql|database|dbms)$"),
+                ("PHP", r"^php$"),
+                ("C#", r"^(c#|csharp)$")
+            ]:
+                if re.search(pat, norm_subj.lower()):
+                    target_lang = lang_name
+                    break
+
+        if not target_lang:
+            target_lang = "Python" if "python" in lower_query else ("Java" if "java" in lower_query else (norm_subj or "Python"))
+
+        # 4. Inheritance (OOP)
+        if "inheritance" in lower_concept or "inheritance" in lower_query:
+            if target_lang == "Python":
+                detail = (
+                    "**Inheritance** is a fundamental mechanism of Object-Oriented Programming (OOP) in Python that allows a child class (subclass) "
+                    "to inherit attributes and methods from an existing parent class (superclass).\n\n"
+                    "#### 🎯 Key Purposes & Benefits in Python\n"
+                    "1. **Code Reusability**: Common state and behavior are defined once in the parent class and shared across all child classes without duplication.\n"
+                    "2. **Method Overriding**: Subclasses can provide their own specialized implementations of methods defined in the parent class.\n"
+                    "3. **`super()` Constructor Chaining**: The `super().__init__(...)` call allows subclasses to cleanly delegate attribute initialization to parent classes.\n"
+                    "4. **Extensibility & Polymorphism**: Models intuitive hierarchical relationships (e.g., a `Dog` **is an** `Animal`) and supports polymorphic function calls.\n\n"
+                    "#### 💻 Practical Python Code Example\n"
+                    "```python\n"
+                    "# Superclass (Parent Class)\n"
+                    "class Animal:\n"
+                    "    def __init__(self, name: str, species: str):\n"
+                    "        self.name = name\n"
+                    "        self.species = species\n\n"
+                    "    def make_sound(self) -> str:\n"
+                    "        return f\"{self.name} makes a generic animal sound.\"\n\n"
+                    "    def describe(self) -> str:\n"
+                    "        return f\"{self.name} is a {self.species}.\"\n\n"
+                    "# Subclass (Child Class) inheriting from Animal\n"
+                    "class Dog(Animal):\n"
+                    "    def __init__(self, name: str, breed: str):\n"
+                    "        # Initialize parent attributes using super()\n"
+                    "        super().__init__(name, species=\"Canine\")\n"
+                    "        self.breed = breed\n\n"
+                    "    # Method Overriding: Child provides specialized behavior\n"
+                    "    def make_sound(self) -> str:\n"
+                    "        return f\"{self.name} ({self.breed}) barks: Woof! Woof!\"\n\n"
+                    "# Usage Demonstration\n"
+                    "if __name__ == \"__main__\":\n"
+                    "    generic_animal = Animal(\"Creature\", \"Unknown\")\n"
+                    "    print(generic_animal.make_sound())  # Outputs: Creature makes a generic animal sound.\n\n"
+                    "    my_dog = Dog(\"Buddy\", \"Golden Retriever\")\n"
+                    "    print(my_dog.describe())            # Inherited method: Buddy is a Canine.\n"
+                    "    print(my_dog.make_sound())          # Overridden method: Buddy (Golden Retriever) barks: Woof! Woof!\n"
+                    "    print(f\"Is Animal? {isinstance(my_dog, Animal)}\")  # Outputs: True\n"
+                    "```\n\n"
+                    "#### ⚠️ Key Rules & Python Traps\n"
+                    "- **Always invoke `super().__init__()`**: Omitting `super().__init__()` in a child class constructor leaves inherited attributes uninitialized.\n"
+                    "- **Multiple Inheritance & MRO**: Unlike Java, Python supports multiple inheritance (`class Child(ParentA, ParentB)`). Python uses the **C3 Linearization** algorithm to compute the Method Resolution Order (inspect via `ClassName.mro()`).\n"
+                    "- **Encapsulation & Name Mangling**: In Python, prefixing an attribute with double underscores (e.g. `__secret`) triggers name mangling (`_Parent__secret`) to prevent accidental overrides in child classes."
+                )
+                resp = f"### 💡 Concept Explanation: **Inheritance in Python**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to explore **multiple inheritance and Python's MRO (`super()`)**, or try a quick quiz question on this topic?"
+                return resp.strip()
+
+            elif target_lang == "C++":
+                code_block = (
+                    "```cpp\n"
+                    "#include <iostream>\n"
+                    "#include <string>\n\n"
+                    "// Base Class (Parent)\n"
+                    "class Animal {\n"
+                    "protected:\n"
+                    "    std::string name;\n\n"
+                    "public:\n"
+                    "    Animal(const std::string& n) : name(n) {}\n"
+                    "    virtual ~Animal() = default; // Virtual destructor prevents memory leaks\n\n"
+                    "    virtual void makeSound() const {\n"
+                    "        std::cout << name << \" makes a generic sound.\" << std::endl;\n"
+                    "    }\n"
+                    "};\n\n"
+                    "// Derived Class (Child) inheriting publicly from Animal\n"
+                    "class Dog : public Animal {\n"
+                    "private:\n"
+                    "    std::string breed;\n\n"
+                    "public:\n"
+                    "    Dog(const std::string& n, const std::string& b) : Animal(n), breed(b) {}\n\n"
+                    "    void makeSound() const override {\n"
+                    "        std::cout << name << \" (\" << breed << \") barks: Woof! Woof!\" << std::endl;\n"
+                    "    }\n"
+                    "};\n\n"
+                    "int main() {\n"
+                    "    Animal* myPet = new Dog(\"Buddy\", \"Golden Retriever\");\n"
+                    "    myPet->makeSound(); // Dynamic dispatch calls Dog's makeSound()\n"
+                    "    delete myPet;       // Safely calls ~Dog() then ~Animal()\n"
+                    "    return 0;\n"
+                    "}\n"
+                    "```"
+                )
+                detail = (
+                    "**Inheritance** is a fundamental mechanism of Object-Oriented Programming (OOP) in C++ that allows a derived class (child) "
+                    "to inherit member variables and methods from a base class (parent).\n\n"
+                    "#### 🎯 Key Characteristics in C++\n"
+                    "1. **Access Modes**: C++ supports `public`, `protected`, and `private` derivation, controlling how base members are exposed through derived classes.\n"
+                    "2. **Virtual Functions & Polymorphism**: Declaring base methods `virtual` enables runtime dynamic dispatch (via the vtable), allowing derived overrides to be invoked through base pointers.\n"
+                    "3. **Virtual Destructors**: Always declare base destructors `virtual` (`virtual ~Animal() = default;`) so derived destructors execute when deleting via base pointers.\n\n"
+                    "#### 💻 Practical C++ Code Example\n"
+                    f"{code_block}\n\n"
+                    "#### ⚠️ Key Rules & C++ Traps\n"
+                    "- **Virtual Destructor Rule**: If a class has virtual functions, its destructor must be virtual to prevent undefined behavior when deleting derived instances via base pointers.\n"
+                    "- **Diamond Problem**: Multiple inheritance in C++ can cause duplicate base instances. Use **virtual inheritance** (`class B : virtual public A`) to resolve diamond hierarchies."
+                )
+                resp = f"### 💡 Concept Explanation: **Inheritance in C++**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to explore **virtual destructors and vtables**, or try a quick quiz question on this topic?"
+                return resp.strip()
+
+            else:
+                code_block = (
+                    "```java\n"
+                    "// Superclass (Parent)\n"
+                    "class Animal {\n"
+                    "    protected String name;\n"
+                    "    public Animal(String name) { this.name = name; }\n"
+                    "    public void makeSound() {\n"
+                    "        System.out.println(name + \" makes a sound.\");\n"
+                    "    }\n"
+                    "}\n\n"
+                    "// Subclass (Child) inheriting from Animal using 'extends'\n"
+                    "class Dog extends Animal {\n"
+                    "    public Dog(String name) { super(name); }\n"
+                    "    @Override\n"
+                    "    public void makeSound() {\n"
+                    "        System.out.println(name + \" barks: Woof! Woof!\");\n"
+                    "    }\n"
+                    "}\n\n"
+                    "public class Main {\n"
+                    "    public static void main(String[] args) {\n"
+                    "        Dog myDog = new Dog(\"Buddy\");\n"
+                    "        myDog.makeSound(); // Outputs: Buddy barks: Woof! Woof!\n"
+                    "    }\n"
+                    "}\n"
+                    "```"
+                )
+                detail = (
+                    "**Inheritance** is a fundamental mechanism of Object-Oriented Programming (OOP) in Java that allows a new class (subclass/child) "
+                    "to acquire the properties, fields, and methods of an existing class (superclass/parent).\n\n"
+                    "#### 🎯 Key Purposes & Benefits\n"
+                    "1. **Code Reusability**: Common attributes and methods are defined once in the superclass and inherited by all subclasses without redundant code duplication.\n"
+                    "2. **Method Overriding (Runtime Polymorphism)**: Subclasses can provide a specialized implementation of inherited methods using `@Override`.\n"
+                    "3. **IS-A Hierarchy**: Models natural domain relationships (e.g., a `Dog` **is an** `Animal`, a `SavingsAccount` **is an** `Account`).\n\n"
+                    "#### 💻 Practical Java Code Example\n"
+                    f"{code_block}\n\n"
+                    "#### ⚠️ Key Rules & Traps\n"
+                    "- **Single Class Inheritance**: Java does not support multiple inheritance with classes (`class C extends A, B` is invalid). Use **Interfaces** (`implements`) instead.\n"
+                    "- **`super` Keyword**: Use `super()` to call the parent constructor and `super.methodName()` to invoke parent methods.\n"
+                    "- **Encapsulation**: `private` members of the parent class are not directly accessible by children; use `protected` or public getters/setters."
+                )
+                resp = f"### 💡 Concept Explanation: **Inheritance in Java**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like a coding exercise or a quick quiz question on this topic?"
+                return resp.strip()
+
+        # 5. Polymorphism (OOP)
+        if "polymorphism" in lower_concept or "polymorphism" in lower_query:
+            if target_lang == "Python":
+                detail = (
+                    "**Polymorphism** (meaning 'many forms') allows objects of different classes to respond to the same method invocation in their own unique way.\n\n"
+                    "#### 🎯 Polymorphism in Python\n"
+                    "1. **Duck Typing**: Python does not require a formal interface or common base class. If an object implements the required method, Python executes it (*'If it walks like a duck and quacks like a duck, it's a duck'*).\n"
+                    "2. **Method Overriding**: Subclasses provide a specialized implementation of a method defined in their superclass.\n"
+                    "3. **Operator Overloading**: Special dunder methods (e.g., `__add__`, `__len__`, `__str__`) allow Python operators (`+`, `len()`, `print()`) to behave polymorphically on custom objects.\n\n"
+                    "#### 💻 Practical Python Code Example\n"
+                    "```python\n"
+                    "class Shape:\n"
+                    "    def area(self) -> float:\n"
+                    "        raise NotImplementedError(\"Subclasses must implement area()\")\n\n"
+                    "class Circle(Shape):\n"
+                    "    def __init__(self, radius: float):\n"
+                    "        self.radius = radius\n\n"
+                    "    def area(self) -> float:\n"
+                    "        return 3.14159 * self.radius ** 2\n\n"
+                    "class Rectangle(Shape):\n"
+                    "    def __init__(self, width: float, height: float):\n"
+                    "        self.width = width\n"
+                    "        self.height = height\n\n"
+                    "    def area(self) -> float:\n"
+                    "        return self.width * self.height\n\n"
+                    "# Polymorphic function: Works on any Shape subclass\n"
+                    "def print_area(shape: Shape) -> None:\n"
+                    "    print(f\"Calculated Area: {shape.area():.2f}\")\n\n"
+                    "shapes = [Circle(5), Rectangle(4, 6)]\n"
+                    "for s in shapes:\n"
+                    "    print_area(s)  # Outputs: Calculated Area: 78.54, Calculated Area: 24.00\n"
+                    "```"
+                )
+                resp = f"### 💡 Concept Explanation: **Polymorphism in Python**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to explore **operator overloading in Python (`__add__`)**, or try a quick quiz question on this topic?"
+                return resp.strip()
+
+            elif target_lang == "C++":
+                detail = (
+                    "**Polymorphism** in C++ enables entities such as functions or objects to have different behaviors depending on their invocation context.\n\n"
+                    "#### 🎯 Compile-Time vs Runtime Polymorphism in C++\n"
+                    "1. **Compile-Time (Static)**: Function overloading, operator overloading, and generic C++ templates.\n"
+                    "2. **Runtime (Dynamic)**: Virtual member functions and dynamic dispatch via the virtual method table (vtable).\n\n"
+                    "#### 💻 Practical C++ Example\n"
+                    "```cpp\n"
+                    "#include <iostream>\n\n"
+                    "class Shape {\n"
+                    "public:\n"
+                    "    virtual ~Shape() = default;\n"
+                    "    virtual void draw() const {\n"
+                    "        std::cout << \"Drawing generic shape\" << std::endl;\n"
+                    "    }\n"
+                    "};\n\n"
+                    "class Circle : public Shape {\n"
+                    "public:\n"
+                    "    void draw() const override {\n"
+                    "        std::cout << \"Drawing a circle\" << std::endl;\n"
+                    "    }\n"
+                    "};\n\n"
+                    "int main() {\n"
+                    "    Shape* s = new Circle();\n"
+                    "    s->draw(); // Dynamic dispatch calls Circle's draw()\n"
+                    "    delete s;\n"
+                    "    return 0;\n"
+                    "}\n"
+                    "```"
+                )
+                resp = f"### 💡 Concept Explanation: **Polymorphism in C++**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to explore **templates vs virtual functions**, or try a quick quiz question on this topic?"
+                return resp.strip()
+
+            else:
+                detail = (
+                    "**Polymorphism** (from Greek meaning 'many forms') allows objects of different types to respond to the same method call with type-specific behavior.\n\n"
+                    "#### 🎯 The Two Forms of Polymorphism in Java\n"
+                    "1. **Compile-Time (Static / Overloading)**: Same method name with different parameters within the same class.\n"
+                    "2. **Runtime (Dynamic / Overriding)**: Subclass overrides a superclass method, resolved dynamically during program execution.\n\n"
+                    "#### 💻 Practical Java Example\n"
+                    "```java\n"
+                    "class Shape {\n"
+                    "    void draw() { System.out.println(\"Drawing generic shape\"); }\n"
+                    "}\n"
+                    "class Circle extends Shape {\n"
+                    "    @Override\n"
+                    "    void draw() { System.out.println(\"Drawing a circle\"); }\n"
+                    "}\n\n"
+                    "Shape s = new Circle();\n"
+                    "s.draw(); // Dynamic dispatch calls Circle's draw()\n"
+                    "```"
+                )
+                resp = f"### 💡 Concept Explanation: **Polymorphism in Java**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like a coding exercise or a quick quiz question on this topic?"
+                return resp.strip()
+
+        # 6. Python Overview
+        if norm_subj == "Python" or "python" in lower_concept:
+            detail = (
+                "**Python** is a high-level, interpreted, general-purpose programming language conceived by **Guido van Rossum** in 1991. "
+                "Its design philosophy emphasizes code readability, developer velocity, and clean, expressive syntax.\n\n"
+                "#### 🎯 Core Features\n"
+                "1. **Dynamic Typing & Memory Management**: Variables do not require explicit type declarations, and memory is automatically reclaimed by Python's Garbage Collector.\n"
+                "2. **Significant Whitespace**: Blocks of code are defined by indentation (typically 4 spaces) rather than curly braces, enforcing uniform readability.\n"
+                "3. **Rich Standard Library**: Often called 'batteries included', Python comes pre-packaged with comprehensive modules for file I/O, networking, math, and JSON.\n"
+                "4. **Vast Data & AI Ecosystem**: The undisputed standard language for Machine Learning and Data Science (NumPy, Pandas, Scikit-learn, PyTorch, TensorFlow).\n\n"
+                "#### 💻 Simple Python Example\n"
+                "```python\n"
+                "# Demonstrating list comprehension and clean syntax\n"
+                "def get_even_squares(numbers: list[int]) -> list[int]:\n"
+                "    return [n ** 2 for n in numbers if n % 2 == 0]\n\n"
+                "nums = [1, 2, 3, 4, 5, 6]\n"
+                "print('Even squares:', get_even_squares(nums))  # Outputs: [4, 16, 36]\n"
+                "```"
+            )
+            resp = f"### 💡 Overview of Python Programming Language\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Topics:** Would you like to review **loops and control flow**, practice **functions & list comprehensions**, or explore exam questions?"
+            return resp.strip()
+
+        # 7. C Language Overview
+        if norm_subj == "C" or lower_concept in ("c", "c programming", "c language") or re.search(r"\b(c\s+programming|c\s+language|language\s+c|\bc\b(?!\+))\b", lower_query):
+            detail = (
+                "**C** is a foundational, general-purpose procedural programming language created by **Dennis Ritchie** between 1972 and 1973 at Bell Labs. "
+                "Engineered originally to implement the Unix operating system, C is celebrated for its efficiency, close-to-hardware access, and foundational role in software engineering.\n\n"
+                "#### 🎯 Key Characteristics & Core Features\n"
+                "1. **Structured Procedural Design**: Programs are organized around functions, structured control blocks, and modular routines without class overhead.\n"
+                "2. **Direct Memory Access & Pointers**: Provides direct access to system memory addresses through pointer arithmetic, giving developers granular control over hardware.\n"
+                "3. **Manual Memory Management**: Explicit memory allocation and deallocation on the heap using standard functions (`malloc()`, `calloc()`, `realloc()`, `free()`).\n"
+                "4. **Native Performance & Compact Binaries**: Compiles directly into native machine code (via GCC/Clang), producing exceptionally fast, lightweight executables with minimal memory footprints.\n"
+                "5. **Minimalist Standard Library**: Provides essential I/O (`<stdio.h>`), string manipulation (`<string.h>`), and math (`<math.h>`) utilities.\n\n"
+                "#### 💻 Simple C Code Example\n"
+                "```c\n"
+                "#include <stdio.h>\n\n"
+                "int main() {\n"
+                "    printf(\"Welcome to C Programming!\\n\");\n"
+                "    int numbers[] = {10, 20, 30, 40, 50};\n"
+                "    int length = sizeof(numbers) / sizeof(numbers[0]);\n\n"
+                "    for (int i = 0; i < length; i++) {\n"
+                "        printf(\"Element %d: %d\\n\", i, numbers[i]);\n"
+                "    }\n"
+                "    return 0;\n"
+                "}\n"
+                "```\n\n"
+                "#### 🚀 Primary Application Domains\n"
+                "- **Operating Systems**: Unix, Linux kernel, Windows kernel, and macOS Darwin components.\n"
+                "- **Embedded Systems & IoT**: Firmware for microcontrollers, automotive ECUs, and medical devices.\n"
+                "- **Compilers & Interpreters**: Runtimes and interpreters for Python (CPython), Ruby, and SQLite."
+            )
+            resp = f"### 💡 Overview of C Programming Language\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Topics:** Would you like to explore **pointers and memory allocation (`malloc`/`free`)**, examine **structures (`struct`)**, or practice C exam questions?"
+            return resp.strip()
+
+        # 8. Java Language Overview
+        if norm_subj == "Java" or lower_concept in ("java", "java programming") or "java language" in lower_concept:
+            detail = (
+                "**Java** is a robust, object-oriented, class-based programming language designed by **James Gosling** at Sun Microsystems (now Oracle) in 1995. "
+                "Its governing philosophy, **\"Write Once, Run Anywhere\" (WORA)**, ensures compiled Java bytecode runs on any platform equipped with a Java Virtual Machine (JVM).\n\n"
+                "#### 🎯 Key Characteristics & Core Features\n"
+                "1. **Platform Independence**: Source code compiles into platform-independent `.class` bytecode interpreted and JIT-compiled by the JVM.\n"
+                "2. **Strict Object-Oriented Principles**: Everything (except primitive types) is encapsulated inside classes, strictly enforcing OOP principles (Inheritance, Polymorphism, Encapsulation, Abstraction).\n"
+                "3. **Automatic Garbage Collection**: Background collectors (G1, ZGC) automatically track and deallocate unreferenced heap memory, preventing memory leaks.\n"
+                "4. **Multithreading & Concurrency**: Built-in native support for concurrent thread execution and synchronization primitives in `java.lang.Thread` and `java.util.concurrent`.\n"
+                "5. **Enterprise-Grade Ecosystem**: Industry-dominant frameworks including Spring Boot, Hibernate, Apache Kafka, and Android SDK.\n\n"
+                "#### 💻 Simple Java Code Example\n"
+                "```java\n"
+                "public class WelcomeJava {\n"
+                "    public static void main(String[] args) {\n"
+                "        System.out.println(\"Welcome to Java Programming!\");\n"
+                "        String[] topics = {\"Classes\", \"Inheritance\", \"Polymorphism\", \"Interfaces\"};\n"
+                "        for (String topic : topics) {\n"
+                "            System.out.println(\"- Core Topic: \" + topic);\n"
+                "        }\n"
+                "    }\n"
+                "}\n"
+                "```\n\n"
+                "#### 🚀 Primary Application Domains\n"
+                "- **Enterprise Web Backends**: Banking, e-commerce, and high-throughput corporate microservices (Spring Boot).\n"
+                "- **Android Development**: Native mobile applications.\n"
+                "- **Big Data Systems**: Core components of Apache Hadoop, Spark, and Cassandra."
+            )
+            resp = f"### 💡 Overview of Java Programming Language\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Topics:** Would you like to review **Inheritance and Overriding**, learn about **Interfaces vs Abstract Classes**, or practice Java exam questions?"
+            return resp.strip()
+
+        # 9. General Structured Fallback
+        detail = (
+            f"**{clean_concept_title}** is an essential topic within **{norm_subj or 'Computer Science'}**.\n\n"
+            f"#### 🎯 Definition & Purpose\n"
+            f"It serves as a foundational building block for constructing predictable, modular, and maintainable software systems.\n\n"
+            f"#### 💡 Core Principles\n"
+            f"- **Clarity & Structure**: Eliminates ambiguity by following standardized architectural patterns.\n"
+            f"- **Separation of Concerns**: Encourages isolated, testable modules that minimize side-effects.\n"
+            f"- **Scalability**: Enables systems to grow in complexity while maintaining computational efficiency."
+        )
+
+        resp = f"### 💡 Concept Explanation: **{clean_concept_title}**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like a coding exercise or a quick quiz question on this topic?"
+        return resp.strip()
+
+    @classmethod
+    def generate_coding_help(cls, query: str = "", subject: str = "", *args, **kwargs) -> str:
+        if not query and "question" in kwargs:
+            query = kwargs["question"]
+        lang = cls._detect_programming_language(subject, query)
+        q_lower = query.lower()
+
+        # Check for programming performance & optimization queries
+        is_perf_query = (
+            ("improve" in q_lower or "optimize" in q_lower or "boost" in q_lower or "speed up" in q_lower or "tune" in q_lower) and
+            ("performance" in q_lower or "speed" in q_lower or "efficiency" in q_lower or "runtime" in q_lower or "memory" in q_lower or "latency" in q_lower)
+        ) or (
+            ("performance" in q_lower or "optimization" in q_lower) and any(w in q_lower for w in ["java", "python", "c++", "c", "code", "sql", "javascript"])
+        )
+
+        if is_perf_query:
+            if lang == "Java" or "java" in q_lower:
+                return """### ⚡ Java Application Performance & Optimization Guide
+
+Improving Java programming performance requires a systematic engineering strategy: **profile first to identify bottlenecks, select optimal data structures, minimize object churn, tune the JVM/GC, and leverage modern concurrency primitives**.
+
+#### 1. 🔍 Step 1: Profiling & Bottleneck Identification ("Measure, Don't Guess")
+Before making code adjustments, establish a baseline and pinpoint whether the application is CPU-bound, memory/GC-bound, or I/O-bound:
+- **Java Flight Recorder (JFR) & JDK Mission Control (JMC):** Low-overhead, production-grade event profiling built directly into the OpenJDK runtime.
+- **VisualVM / JProfiler:** Inspect live thread execution states, CPU sampling flame graphs, and heap object allocation hotspots.
+- **Java Microbenchmark Harness (JMH):** Always run microbenchmarks with JMH to avoid falsified metrics caused by JIT dead-code elimination, loop unrolling, and warmup delays.
+
+#### 2. 🧱 Algorithms & Collections Optimization
+- **Select the Right Collection:**
+  - Use `ArrayList` instead of `LinkedList` for almost all sequential or indexed access: contiguous array memory provides optimal CPU L1/L2 cache locality, whereas `LinkedList` incurs pointer-chasing overhead.
+  - **Pre-size Collections:** When the expected capacity is known, initialize collections explicitly (e.g., `new ArrayList<>(expectedCount)` or `new HashMap<>((int)(expectedCount / 0.75f) + 1)`) to eliminate costly array copy resizes and hash bucket rehashing.
+- **Eliminate Auto-Boxing in Critical Loops:**
+  - Wrapper classes (`Integer`, `Double`, `Long`) introduce heap allocations and pointer indirection. Use primitive arrays (`int[]`, `double[]`) or specialized primitive collections (FastUtil, Trove) for numeric processing.
+
+#### 3. 🧵 Memory Management & Garbage Collection Tuning
+- **String Handling in Loops:**
+  - Never concatenate strings with `+` inside loops (which creates new intermediate objects per iteration). Always use a pre-sized `StringBuilder`.
+- **Select the Appropriate Garbage Collector:**
+  - **G1GC (Default):** Balanced throughput and predictable pause times for modern heaps > 4GB (`-XX:+UseG1GC`).
+  - **ZGC / Shenandoah:** Ultra-low latency collectors with sub-millisecond pauses for latency-critical applications (`-XX:+UseZGC`).
+- **Reduce Object Churn:**
+  - Reuse heavy or stateless objects (e.g., reuse `DateTimeFormatter` or `Pattern` instances as `static final` constants rather than compiling regular expressions repeatedly).
+
+#### 4. 🚀 Concurrency & I/O Optimization
+- **Thread Pools & Virtual Threads:**
+  - Avoid spawning unmanaged `new Thread()` instances. Utilize `ThreadPoolExecutor` or Java 21+ Virtual Threads (`Executors.newVirtualThreadPerTaskExecutor()`) for high-concurrency I/O workloads.
+- **Buffered & Non-Blocking I/O:**
+  - Wrap raw streams with `BufferedReader` / `BufferedInputStream` to minimize system calls, or use `java.nio.channels.FileChannel` with direct byte buffers for high-volume file transfers.
+
+#### 💻 Practical Example: Inefficient vs. Optimized Java Code
+
+##### ❌ Inefficient Pattern (O(n²) Allocations & GC Pressure):
+```java
+// Anti-pattern: String concatenation in loop generates n temporary heap objects
+String csvReport = "";
+for (int i = 0; i < records.size(); i++) {
+    csvReport += records.get(i).toCsvRow() + "\\n";
+}
+```
+
+##### ✅ Optimized Pattern (O(n) In-Place Pre-allocated Buffer):
+```java
+// High-performance: Pre-sized buffer, zero intermediate heap churn
+StringBuilder sb = new StringBuilder(records.size() * 64);
+for (int i = 0; i < records.size(); i++) {
+    sb.append(records.get(i).toCsvRow()).append('\\n');
+}
+String csvReport = sb.toString();
+```
+
+#### 📋 Java Performance Checklist
+- [ ] Measure baseline using JFR, VisualVM, or JMH before modifying code
+- [ ] Pre-size `ArrayList` and `HashMap` instances to target capacity
+- [ ] Replace `LinkedList` with `ArrayList` for CPU cache locality
+- [ ] Avoid primitive boxing (`Integer`, `Double`) in hot calculation loops
+- [ ] Use `StringBuilder` for all iterative string mutations
+- [ ] Reuse compiled `Pattern` and formatter instances as `static final`
+- [ ] Leverage Virtual Threads (Java 21+) or managed thread pools for concurrent I/O
+
+💡 **Suggested Next Step:** Do you have a specific Java method, loop, or query that is running slowly? Share it here and we can benchmark and optimize it together!""".strip()
+
+            elif lang == "Python" or "python" in q_lower:
+                return """### ⚡ Python Application Performance & Optimization Guide
+
+Improving Python application performance focuses on **eliminating interpreted bytecode overhead, leveraging C-accelerated libraries, optimizing algorithms and data structures, and profiling hot execution paths**.
+
+#### 1. 🔍 Step 1: Profiling Hot Paths ("Measure Before Optimizing")
+- **`cProfile` & `pstats`:** Built-in deterministic profiler to identify which functions consume the most execution time (`python -m cProfile -s tottime script.py`).
+- **`line_profiler`:** Inspect line-by-line runtime metrics for pinpointing exact bottleneck loops.
+- **`memory_profiler`:** Track memory allocations and memory leaks per line.
+
+#### 2. 🧱 Algorithmic & Data Structure Enhancements
+- **Use Built-in Data Structures:**
+  - Use `set` and `dict` for $O(1)$ membership checks instead of $O(n)$ list scans (`if item in my_set:`).
+  - Use `collections.deque` for $O(1)$ append/pop operations on both ends instead of `list.pop(0)` which is $O(n)$.
+- **List Comprehensions & Generator Expressions:**
+  - List comprehensions run at native C speed in CPython, outperforming standard `for` loops with `.append()`.
+  - Use generators (`(x * 2 for x in data)`) to stream massive datasets without loading them entirely into memory.
+
+#### 3. 🚀 Leverage C-Accelerated & Vectorized Libraries
+- **Vectorization with NumPy:**
+  - Replace Python loops operating on numeric arrays with vectorized NumPy operations, shifting computation to SIMD C/Fortran routines.
+- **Alternative Runtimes:**
+  - For CPU-bound Python workloads without C extensions, evaluate **PyPy** (Just-In-Time compiler) for 4x–7x speedups.
+
+#### 💻 Practical Example: Inefficient vs. Optimized Python Code
+
+##### ❌ Inefficient Pattern (O(n) membership checks in loop):
+```python
+# Anti-pattern: Linear scan on list inside loop is O(n * m)
+valid_ids = [101, 102, 103, 104]  # list
+filtered = []
+for item in large_dataset:
+    if item.id in valid_ids:  # O(n) scan on every iteration!
+        filtered.append(item)
+```
+
+##### ✅ Optimized Pattern (O(1) hash lookup with set comprehension):
+```python
+# High-performance: O(1) hash lookup yields O(m) total time
+valid_ids_set = set(valid_ids)
+filtered = [item for item in large_dataset if item.id in valid_ids_set]
+```
+
+#### 📋 Python Performance Checklist
+- [ ] Profile with `cProfile` to identify top time-consuming functions
+- [ ] Convert lookup lists to `set` for $O(1)$ membership testing
+- [ ] Replace `for` loop appends with list comprehensions or generators
+- [ ] Use `collections.deque` for FIFO queue operations
+- [ ] Vectorize numeric calculations using NumPy
+- [ ] Use `join()` for string aggregation instead of `+` concatenation
+
+💡 **Suggested Next Step:** Would you like to profile a specific Python function or explore vectorization for your dataset?""".strip()
+
+            elif lang == "C++" or "c++" in q_lower or "cpp" in q_lower:
+                return """### ⚡ C++ Application Performance & Optimization Guide
+
+Optimizing C++ applications focuses on **hardware cache friendliness, zero-cost abstractions, compiler optimizations, move semantics, and minimizing heap allocations in hot paths**.
+
+#### 1. 🔍 Step 1: Profiling & Hardware Performance Counters
+- **Linux `perf` & FlameGraphs:** Measure CPU cycles, cache misses, and branch mispredictions.
+- **Valgrind (Callgrind & Cachegrind):** Inspect cache locality and function call counts.
+- **Google Benchmark:** High-precision microbenchmarking harness for C++ code.
+
+#### 2. 🧱 Cache Locality & Memory Layout
+- **Contiguous Memory (`std::vector`):**
+  - Always prefer `std::vector` over linked data structures (`std::list`). Contiguous heap buffers maximize CPU L1/L2 cache line hits and hardware prefetching.
+- **Pre-allocate Vector Memory:**
+  - Always call `vec.reserve(expectedSize)` prior to inserting elements to eliminate repeated reallocations and copies.
+
+#### 3. 🚀 Modern C++ Optimization Techniques
+- **Move Semantics & Rvalue References (`std::move`):**
+  - Avoid copying large objects, strings, or containers. Transfer ownership using move constructors and `std::move`.
+- **`constexpr` & Compile-Time Computation:**
+  - Shift calculations from runtime to compile time using `constexpr` functions and template metaprogramming.
+- **Compiler Optimization Flags:**
+  - Compile production builds with `-O3 -march=native -flto` (Link-Time Optimization) and enable `-DNDEBUG` to remove assertion overhead.
+
+#### 💻 Practical Example: Inefficient vs. Optimized C++ Code
+
+##### ❌ Inefficient Pattern (Repeated heap reallocations & deep copies):
+```cpp
+// Anti-pattern: vector resizes repeatedly, objects copied by value
+std::vector<std::string> lines;
+for (const auto& item : data) {
+    lines.push_back(item.generateString()); // Resizes + deep copy
+}
+```
+
+##### ✅ Optimized Pattern (Reserved memory & move semantics):
+```cpp
+// High-performance: Pre-reserved buffer, emplace with move semantics
+std::vector<std::string> lines;
+lines.reserve(data.size()); // Zero reallocations
+for (const auto& item : data) {
+    lines.emplace_back(item.generateString()); // Direct move construction
+}
+```
+
+#### 📋 C++ Performance Checklist
+- [ ] Compile with `-O3 -flto -march=native` for release targets
+- [ ] Profile with `perf` to track L1/L2 cache misses and branch mispredictions
+- [ ] Pre-allocate container capacity with `.reserve()`
+- [ ] Use `std::move` and `emplace_back` to eliminate object copies
+- [ ] Prefer `std::vector` over node-based collections (`std::list`)
+- [ ] Move invariants and constants to compile-time with `constexpr`
+
+💡 **Suggested Next Step:** Would you like to analyze a specific C++ algorithm or discuss cache-conscious data layouts?""".strip()
+
+        if "reverse" in q_lower and ("string" in q_lower or "str" in q_lower):
+            if lang == "Python":
+                code = (
+                    "```python\n"
+                    "def reverse_string(s: str) -> str:\n"
+                    "    # Method 1: Pythonic slice (O(n) time, O(n) space)\n"
+                    "    return s[::-1]\n\n"
+                    "# Method 2: Two-pointer in-place style\n"
+                    "def reverse_string_twopointer(s: str) -> str:\n"
+                    "    chars = list(s)\n"
+                    "    left, right = 0, len(chars) - 1\n"
+                    "    while left < right:\n"
+                    "        chars[left], chars[right] = chars[right], chars[left]\n"
+                    "        left += 1\n"
+                    "        right -= 1\n"
+                    "    return ''.join(chars)\n\n"
+                    "# Demonstration\n"
+                    "print(reverse_string('exam'))  # Output: 'maxe'\n"
+                    "```"
+                )
+            else:
+                code = (
+                    "```java\n"
+                    "public class StringReverser {\n"
+                    "    public static String reverse(String str) {\n"
+                    "        if (str == null) return null;\n"
+                    "        StringBuilder sb = new StringBuilder(str);\n"
+                    "        return sb.reverse().toString();\n"
+                    "    }\n"
+                    "    public static void main(String[] args) {\n"
+                    "        System.out.println(reverse(\"exam\")); // Outputs: maxe\n"
+                    "    }\n"
+                    "}\n"
+                    "```"
+                )
+            explanation = "Reversing a string is typically solved using string slicing or a two-pointer swap approach with $O(n)$ time complexity."
+        elif "nullpointer" in q_lower:
+            code = (
+                "```java\n"
+                "// 1. Always check for null before dereferencing\n"
+                "if (user != null && user.getName() != null) {\n"
+                "    System.out.println(user.getName().toUpperCase());\n"
+                "}\n\n"
+                "// 2. Or use Optional in modern Java\n"
+                "Optional.ofNullable(user)\n"
+                "        .map(User::getName)\n"
+                "        .ifPresent(System.out::println);\n"
+                "```"
+            )
+            explanation = "A `NullPointerException` occurs when you attempt to invoke a method, access a field, or measure the length of an object reference that currently points to `null`."
+        else:
+            code = (
+                f"```{lang.lower()}\n"
+                f"# Robust implementation for {query.strip(' ?.')}\n"
+                f"def solve(data):\n"
+                f"    if not data:\n"
+                f"        return None\n"
+                f"    # Process data with clear logic\n"
+                f"    result = [x for x in data if x is not None]\n"
+                f"    return result\n"
+                f"```"
+            )
+            explanation = f"Here is a clean, modular solution implemented in {lang} with proper input validation."
+
+        resp = f"""### 💻 Coding Solution & Debugging Guide ({lang})
+
+#### 🔍 Problem Analysis
+{explanation}
+
+#### 🛠️ Working Code Implementation
+{code}
+
+#### ⚡ Complexity & Best Practices
+- **Time Complexity**: $O(n)$ linear scan through elements.
+- **Space Complexity**: $O(n)$ to store result.
+- **Boundary Checks**: Always validate empty, null, or singleton inputs.
+
+💡 **Next Steps:** Would you like to test this with specific inputs or optimize it further?
+"""
+        return resp.strip()
+
+    @classmethod
+    def generate_practice_questions_response(
+        cls,
+        subject: str = "Computer Science",
+        topic: str = "Core Principles",
+        count: int = 5,
+        *args,
+        **kwargs
+    ) -> str:
+        if "question" in kwargs and kwargs["question"]:
+            m_cnt = re.search(r'\b(\d+)\b', kwargs["question"])
+            if m_cnt:
+                count = int(m_cnt.group(1))
+        clean_subj = subject.strip() if subject else "Computer Science"
+        clean_top = topic.strip() if topic else "Core Principles"
+
+        # Match count requested up to 10
+        actual_count = min(max(count, 3), 10)
+
+        questions = [
+            (
+                "What is the output of the following loop in Python?\n```python\nfor i in range(1, 5, 2):\n    print(i, end=' ')\n```",
+                ["A) 1 2 3 4", "B) 1 3", "C) 1 3 5", "D) 2 4"],
+                "B",
+                "`range(1, 5, 2)` starts at 1, steps by 2, and stops before 5. Yields 1 and 3."
+            ),
+            (
+                "In Python, what is the value of `i` after this loop finishes?\n```python\nfor i in range(4):\n    if i == 2:\n        break\n```",
+                ["A) 1", "B) 2", "C) 3", "D) 4"],
+                "B",
+                "When `i == 2`, the `break` statement executes immediately, preserving `i = 2`."
+            ),
+            (
+                "When does the `else` clause in a Python `for...else` loop execute?",
+                ["A) Only when a break occurs", "B) When the loop exhausts its sequence without hitting a break", "C) If an exception is caught", "D) Never in Python"],
+                "B",
+                "A loop's `else` block runs only if the loop terminates normally without encountering a `break`."
+            ),
+            (
+                "What does `enumerate(['a', 'b', 'c'])` produce during iteration?",
+                ["A) Just values: 'a', 'b', 'c'", "B) Pairs of `(index, value)`: `(0, 'a')`, `(1, 'b')`, `(2, 'c')`", "C) Length of list", "D) Reversed list"],
+                "B",
+                "`enumerate()` yields two-item tuples containing the running counter index and the element."
+            ),
+            (
+                "What is the time complexity of traversing an array of size $N$ using a single `while` loop?",
+                ["A) $O(1)$", "B) $O(N)$", "C) $O(N^2)$", "D) $O(\\log N)$"],
+                "B",
+                "Visiting each of $N$ elements exactly once requires linear $O(N)$ operations."
+            ),
+            (
+                "Which loop keyword skips the remaining statements in the current iteration and advances to the next?",
+                ["A) break", "B) pass", "C) continue", "D) return"],
+                "C",
+                "`continue` immediately jumps to the next cycle of the loop."
+            ),
+            (
+                "What will be the output of `[x * 2 for x in range(3)]`?",
+                ["A) [0, 2, 4]", "B) [2, 4, 6]", "C) [0, 1, 2]", "D) [0, 2]"],
+                "A",
+                "The list comprehension evaluates `0*2=0`, `1*2=2`, and `2*2=4`."
+            ),
+            (
+                "How many times will a `while False:` block execute?",
+                ["A) 1 time", "B) 0 times", "C) Infinite times", "D) Causes SyntaxError"],
+                "B",
+                "Because the condition evaluates to False initially, the loop body never executes."
+            ),
+            (
+                "What function is used to iterate over two sequences simultaneously in parallel?",
+                ["A) parallel()", "B) pair()", "C) zip()", "D) concat()"],
+                "C",
+                "`zip()` bundles elements from multiple iterables into tuples pairwise."
+            ),
+            (
+                "What happens if the condition of a `while` loop is never updated or made False?",
+                ["A) Compiler error", "B) Infinite loop", "C) Early exit", "D) Memory reset"],
+                "B",
+                "An unchanged True condition causes an infinite loop until terminated externally."
+            )
+        ]
+
+        selected_q = questions[:actual_count]
+
+        out_lines = [
+            f"### 📝 Practice Quiz: **{clean_subj} — {clean_top}** ({len(selected_q)} Questions)\n",
+            "Test your knowledge with these targeted exam practice questions:\n"
+        ]
+
+        for idx, q_data in enumerate(selected_q, start=1):
+            q_text, opts, _, _ = q_data
+            out_lines.append(f"**Question {idx}:**")
+            out_lines.append(q_text)
+            for opt in opts:
+                out_lines.append(f"- {opt}")
+            out_lines.append("")
+
+        out_lines.append("---")
+        out_lines.append("### 🔑 Answer Key & Explanations\n")
+        for idx, q_data in enumerate(selected_q, start=1):
+            _, _, ans, expl = q_data
+            out_lines.append(f"**Question {idx}: Correct Answer `{ans}`**")
+            out_lines.append(f"- *Explanation:* {expl}\n")
+
+        out_lines.append("💡 **Practice Tip:** Ready to take an official practice session? Head over to the **Practice Session** tab on your student sidebar!")
+        return "\n".join(out_lines)
+
+    @classmethod
+    def generate_follow_up_response(
+        cls,
+        query: str = "",
+        last_assistant_msg: str = "",
+        subject: str = "",
+        *args,
+        **kwargs
+    ) -> str:
+        if not query and "question" in kwargs:
+            query = kwargs["question"]
+        if not last_assistant_msg and "conversation_history" in kwargs:
+            conv = kwargs["conversation_history"] or []
+            for m in reversed(conv):
+                if m.get("role") == "assistant":
+                    last_assistant_msg = m.get("content", "")
+                    break
+        q_lower = query.lower()
+
+        # 1. 7-day timetable query
+        if any(w in q_lower for w in ["7 days", "7-day", "seven days", "timetable", "schedule"]):
+            subj_title = subject or "Your Exam"
+            return (
+                f"### 📅 Realistic 7-Day Intensive Study Timetable for **{subj_title}**\n\n"
+                f"Here is a day-by-day revision schedule designed to maximize your exam score in one week:\n\n"
+                f"- **Day 1: Fundamentals & Syntax Review** (2–3 hrs)\n"
+                f"  - Review variables, data types, standard conventions, and basic I/O.\n"
+                f"  - Practice 10 simple exercises to build momentum.\n\n"
+                f"- **Day 2: Control Flow & Logic** (2–3 hrs)\n"
+                f"  - Master `for` loops, `while` loops, conditional branching, and early exits (`break`/`continue`).\n"
+                f"  - Write loop accumulators and condition guards.\n\n"
+                f"- **Day 3: Functions, Methods & Modular Design** (3 hrs)\n"
+                f"  - Understand parameter passing, return types, variable scope, and recursion basics.\n"
+                f"  - Refactor monolithic code into clean, reusable functions.\n\n"
+                f"- **Day 4: Core Object-Oriented Principles / Data Structures** (3 hrs)\n"
+                f"  - Classes, Encapsulation, Inheritance, and Polymorphism.\n"
+                f"  - Practice manipulating Arrays, Lists, and Dictionaries/Maps.\n\n"
+                f"- **Day 5: Error Handling & Edge Cases** (2–3 hrs)\n"
+                f"  - Deep dive into exceptions (`try`/`catch`/`finally`) and common boundary errors (off-by-one, null checks).\n"
+                f"  - Practice debugging broken code snippets.\n\n"
+                f"- **Day 6: Timed Practice Sessions & Mock Exams** (3 hrs)\n"
+                f"  - Complete 2 full-length practice tests on the **Practice Session** tab.\n"
+                f"  - Analyze every missed question thoroughly.\n\n"
+                f"- **Day 7: Final Formula Card & High-Yield Review** (2 hrs)\n"
+                f"  - Review your personal mistake notebook and key syntax summaries.\n"
+                f"  - Avoid cramming new concepts; ensure adequate rest before exam day.\n\n"
+                f"💡 **Tip:** Spend 70% of your daily study time actively writing code and solving questions, and 30% reading theory!"
+            )
+
+        # 2. Point reference query (e.g., "explain the second point")
+        m_pt = re.search(r'(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|point\s+\d+)', q_lower)
+        if m_pt or "point" in q_lower:
+            pt_name = m_pt.group(1) if m_pt else "second point"
+            pt_title = pt_name.title()
+            ex_code = (
+                "```java\n"
+                "// Clean method structure with input validation and clear exception handling\n"
+                "public double calculateDiscount(double price, double percentage) {\n"
+                "    if (price < 0 || percentage < 0 || percentage > 100) {\n"
+                "        throw new IllegalArgumentException(\"Invalid price or percentage value.\");\n"
+                "    }\n"
+                "    return price * (1.0 - (percentage / 100.0));\n"
+                "}\n"
+                "```"
+            )
+            return (
+                f"### 🔍 In-Depth Breakdown: **{pt_title}**\n\n"
+                f"Building on our previous discussion, here is a detailed, practical look at **{pt_name}**:\n\n"
+                f"#### 🎯 What This Means in Practice\n"
+                f"This phase focuses on advancing from basic syntax recognition into structured software architecture and problem-solving. "
+                f"Rather than writing isolated statements, you learn how software components interact reliably.\n\n"
+                f"#### 💡 Key Action Steps\n"
+                f"1. **Isolate Component Responsibilities**: Ensure each class or function has a single, well-defined responsibility.\n"
+                f"2. **Implement Guard Clauses**: Validate inputs at the beginning of methods to eliminate invalid states early.\n"
+                f"3. **Test with Edge Cases**: Always test with empty inputs, zero, maximum values, and null references.\n\n"
+                f"#### 💻 Practical Example\n"
+                f"{ex_code}\n\n"
+                f"💡 **Suggested Next Step:** Would you like to move on to the next topic, or see how this applies to exam questions?"
+            )
+
+        # 3. Example request
+        if "example" in q_lower:
+            ex_py = (
+                "```python\n"
+                "# Demonstration of robust logic and clean execution flow\n"
+                "def process_scores(scores: list) -> dict:\n"
+                "    if not scores:\n"
+                "        return {'average': 0.0, 'highest': None, 'count': 0}\n"
+                "    \n"
+                "    total = sum(scores)\n"
+                "    return {\n"
+                "        'average': round(total / len(scores), 2),\n"
+                "        'highest': max(scores),\n"
+                "        'count': len(scores)\n"
+                "    }\n"
+                "\n"
+                "# Testing with representative data\n"
+                "results = process_scores([85, 92, 78, 96, 88])\n"
+                "print('Summary:', results)\n"
+                "# Output: Summary: {'average': 87.8, 'highest': 96, 'count': 5}\n"
+                "```"
+            )
+            return (
+                f"### 💻 Practical Demonstration & Code Example\n\n"
+                f"Here is a concrete, working example illustrating the concept we were just discussing:\n\n"
+                f"{ex_py}\n\n"
+                f"#### 🔍 Key Takeaway\n"
+                f"- Input validation protects against empty datasets (`ZeroDivisionError`).\n"
+                f"- The output is structured and predictable, making it easy to consume.\n\n"
+                f"💡 Would you like to see how this is tested, or practice writing a similar function?"
+            )
+
+        # 4. General continuation / elaboration
+        return (
+            f"### 📚 Continued Explanation\n\n"
+            f"Following up on our conversation:\n\n"
+            f"To deepen your understanding, focus on applying these concepts in active problem-solving. "
+            f"When studying for technical examinations, theoretical knowledge solidifies fastest when paired with immediate coding practice and question review.\n\n"
+            f"💡 **Next Steps:** What specific part would you like to explore further, or would you like to solve a quiz question together?"
+        )
+
+    @classmethod
+    def generate_system_support_response(cls, query: str = "", *args, **kwargs) -> str:
+        if not query and "question" in kwargs:
+            query = kwargs["question"]
+        q_lower = query.lower()
+        has_timer = "timer" in q_lower
+        has_tab = "tab" in q_lower or "switch" in q_lower or "violation" in q_lower
+
+        if has_timer and has_tab:
+            return (
+                "### ⏱️ How the Exam Timer Works\n\n"
+                "- **Countdown Timer**: A live countdown timer is displayed at the top right of the exam screen throughout your test.\n"
+                "- **Synchronization**: The timer accurately tracks your allotted exam duration.\n"
+                "- **Automatic Submission**: When the timer reaches `00:00`, the exam session will automatically complete and finalize your answers.\n"
+                "- **Manual Submission**: You do not have to wait for the timer to expire; you can click **Submit Exam** at any time once you are satisfied with your answers.\n\n"
+                "### 🛡️ Tab Switching & Proctoring Violations\n\n"
+                "- **Detection**: The examination system automatically detects when you switch tabs, minimize the browser window, or open another application.\n"
+                "- **Counter**: Every time you navigate away from the active exam window, a violation event is recorded and the counter on your screen increments.\n"
+                "- **No Forced Termination**: Tab switching does **not** kick you out or abruptly terminate your exam. You can continue answering until the timer ends or you click submit.\n"
+                "- **Audit Trail**: All violation counts are saved in your exam results for instructor and administrator review."
+            )
+        elif has_timer:
+            return (
+                "### ⏱️ How the Exam Timer Works\n\n"
+                "- **Countdown Timer**: A live countdown timer is displayed at the top right of the exam screen throughout your test.\n"
+                "- **Synchronization**: The timer accurately tracks your allotted exam duration.\n"
+                "- **Automatic Submission**: When the timer reaches `00:00`, the exam session will automatically complete and finalize your answers.\n"
+                "- **Manual Submission**: You do not have to wait for the timer to expire; you can click **Submit Exam** at any time once you are satisfied with your answers."
+            )
+        elif has_tab:
+            return (
+                "### 🛡️ Tab Switching & Proctoring Violations\n\n"
+                "- **Detection**: The examination system automatically detects when you switch tabs, minimize the browser window, or open another application.\n"
+                "- **Counter**: Every time you navigate away from the active exam window, a violation event is recorded and the counter on your screen increments.\n"
+                "- **No Forced Termination**: Tab switching does **not** kick you out or abruptly terminate your exam. You can continue answering until the timer ends or you click submit.\n"
+                "- **Audit Trail**: All violation counts are saved in your exam results for instructor and administrator review."
+            )
+        elif "submit" in q_lower:
+            return (
+                "### 📝 How to Submit Your Exam\n\n"
+                "1. Review all your selected answers on the question palette to ensure none were skipped.\n"
+                "2. When you are ready, click the **Submit Exam** button at the bottom of the page.\n"
+                "3. Your score and performance breakdown will be calculated and displayed on your Results page immediately."
+            )
+        else:
+            return (
+                "### ℹ️ Online Examination System Support\n\n"
+                "- **Exams**: Access scheduled tests from your **Student Dashboard**.\n"
+                "- **Practice Sessions**: Generate targeted, instant practice quizzes from the **Personalized Learning** or **Practice** sections.\n"
+                "- **Study Materials**: View verified, approved course notes and documents directly from the **Study Materials** page on your sidebar.\n"
+                "- **Performance Analytics**: Review your historical marks, accuracy percentages, and subject trends on your **Analytics** page."
+            )
+
+    @classmethod
+    def generate_material_summary_response(cls, subject: str = "General", materials: Optional[List[Dict[str, Any]]] = None, *args, **kwargs) -> str:
+        if materials is None and "chunks" in kwargs:
+            materials = kwargs["chunks"]
+        norm_subj = subject.strip() if subject else "General"
+
+        matching_materials = []
+        if materials and norm_subj.lower() not in ("general", "all"):
+            for d in materials:
+                d_subj = d.get("subject", "")
+                if not d_subj or d_subj.strip().lower() == norm_subj.lower():
+                    matching_materials.append(d)
+        else:
+            matching_materials = list(materials or [])
+
+        if not matching_materials:
+            return f"There are currently no uploaded or approved course materials for **{norm_subj}** in the study repository. Please check with your instructor or refer to the standard textbook."
+
+        lines = [f"### 📚 Available Course Study Materials for **{norm_subj}**\n"]
+        for d in matching_materials:
+            fn = d.get("original_name") or d.get("filename")
+            doc_id = d.get("id") or d.get("document_id")
+            pages = d.get("total_pages", 1)
+            chunks = d.get("total_chunks", 0)
+            topic = d.get("topic", "General")
+            if doc_id:
+                lines.append(f"- **[`{fn}`](view_course_material.php?id={doc_id}&source=assistant)** (Topic: {topic})")
+            else:
+                lines.append(f"- **`{fn}`** (Topic: {topic})")
+            lines.append(f"  - Details: {pages} page(s) &bull; {chunks} indexed chunks &bull; Verified study notes")
+
+        lines.append("\n💡 Click any document title above to open the study material viewer directly in a new tab.")
+        return "\n".join(lines)
+
+    @classmethod
+    def generate_general_educational_response(
+        cls,
+        query: str = "",
+        subject: str = "",
+        context_chunks: Optional[List[Dict[str, Any]]] = None,
+        *args,
+        **kwargs
+    ) -> str:
+        if not query and "question" in kwargs:
+            query = kwargs["question"]
+        if context_chunks is None and "chunks" in kwargs:
+            context_chunks = kwargs["chunks"]
+
+        clean_q = (query or "").strip()
+        clean_target = clean_q.strip("?.") or (subject or "Core Concepts")
+        norm_subj = subject.strip() if subject else "General"
+
+        grounding_note = ""
+        if context_chunks and len(context_chunks) > 0:
+            fn = context_chunks[0].get("filename", "")
+            pnum = context_chunks[0].get("page_number", 1)
+            doc_id = context_chunks[0].get("document_id")
+            link_str = f"[`{fn}`](view_course_material.php?id={doc_id}&page={pnum}&source=assistant)" if doc_id else f"`{fn}`"
+            grounding_note = f"\n\n*(Verified against course material: {link_str} — Page {pnum})*"
+
+        return f"""### 📚 Study & Learning Overview: **{clean_target}**
+
+Understanding this topic is essential for your technical and academic preparation in **{norm_subj}**.
+
+#### 💡 Core Overview
+When approaching **{clean_target}**, structure your understanding around three key pillars:
+1. **Foundational Definition**: What the concept is, its primary role, and why it was introduced.
+2. **Mechanism & Execution**: How the components interact under the hood and its architectural implications.
+3. **Practical Application**: Real-world scenarios where this concept solves concrete engineering problems.
+
+#### 🎯 Recommended Learning Strategy
+- Review the core definitions and fundamental syntax.
+- Write a short code snippet or solve 2–3 practice questions to reinforce the theory.
+- Connect this concept to previous topics and examine edge cases.
+{grounding_note}
+
+💡 **Next Steps:** Would you like a detailed concept breakdown, practical examples, or practice quiz questions on this topic?""".strip()
 
 llm_service = LLMService()

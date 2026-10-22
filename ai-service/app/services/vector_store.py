@@ -84,7 +84,8 @@ class ChromaVectorStoreManager:
 
     def __init__(self):
         os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)
-        self.client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
+        chroma_settings = chromadb.config.Settings(anonymized_telemetry=False, is_persistent=True)
+        self.client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR, settings=chroma_settings)
 
         # Ensure shared embedding model is loaded once
         EmbeddingModelManager.get_instance()
