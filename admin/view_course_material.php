@@ -20,6 +20,7 @@ $renderedHtml = '';
  * Robust, XSS-safe Markdown to HTML parser for study materials.
  * Escapes all text elements before wrapping in semantic HTML tags.
  */
+if (!function_exists('renderStudyMaterialMarkdown')) {
 function renderStudyMaterialMarkdown(string $md): string {
     $md = str_replace(["\r\n", "\r"], "\n", $md);
     $lines = explode("\n", $md);
@@ -222,6 +223,7 @@ function renderStudyMaterialMarkdown(string $md): string {
     }
 
     return implode("\n", $html);
+}
 }
 
 // Process Document Retrieval

@@ -59,6 +59,25 @@ if ($res_users) {
     }
 }
 
+// Preload lookup map of authorized/ingested study materials for clickable links
+$docLookup = [
+    'by_id' => [],
+    'by_name' => []
+];
+$res_docs = $conn->query("SELECT id, filename, original_name, subject, topic FROM ai_documents WHERE status = 'ingested'");
+if ($res_docs) {
+    while ($d = $res_docs->fetch_assoc()) {
+        $d_id = (int)$d['id'];
+        $docLookup['by_id'][$d_id] = $d;
+        if (!empty($d['filename'])) {
+            $docLookup['by_name'][strtolower($d['filename'])] = $d;
+        }
+        if (!empty($d['original_name'])) {
+            $docLookup['by_name'][strtolower($d['original_name'])] = $d;
+        }
+    }
+}
+
 // Initialize chat history in session
 if (!isset($_SESSION['study_assistant_history']) || !is_array($_SESSION['study_assistant_history'])) {
     $_SESSION['study_assistant_history'] = [];
@@ -129,75 +148,161 @@ if ($stmt_p) {
 $question_input = "";
 $error_message = "";
 
+$is_ajax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') ||
+           (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $submitted_token = $_POST['csrf_token'] ?? '';
     if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $submitted_token)) {
         $error_message = "Invalid CSRF security token.";
+        if ($is_ajax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['status' => 'error', 'message' => $error_message]);
+            exit();
+        }
     } elseif (!empty($_POST['question'])) {
         $question_input = trim($_POST['question']);
 
-    // Authoritative dynamic subject resolution from database exams, titles, aliases, or query
-    $resolution = SubjectResolver::resolve($conn, $question_input);
+        // Authoritative dynamic subject resolution from database exams, titles, aliases, or query
+        $resolution = SubjectResolver::resolve($conn, $question_input);
 
-    if ($resolution['status'] === 'ambiguous') {
-        // Short clarification prompt instead of retrieving unrelated content
-        $subjs = $resolution['subjects'];
-        $subjsText = implode(' and ', $subjs);
-        $subjsOr = implode(' or ', $subjs);
-        $clarificationMsg = "It looks like your question mentions multiple subjects ({$subjsText}). Which subject would you like help with? Please specify either {$subjsOr} so I can provide the right exam questions, performance insights, and course materials.";
+        if ($resolution['status'] === 'ambiguous') {
+            // Short clarification prompt instead of retrieving unrelated content
+            $subjs = $resolution['subjects'];
+            $subjsText = implode(' and ', $subjs);
+            $subjsOr = implode(' or ', $subjs);
+            $clarificationMsg = "It looks like your question mentions multiple subjects ({$subjsText}). Which subject would you like help with? Please specify either {$subjsOr} so I can provide the right exam questions, performance insights, and course materials.";
 
-        $_SESSION['study_assistant_history'][] = [
-            'question' => $question_input,
-            'answer' => $clarificationMsg,
-            'sources' => [],
-            'has_sufficient_context' => false,
-            'is_conversational' => true,
-            'intent' => 'clarification',
-            'time' => date('h:i A')
-        ];
-        $question_input = "";
-    } else {
-        $resolvedSubject = $resolution['subject'] ?? null;
-        $topic = null;
-
-        // Enrich user_context with subject-specific exam question counts & student stats
-        $callUserContext = $user_context;
-        if ($resolvedSubject !== null) {
-            $subjSummary = SubjectResolver::getSubjectSummary($conn, $resolvedSubject, $user_id);
-            $callUserContext['subject_summary'] = $subjSummary;
-        }
-
-        $aiClient = new AiClient();
-        $res = $aiClient->askRAG(
-            question: $question_input,
-            subject: $resolvedSubject,
-            topic: $topic,
-            topK: 5,
-            threshold: null,
-            studentId: $user_id,
-            history: $history,
-            userContext: $callUserContext,
-            systemStats: $system_stats,
-            otherUsersInfo: $other_users_info
-        );
-
-        if ($res['status'] === 'success') {
-            $rag_data = $res['data'] ?? [];
+            $turn_time = date('h:i A');
             $_SESSION['study_assistant_history'][] = [
                 'question' => $question_input,
-                'answer' => $rag_data['answer'] ?? "I couldn't process an answer at this time.",
-                'sources' => $rag_data['sources'] ?? [],
-                'has_sufficient_context' => $rag_data['has_sufficient_context'] ?? false,
-                'is_conversational' => $rag_data['is_conversational'] ?? false,
-                'intent' => $rag_data['intent'] ?? 'academic_question',
-                'time' => date('h:i A')
+                'answer' => $clarificationMsg,
+                'sources' => [],
+                'has_sufficient_context' => false,
+                'is_conversational' => true,
+                'intent' => 'clarification',
+                'time' => $turn_time
             ];
+
+            if ($is_ajax) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode([
+                    'status' => 'success',
+                    'question' => $question_input,
+                    'answer' => render_chat_markdown($clarificationMsg, $docLookup),
+                    'sources' => [],
+                    'time' => $turn_time
+                ]);
+                exit();
+            }
             $question_input = "";
         } else {
-            $error_message = $res['message'] ?? "The AI Assistant is currently unavailable. Please check that the AI service is running.";
+            $resolvedSubject = $resolution['subject'] ?? null;
+            $topic = null;
+
+            // If no subject explicitly resolved in this turn, check previous turns in session history
+            if ($resolvedSubject === null && !empty($_SESSION['study_assistant_history'])) {
+                for ($i = count($_SESSION['study_assistant_history']) - 1; $i >= 0; $i--) {
+                    if (!empty($_SESSION['study_assistant_history'][$i]['subject'])) {
+                        $resolvedSubject = $_SESSION['study_assistant_history'][$i]['subject'];
+                        break;
+                    }
+                }
+            }
+
+            // Build recent conversation context window (last 6 messages)
+            $conversationHistory = [];
+            $recentTurns = array_slice($_SESSION['study_assistant_history'] ?? [], -6);
+            foreach ($recentTurns as $turn) {
+                if (!empty($turn['question'])) {
+                    $conversationHistory[] = ['role' => 'user', 'content' => (string)$turn['question']];
+                }
+                if (!empty($turn['answer'])) {
+                    $conversationHistory[] = ['role' => 'assistant', 'content' => (string)$turn['answer']];
+                }
+            }
+
+            // Enrich user_context with subject-specific exam question counts & student stats
+            $callUserContext = $user_context;
+            if ($resolvedSubject !== null) {
+                $subjSummary = SubjectResolver::getSubjectSummary($conn, $resolvedSubject, $user_id);
+                $callUserContext['subject_summary'] = $subjSummary;
+            }
+
+            $aiClient = new AiClient();
+            $res = $aiClient->askRAG(
+                question: $question_input,
+                subject: $resolvedSubject,
+                topic: $topic,
+                topK: 5,
+                threshold: null,
+                studentId: $user_id,
+                history: $history,
+                userContext: $callUserContext,
+                systemStats: $system_stats,
+                otherUsersInfo: $other_users_info,
+                conversationHistory: $conversationHistory
+            );
+
+            if ($res['status'] === 'success') {
+                $rag_data = $res['data'] ?? [];
+                $turn_time = date('h:i A');
+                $raw_answer = $rag_data['answer'] ?? "I couldn't process an answer at this time.";
+                $raw_sources = $rag_data['sources'] ?? [];
+
+                $_SESSION['study_assistant_history'][] = [
+                    'question' => $question_input,
+                    'answer' => $raw_answer,
+                    'sources' => $raw_sources,
+                    'has_sufficient_context' => $rag_data['has_sufficient_context'] ?? false,
+                    'is_conversational' => $rag_data['is_conversational'] ?? false,
+                    'intent' => $rag_data['intent'] ?? 'academic_question',
+                    'subject' => $resolvedSubject,
+                    'time' => $turn_time
+                ];
+
+                if ($is_ajax) {
+                    $formatted_sources = [];
+                    foreach ($raw_sources as $src) {
+                        $srcDocId = (int)($src['document_id'] ?? 0);
+                        $srcFname = $src['filename'] ?? '';
+                        $srcPnum = max(1, (int)($src['page_number'] ?? 1));
+                        if ($srcDocId <= 0 && isset($docLookup['by_name'][strtolower($srcFname)])) {
+                            $srcDocId = (int)$docLookup['by_name'][strtolower($srcFname)]['id'];
+                        }
+                        $viewLink = $srcDocId > 0
+                            ? "view_course_material.php?id={$srcDocId}&page={$srcPnum}&source=assistant"
+                            : "view_course_material.php?file=" . urlencode($srcFname) . "&page={$srcPnum}&source=assistant";
+                        $formatted_sources[] = [
+                            'filename' => $srcFname,
+                            'page_number' => $srcPnum,
+                            'document_id' => $srcDocId,
+                            'view_link' => $viewLink
+                        ];
+                    }
+
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode([
+                        'status' => 'success',
+                        'question' => $question_input,
+                        'answer' => render_chat_markdown($raw_answer, $docLookup),
+                        'raw_answer' => $raw_answer,
+                        'sources' => $formatted_sources,
+                        'time' => $turn_time
+                    ]);
+                    exit();
+                }
+                $question_input = "";
+            } else {
+                $error_message = $res['message'] ?? "The AI Assistant is currently unavailable. Please check that the AI service is running.";
+                if ($is_ajax) {
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(['status' => 'error', 'message' => $error_message]);
+                    exit();
+                }
+            }
         }
     }
-}
 }
 ?>
 <!DOCTYPE html>
@@ -273,6 +378,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             gap: 6px;
             font-weight: 500;
         }
+        .citation-badge-link {
+            transition: all 0.2s ease;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .citation-badge-link:hover {
+            background: #dbeafe;
+            border-color: #93c5fd;
+            color: #1e40af;
+            box-shadow: 0 2px 6px rgba(29, 78, 216, 0.15);
+            transform: translateY(-1px);
+        }
+        .material-link {
+            color: #0d6efd;
+            text-decoration: underline;
+            font-weight: 600;
+            transition: color 0.15s ease;
+        }
+        .material-link:hover {
+            color: #0a58ca;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -308,9 +435,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <p class="mb-0 small fw-medium">No messages yet. Type your message below to start chatting with the AI Assistant!</p>
                 </div>
             <?php else: ?>
-                <?php foreach ($_SESSION['study_assistant_history'] as $msg): ?>
+                <?php 
+                $totalHistory = count($_SESSION['study_assistant_history']);
+                foreach ($_SESSION['study_assistant_history'] as $idx => $msg): 
+                    $isLatest = ($idx === $totalHistory - 1);
+                ?>
                     <!-- User Message -->
-                    <div class="d-flex justify-content-end mb-3">
+                    <div class="d-flex justify-content-end mb-3 chat-msg-row chat-msg-user">
                         <div class="user-bubble shadow-sm">
                             <div class="small text-white-50 fw-semibold mb-1"><i class="fa-solid fa-user me-1"></i>👤 You</div>
                             <div class="lh-base"><?= htmlspecialchars($msg['question']) ?></div>
@@ -318,14 +449,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
 
                     <!-- Assistant Message -->
-                    <div class="d-flex justify-content-start mb-4">
+                    <div class="d-flex justify-content-start mb-4 chat-msg-row chat-msg-assistant" <?= ($isLatest) ? 'id="latest-assistant-response"' : '' ?>>
                         <div class="assistant-bubble">
                             <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
                                 <span class="fw-bold text-dark small"><i class="fa-solid fa-robot text-primary me-2"></i>🤖 AI Assistant</span>
                                 <small class="text-muted" style="font-size: 0.75rem;"><?= htmlspecialchars($msg['time']) ?></small>
                             </div>
                             <div class="text-dark lh-base">
-                                <?= render_chat_markdown($msg['answer']) ?>
+                                <?= render_chat_markdown($msg['answer'], $docLookup) ?>
                             </div>
 
                             <!-- Source Citations -->
@@ -334,10 +465,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <div class="fw-semibold text-muted small mb-2"><i class="fa-solid fa-bookmark text-primary me-1"></i>Sources:</div>
                                     <div class="d-flex flex-wrap gap-2">
                                         <?php foreach ($msg['sources'] as $src): ?>
-                                            <div class="citation-badge">
+                                            <?php
+                                             $srcDocId = (int)($src['document_id'] ?? 0);
+                                             $srcFname = $src['filename'] ?? '';
+                                             $srcPnum = max(1, (int)($src['page_number'] ?? 1));
+                                             if ($srcDocId <= 0 && isset($docLookup['by_name'][strtolower($srcFname)])) {
+                                                 $srcDocId = (int)$docLookup['by_name'][strtolower($srcFname)]['id'];
+                                             }
+                                             $viewLink = $srcDocId > 0
+                                                 ? "view_course_material.php?id={$srcDocId}&page={$srcPnum}&source=assistant"
+                                                 : "view_course_material.php?file=" . urlencode($srcFname) . "&page={$srcPnum}&source=assistant";
+                                            ?>
+                                            <a href="<?= htmlspecialchars($viewLink) ?>" target="_blank" rel="noopener noreferrer" class="citation-badge citation-badge-link" title="Open study material">
                                                 <i class="fa-solid fa-file-lines"></i>
-                                                <span><?= htmlspecialchars($src['filename']) ?> &mdash; Page <?= (int)$src['page_number'] ?></span>
-                                            </div>
+                                                <span><?= htmlspecialchars($srcFname) ?> &mdash; Page <?= $srcPnum ?></span>
+                                                <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size: 0.72rem; opacity: 0.75;"></i>
+                                            </a>
                                         <?php endforeach; ?>
                                     </div>
                                 </div>
@@ -350,14 +493,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <!-- Question Input Card -->
         <div class="chat-card shadow-sm p-4">
-            <form method="POST" action="">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+            <form id="chat-form" method="POST" action="">
+                <input type="hidden" name="csrf_token" id="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                 <div class="mb-3">
-                    <label class="form-label fw-semibold text-dark">Your Message</label>
-                    <textarea name="question" class="form-control" rows="3" placeholder="Ask me anything about your exams, performance, studies, or the examination system..." required><?= htmlspecialchars($question_input) ?></textarea>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label fw-semibold text-dark mb-0">Your Message</label>
+                        <small class="text-muted"><kbd class="bg-light text-dark border">Enter</kbd> to send &middot; <kbd class="bg-light text-dark border">Shift + Enter</kbd> for newline</small>
+                    </div>
+                    <textarea id="chat-textarea" name="question" class="form-control" rows="3" placeholder="Ask me anything about your exams, performance, studies, or the examination system..." required><?= htmlspecialchars($question_input) ?></textarea>
                 </div>
 
-                <button type="submit" class="btn btn-primary fw-semibold px-4 py-2">
+                <button type="submit" id="chat-submit-btn" class="btn btn-primary fw-semibold px-4 py-2">
                     <i class="fa-solid fa-paper-plane me-2"></i>Ask Study Assistant
                 </button>
             </form>
@@ -368,35 +514,247 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-function scrollChatToBottom(smooth = true) {
-    const chatContainer = document.getElementById('chat-container');
-    if (!chatContainer) return;
+const chatContainer = document.getElementById('chat-container');
+const chatForm = document.getElementById('chat-form');
+const chatTextarea = document.getElementById('chat-textarea');
+const chatSubmitBtn = document.getElementById('chat-submit-btn');
+const csrfTokenInput = document.getElementById('csrf_token');
 
-    requestAnimationFrame(() => {
+let isSubmitting = false;
+
+/**
+ * Positions the chat-container at the top of the latest assistant response
+ * so the student can read from line 1, without scrolling the main document window.
+ */
+function positionChatAtLatestResponse(smooth = true) {
+    if (!chatContainer) return;
+    const latestResponse = document.getElementById('latest-assistant-response');
+    if (!latestResponse) {
         chatContainer.scrollTo({
             top: chatContainer.scrollHeight,
             behavior: smooth ? 'smooth' : 'auto'
         });
+        return;
+    }
+
+    // Target the user question right above the assistant response so both the question and answer start are visible
+    let anchorElem = latestResponse;
+    const prevElem = latestResponse.previousElementSibling;
+    if (prevElem && prevElem.classList.contains('chat-msg-user')) {
+        anchorElem = prevElem;
+    }
+
+    // Calculate position strictly relative to chatContainer scroll viewport using getBoundingClientRect
+    const containerRect = chatContainer.getBoundingClientRect();
+    const targetRect = anchorElem.getBoundingClientRect();
+    const targetTop = targetRect.top - containerRect.top + chatContainer.scrollTop - 10;
+    chatContainer.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: smooth ? 'smooth' : 'auto'
     });
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    scrollChatToBottom(false);
-    setTimeout(function() {
-        scrollChatToBottom(true);
-    }, 100);
-});
+/**
+ * Escapes HTML characters for safe client-side insertion of user questions
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
-window.addEventListener('load', function() {
-    scrollChatToBottom(true);
-});
+/**
+ * Handles message submission via AJAX with immediate user message display,
+ * enter-to-send, loading indicator, and scroll positioning at line 1 of the AI answer.
+ */
+function submitChat() {
+    if (isSubmitting) return;
+    const questionText = chatTextarea ? chatTextarea.value.trim() : '';
+    if (!questionText) return;
 
-const chatForm = document.querySelector('form');
+    isSubmitting = true;
+    if (chatSubmitBtn) {
+        chatSubmitBtn.disabled = true;
+        chatSubmitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Thinking...';
+    }
+    if (chatTextarea) {
+        chatTextarea.disabled = true;
+    }
+
+    // 1. Remove initial empty placeholder if present
+    const placeholder = chatContainer.querySelector('.text-center.text-muted');
+    if (placeholder) {
+        placeholder.remove();
+    }
+
+    // 2. Remove latest-assistant-response ID from any previous turn
+    const prevLatest = document.getElementById('latest-assistant-response');
+    if (prevLatest) {
+        prevLatest.removeAttribute('id');
+    }
+
+    // 3. Immediately display the user's message in the thread
+    const userRow = document.createElement('div');
+    userRow.className = 'd-flex justify-content-end mb-3 chat-msg-row chat-msg-user';
+    userRow.innerHTML = `
+        <div class="user-bubble shadow-sm">
+            <div class="small text-white-50 fw-semibold mb-1"><i class="fa-solid fa-user me-1"></i>👤 You</div>
+            <div class="lh-base">${escapeHtml(questionText)}</div>
+        </div>
+    `;
+    chatContainer.appendChild(userRow);
+
+    // Scroll chat container so the user's message is immediately visible
+    chatContainer.scrollTo({
+        top: chatContainer.scrollHeight,
+        behavior: 'smooth'
+    });
+
+    // 4. Show pulsing typing indicator
+    const typingIndicator = document.createElement('div');
+    typingIndicator.id = 'ai-typing-indicator';
+    typingIndicator.className = 'd-flex justify-content-start mb-4 chat-msg-row chat-msg-assistant';
+    typingIndicator.innerHTML = `
+        <div class="assistant-bubble">
+            <div class="d-flex align-items-center gap-2 text-primary small">
+                <span class="spinner-grow spinner-grow-sm" role="status"></span>
+                <span class="text-muted fw-medium fst-italic">AI Assistant is thinking...</span>
+            </div>
+        </div>
+    `;
+    chatContainer.appendChild(typingIndicator);
+
+    // 5. Build form data for submission
+    const csrfToken = csrfTokenInput ? csrfTokenInput.value : '';
+    const bodyParams = new URLSearchParams();
+    bodyParams.append('csrf_token', csrfToken);
+    bodyParams.append('question', questionText);
+
+    fetch('study_assistant.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        },
+        body: bodyParams.toString()
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('HTTP error ' + response.status);
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Remove typing indicator
+        if (typingIndicator && typingIndicator.parentNode) {
+            typingIndicator.remove();
+        }
+
+        if (data.status === 'success') {
+            const timeStr = data.time || 'Just now';
+            const answerHtml = data.answer || "I couldn't process an answer at this time.";
+            const sources = data.sources || [];
+
+            let sourcesHtml = '';
+            if (sources.length > 0) {
+                sourcesHtml += '<div class="mt-3 pt-2 border-top">';
+                sourcesHtml += '<div class="fw-semibold text-muted small mb-2"><i class="fa-solid fa-bookmark text-primary me-1"></i>Sources:</div>';
+                sourcesHtml += '<div class="d-flex flex-wrap gap-2">';
+                sources.forEach(src => {
+                    sourcesHtml += `
+                        <a href="${escapeHtml(src.view_link)}" target="_blank" rel="noopener noreferrer" class="citation-badge citation-badge-link" title="Open study material">
+                            <i class="fa-solid fa-file-lines"></i>
+                            <span>${escapeHtml(src.filename)} &mdash; Page ${src.page_number}</span>
+                            <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size: 0.72rem; opacity: 0.75;"></i>
+                        </a>
+                    `;
+                });
+                sourcesHtml += '</div></div>';
+            }
+
+            const assistantRow = document.createElement('div');
+            assistantRow.className = 'd-flex justify-content-start mb-4 chat-msg-row chat-msg-assistant';
+            assistantRow.id = 'latest-assistant-response';
+            assistantRow.innerHTML = `
+                <div class="assistant-bubble">
+                    <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
+                        <span class="fw-bold text-dark small"><i class="fa-solid fa-robot text-primary me-2"></i>🤖 AI Assistant</span>
+                        <small class="text-muted" style="font-size: 0.75rem;">${escapeHtml(timeStr)}</small>
+                    </div>
+                    <div class="text-dark lh-base">
+                        ${answerHtml}
+                    </div>
+                    ${sourcesHtml}
+                </div>
+            `;
+            chatContainer.appendChild(assistantRow);
+
+            // Position chat at line 1 of the new AI response
+            requestAnimationFrame(() => {
+                positionChatAtLatestResponse(true);
+            });
+        } else {
+            const errAlert = document.createElement('div');
+            errAlert.className = 'alert alert-warning alert-dismissible fade show shadow-sm mb-4';
+            errAlert.innerHTML = `
+                <i class="fa-solid fa-triangle-exclamation me-2"></i>${escapeHtml(data.message || 'An error occurred.')}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            chatContainer.appendChild(errAlert);
+        }
+    })
+    .catch(err => {
+        if (typingIndicator && typingIndicator.parentNode) {
+            typingIndicator.remove();
+        }
+        const errAlert = document.createElement('div');
+        errAlert.className = 'alert alert-danger alert-dismissible fade show shadow-sm mb-4';
+        errAlert.innerHTML = `
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>The AI Assistant is currently unavailable. Please verify the AI service is active.
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        chatContainer.appendChild(errAlert);
+    })
+    .finally(() => {
+        isSubmitting = false;
+        if (chatSubmitBtn) {
+            chatSubmitBtn.disabled = false;
+            chatSubmitBtn.innerHTML = '<i class="fa-solid fa-paper-plane me-2"></i>Ask Study Assistant';
+        }
+        if (chatTextarea) {
+            chatTextarea.disabled = false;
+            chatTextarea.value = '';
+            chatTextarea.focus();
+        }
+    });
+}
+
+// Enter-to-send: Enter submits, Shift+Enter inserts newline (respects IME composition)
+if (chatTextarea) {
+    chatTextarea.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+            e.preventDefault();
+            submitChat();
+        }
+    });
+}
+
+// Form submit event
 if (chatForm) {
-    chatForm.addEventListener('submit', function() {
-        scrollChatToBottom(true);
+    chatForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        submitChat();
     });
 }
+
+// Initial positioning on page load
+document.addEventListener('DOMContentLoaded', function() {
+    positionChatAtLatestResponse(false);
+});
+window.addEventListener('load', function() {
+    positionChatAtLatestResponse(false);
+});
 </script>
 </body>
 </html>

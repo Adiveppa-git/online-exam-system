@@ -102,6 +102,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
         Personalized Learning
     </a>
 
+    <a href="../student/study_materials.php" class="<?= ($current_page=='study_materials.php'||$current_page=='view_course_material.php')?'active':'' ?>">
+        Study Materials
+    </a>
+
     <a href="../student/ai_performance.php" class="<?= $current_page=='ai_performance.php'?'active':'' ?>">
         Performance Analytics
     </a>

@@ -69,6 +69,25 @@ $status = $plan_data['status'] ?? 'insufficient_data';
 $overall_accuracy = $plan_data['overall_accuracy'] ?? 0.0;
 $summary = $plan_data['summary_explanation'] ?? "Complete an exam or practice session to receive personalized recommendations.";
 $plan_items = $plan_data['plan_items'] ?? [];
+
+// Preload lookup map of authorized/ingested study materials for clickable links
+$docLookup = [
+    'by_id' => [],
+    'by_name' => []
+];
+$res_docs = $conn->query("SELECT id, filename, original_name, subject, topic FROM ai_documents WHERE status = 'ingested'");
+if ($res_docs) {
+    while ($d = $res_docs->fetch_assoc()) {
+        $d_id = (int)$d['id'];
+        $docLookup['by_id'][$d_id] = $d;
+        if (!empty($d['filename'])) {
+            $docLookup['by_name'][strtolower($d['filename'])] = $d;
+        }
+        if (!empty($d['original_name'])) {
+            $docLookup['by_name'][strtolower($d['original_name'])] = $d;
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -113,6 +132,18 @@ $plan_items = $plan_data['plan_items'] ?? [];
         .priority-border-weak { border-left: 5px solid #dc3545 !important; }
         .priority-border-dev { border-left: 5px solid #ffc107 !important; }
         .priority-border-strong { border-left: 5px solid #198754 !important; }
+        .material-link-badge {
+            transition: all 0.2s ease;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .material-link-badge:hover {
+            background-color: #e0f2fe !important;
+            border-color: #38bdf8 !important;
+            color: #0284c7 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -185,14 +216,63 @@ $plan_items = $plan_data['plan_items'] ?? [];
 
                             <!-- Course Material RAG Section -->
                             <div class="bg-light p-3 rounded mb-3">
-                                <div class="fw-semibold small text-dark mb-1"><i class="fa-solid fa-book-open me-2 text-primary"></i>Phase G Grounded Course Material:</div>
+                                <div class="fw-semibold small text-dark mb-1"><i class="fa-solid fa-book-open me-2 text-primary"></i>Grounded Course Material:</div>
                                 <div class="small text-muted mb-2"><?= htmlspecialchars($item['course_material_notice']) ?></div>
-                                <?php if ($item['has_course_material'] && !empty($item['sources'])): ?>
+                                <?php
+                                $sourcesToRender = [];
+                                $seenSources = [];
+                                if (!empty($item['sources']) && is_array($item['sources'])) {
+                                    foreach ($item['sources'] as $src) {
+                                        $srcDocId = (int)($src['document_id'] ?? 0);
+                                        $srcFname = trim($src['filename'] ?? '');
+                                        $srcPnum = max(1, (int)($src['page_number'] ?? 1));
+                                        if ($srcDocId <= 0 && !empty($srcFname) && isset($docLookup['by_name'][strtolower($srcFname)])) {
+                                            $srcDocId = (int)$docLookup['by_name'][strtolower($srcFname)]['id'];
+                                        }
+                                        $dedupKey = ($srcDocId > 0 ? "id_{$srcDocId}" : "fn_" . strtolower($srcFname)) . "_p{$srcPnum}";
+                                        if (!isset($seenSources[$dedupKey])) {
+                                            $seenSources[$dedupKey] = true;
+                                            $sourcesToRender[] = [
+                                                'document_id' => $srcDocId,
+                                                'filename' => $srcFname,
+                                                'page_number' => $srcPnum,
+                                                'display_name' => ($srcDocId > 0 && isset($docLookup['by_id'][$srcDocId]['original_name']))
+                                                    ? $docLookup['by_id'][$srcDocId]['original_name']
+                                                    : (!empty($srcFname) ? $srcFname : "Study Material #{$srcDocId}")
+                                            ];
+                                        }
+                                    }
+                                } elseif ($item['has_course_material'] && !empty($docLookup['by_id'])) {
+                                    // Fallback: match by subject/topic if flag is set but chunks array is empty
+                                    foreach ($docLookup['by_id'] as $dId => $dInfo) {
+                                        if (strcasecmp($dInfo['subject'], $item['subject']) === 0 || strcasecmp($dInfo['topic'], $item['topic']) === 0) {
+                                            $sourcesToRender[] = [
+                                                'document_id' => $dId,
+                                                'filename' => $dInfo['filename'],
+                                                'page_number' => 1,
+                                                'display_name' => $dInfo['original_name'] ?: $dInfo['filename']
+                                            ];
+                                            break;
+                                        }
+                                    }
+                                }
+                                ?>
+                                <?php if (!empty($sourcesToRender)): ?>
                                     <div class="d-flex flex-wrap gap-2">
-                                        <?php foreach ($item['sources'] as $src): ?>
-                                            <span class="badge bg-white text-primary border">
-                                                <i class="fa-solid fa-file-pdf me-1"></i><?= htmlspecialchars($src['filename']) ?> (Page <?= $src['page_number'] ?>)
-                                            </span>
+                                        <?php foreach ($sourcesToRender as $usrc): ?>
+                                            <?php
+                                            $uDocId = (int)$usrc['document_id'];
+                                            $uFname = $usrc['filename'];
+                                            $uPnum = max(1, (int)$usrc['page_number']);
+                                            $uViewLink = $uDocId > 0
+                                                ? "view_course_material.php?id={$uDocId}&page={$uPnum}&source=personalized_learning"
+                                                : "view_course_material.php?file=" . urlencode($uFname) . "&page={$uPnum}&source=personalized_learning";
+                                            ?>
+                                            <a href="<?= htmlspecialchars($uViewLink) ?>" target="_blank" rel="noopener noreferrer" class="badge bg-white text-primary border text-decoration-none shadow-sm py-2 px-3 d-inline-flex align-items-center gap-1 material-link-badge" title="Click to open study material in viewer">
+                                                <i class="fa-solid fa-file-lines text-primary me-1"></i>
+                                                <span><?= htmlspecialchars($usrc['display_name']) ?> (Page <?= $uPnum ?>)</span>
+                                                <i class="fa-solid fa-arrow-up-right-from-square ms-1 text-secondary" style="font-size: 0.72rem;"></i>
+                                            </a>
                                         <?php endforeach; ?>
                                     </div>
                                 <?php endif; ?>
