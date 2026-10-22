@@ -26,5 +26,28 @@ VALUES (?,?)
 $stmt->bind_param("ii", $user_id, $exam_id);
 $stmt->execute();
 
-echo "saved";
+/* FETCH UPDATED VIOLATION COUNT */
+$cntStmt = $conn->prepare("SELECT COUNT(*) AS total FROM violations WHERE user_id = ? AND exam_id = ?");
+$cntStmt->bind_param("ii", $user_id, $exam_id);
+$cntStmt->execute();
+$totalViolations = (int)($cntStmt->get_result()->fetch_assoc()['total'] ?? 0);
+
+/* SYNC WITH exam_violations IF TABLE EXISTS */
+try {
+    $syncStmt = $conn->prepare("
+        INSERT INTO exam_violations (student_id, exam_id, violation_count)
+        VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE violation_count = VALUES(violation_count), last_violation = CURRENT_TIMESTAMP
+    ");
+    if ($syncStmt) {
+        $syncStmt->bind_param("iii", $user_id, $exam_id, $totalViolations);
+        $syncStmt->execute();
+    }
+} catch (Throwable $t) {}
+
+header('Content-Type: application/json');
+echo json_encode([
+    'status' => 'saved',
+    'violations' => $totalViolations
+]);
 ?>

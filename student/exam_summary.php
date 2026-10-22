@@ -70,10 +70,38 @@ if (!empty($answers) && is_array($answers)) {
     }
 }
 
+/* FETCH VIOLATION COUNT FOR THIS ATTEMPT */
+$vCount = 0;
+$vStmt = $conn->prepare("SELECT COUNT(*) AS total FROM violations WHERE user_id = ? AND exam_id = ?");
+if ($vStmt) {
+    $vStmt->bind_param("ii", $user_id, $exam_id);
+    $vStmt->execute();
+    $vRes = $vStmt->get_result();
+    if ($vRow = $vRes->fetch_assoc()) {
+        $vCount = (int)$vRow['total'];
+    }
+}
+
 /* SAVE RESULT */
-$ins = $conn->prepare("INSERT INTO results (user_id, exam_id, score) VALUES (?,?,?)");
-$ins->bind_param("iii",$user_id,$exam_id,$score);
+$ins = $conn->prepare("
+    INSERT INTO results (user_id, exam_id, score, tab_switch_count)
+    VALUES (?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE score = VALUES(score), tab_switch_count = VALUES(tab_switch_count)
+");
+if (!$ins) {
+    $ins = $conn->prepare("INSERT INTO results (user_id, exam_id, score) VALUES (?,?,?)");
+    $ins->bind_param("iii", $user_id, $exam_id, $score);
+} else {
+    $ins->bind_param("iiii", $user_id, $exam_id, $score, $vCount);
+}
 $ins->execute();
+
+/* FLASH CONFIRMATION MESSAGE */
+$_SESSION['submission_success'] = [
+    'exam_id' => $exam_id,
+    'violations' => $vCount,
+    'message' => 'Exam submitted successfully.'
+];
 
 /* REDIRECT */
 if (!headers_sent()) {

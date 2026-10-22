@@ -59,6 +59,18 @@ while ($rowAns = $resAns->fetch_assoc()) {
 
 $total_questions = count($questions);
 $duration = $exam['duration'] * 60;
+
+/* ===== FETCH EXISTING VIOLATION COUNT ===== */
+$current_violation_count = 0;
+$stmtViolations = $conn->prepare("SELECT COUNT(*) AS cnt FROM violations WHERE user_id = ? AND exam_id = ?");
+if ($stmtViolations) {
+    $stmtViolations->bind_param("ii", $user_id, $exam_id);
+    $stmtViolations->execute();
+    $resV = $stmtViolations->get_result();
+    if ($rowV = $resV->fetch_assoc()) {
+        $current_violation_count = (int)$rowV['cnt'];
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -443,6 +455,30 @@ textarea.coding-answer-textarea {
         font-size: 14.5px !important;
     }
 }
+
+/* TAB VIOLATION TRACKER STYLES */
+.violation-tracker {
+    position: fixed;
+    top: 20px;
+    right: 220px;
+    background: #ffffff;
+    color: #b91c1c;
+    border: 1.5px solid #ef4444;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 14px;
+    z-index: 999;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+@media (max-width: 768px) {
+    .violation-tracker {
+        top: 42px;
+        right: 10px;
+        font-size: 12px;
+        padding: 4px 8px;
+    }
+}
 </style>
 
 </head>
@@ -455,6 +491,7 @@ textarea.coding-answer-textarea {
 </audio>
 
 <div class="timer" id="timer"></div>
+<div class="violation-tracker" id="violationTracker">Tab-Switch Violations: <span id="violationCountDisplay"><?= $current_violation_count ?></span></div>
 <div class="warning-box" id="warningBox"></div>
 
 <div class="exam-wrapper">
@@ -463,6 +500,10 @@ textarea.coding-answer-textarea {
 <div class="question-panel">
 
 <h3>Questions</h3>
+
+<div class="violation-count-badge" id="panelViolationBadge" style="margin-bottom:15px;padding:8px 12px;background:#fff1f2;border:1px solid #fecdd3;border-radius:6px;font-size:13px;font-weight:600;color:#be123c;">
+    Tab-Switch Violations: <span id="panelViolationCount"><?= $current_violation_count ?></span>
+</div>
 
 <div style="margin-bottom:15px;font-size:13px">
 <div><span style="color:#1e88e5">⬤</span> Current</div>
@@ -1245,52 +1286,74 @@ time--;
 },1000);
 
 
-/* TAB VIOLATION WARNING */
-
-let warningCount=0;
-let maxWarnings=3;
-
-const warningBox=document.getElementById("warningBox");
-
-document.addEventListener("visibilitychange",()=>{
-
-if(submitted) return;
-
-if(document.hidden){
-
-warningCount++;
-
-fetch("report_violation.php",{
-method:"POST",
-headers:{"Content-Type":"application/x-www-form-urlencoded"},
-body:"exam_id=<?= $exam_id ?>&csrf_token=<?= urlencode($csrf_token) ?>"
-});
-
-}else{
-
-let remaining=maxWarnings-warningCount;
-
-if(warningCount<=maxWarnings){
-
-warningBox.innerText="WARNING: Tab switching detected. Warnings left: "+remaining;
-
-warningBox.style.display="block";
-
-setTimeout(()=>{
-warningBox.style.display="none";
-},3000);
-
+/* FORM SUBMISSION TRACKING */
+const examForm = document.getElementById("examForm");
+if (examForm) {
+    examForm.addEventListener("submit", () => {
+        submitted = true;
+    });
 }
 
-if(warningCount>maxWarnings){
+/* TAB VIOLATION TRACKING - DETECTION AND DISPLAY ONLY (NO AUTO-SUBMISSION) */
+let violationCount = <?= $current_violation_count ?>;
+let isTabHidden = false;
+let lastViolationTime = 0;
 
-submitted=true;
-document.getElementById("examForm").submit();
+const warningBox = document.getElementById("warningBox");
+const violationCountDisplay = document.getElementById("violationCountDisplay");
+const panelViolationCount = document.getElementById("panelViolationCount");
 
+function updateViolationDisplays() {
+    if (violationCountDisplay) {
+        violationCountDisplay.innerText = violationCount;
+    }
+    if (panelViolationCount) {
+        panelViolationCount.innerText = violationCount;
+    }
 }
 
-}
+document.addEventListener("visibilitychange", () => {
+    if (submitted) return;
 
+    if (document.hidden) {
+        // Prevent duplicate counting for a single tab switch event
+        const now = Date.now();
+        if (isTabHidden || (now - lastViolationTime < 800)) {
+            return;
+        }
+        isTabHidden = true;
+        lastViolationTime = now;
+        violationCount++;
+        updateViolationDisplays();
+
+        fetch("report_violation.php", {
+            method: "POST",
+            headers: {"Content-Type": "application/x-www-form-urlencoded"},
+            body: "exam_id=<?= $exam_id ?>&csrf_token=<?= urlencode($csrf_token) ?>"
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data && typeof data.violations === "number") {
+                violationCount = data.violations;
+                updateViolationDisplays();
+            }
+        })
+        .catch(() => {
+            // Retain locally incremented count if network is slow/offline
+        });
+    } else {
+        if (!isTabHidden) return;
+        isTabHidden = false;
+
+        // Display non-destructive warning popup when returning to tab
+        if (warningBox) {
+            warningBox.innerText = "WARNING: Tab switching detected! Tab-Switch Violations: " + violationCount;
+            warningBox.style.display = "block";
+            setTimeout(() => {
+                warningBox.style.display = "none";
+            }, 3500);
+        }
+    }
 });
 
 /* OPTION SELECTION SYNC */

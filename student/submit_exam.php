@@ -85,13 +85,42 @@ while ($row = $qRes->fetch_assoc()) {
     }
 }
 
+/* ================= FETCH VIOLATION COUNT ================= */
+$vCount = 0;
+$vStmt = $conn->prepare("SELECT COUNT(*) AS total FROM violations WHERE user_id = ? AND exam_id = ?");
+if ($vStmt) {
+    $vStmt->bind_param("ii", $student_id, $exam_id);
+    $vStmt->execute();
+    $vRes = $vStmt->get_result();
+    if ($vRow = $vRes->fetch_assoc()) {
+        $vCount = (int)$vRow['total'];
+    }
+}
+
 /* ================= SAVE RESULT ================= */
 $insert = $conn->prepare("
-    INSERT INTO results (user_id, exam_id, score)
-    VALUES (?, ?, ?)
+    INSERT INTO results (user_id, exam_id, score, tab_switch_count)
+    VALUES (?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE score = VALUES(score), tab_switch_count = VALUES(tab_switch_count)
 ");
-$insert->bind_param("iii", $student_id, $exam_id, $score);
+if (!$insert) {
+    $insert = $conn->prepare("
+        INSERT INTO results (user_id, exam_id, score)
+        VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE score = VALUES(score)
+    ");
+    $insert->bind_param("iii", $student_id, $exam_id, $score);
+} else {
+    $insert->bind_param("iiii", $student_id, $exam_id, $score, $vCount);
+}
 $insert->execute();
+
+/* ================= FLASH CONFIRMATION ================= */
+$_SESSION['submission_success'] = [
+    'exam_id' => $exam_id,
+    'violations' => $vCount,
+    'message' => 'Exam submitted successfully.'
+];
 
 /* ================= CLEAR SESSION ================= */
 unset($_SESSION['exam_id']);
