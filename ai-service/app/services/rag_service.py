@@ -160,8 +160,11 @@ class RAGService:
         """
         # Detect Subject/Topic upfront for strict subject isolation
         detected_subj, detected_top = SubjectDetector.detect(question)
-        # Explicit language/subject in current query takes priority over passed subject or conversation history
-        target_subject = detected_subj or SubjectDetector.normalize_subject(subject)
+        norm_subj_input = SubjectDetector.normalize_subject(subject)
+        if norm_subj_input and detected_subj and (detected_subj.lower() in norm_subj_input.lower()):
+            target_subject = norm_subj_input
+        else:
+            target_subject = detected_subj or norm_subj_input
         target_topic = topic or detected_top
 
         # If subject is not yet identified, infer from conversation history if available
@@ -212,6 +215,23 @@ class RAGService:
                 "intent": intent,
                 "is_conversational": True
             }
+
+        # Check if question starts with a polite greeting (e.g. "hi explain grammar")
+        greeting_prefix = ""
+        q_raw_lower = question.strip().lower()
+        if re.match(r'^(good\s+morning)\b', q_raw_lower):
+            greeting_prefix = "Good morning! ☀️ "
+        elif re.match(r'^(good\s+afternoon)\b', q_raw_lower):
+            greeting_prefix = "Good afternoon! ☀️ "
+        elif re.match(r'^(good\s+evening)\b', q_raw_lower):
+            greeting_prefix = "Good evening! 🌙 "
+        elif any(re.match(r'^(' + tok + r')\b', q_raw_lower) for tok in [r"hi+", r"hello", r"hey+"]):
+            greeting_prefix = "Hello! 👋 "
+
+        def _wrap_ans(ans_str: str) -> str:
+            if greeting_prefix and ans_str and not ans_str.startswith(greeting_prefix) and not any(ans_str.startswith(g) for g in ["Hello!", "Good morning!", "Good afternoon!", "Good evening!", "Goodbye!"]):
+                return f"{greeting_prefix}{ans_str}"
+            return ans_str
 
         # 2. Current Logged-in User Identity
         if intent == "current_user_identity":
@@ -461,7 +481,7 @@ class RAGService:
 
             return {
                 "question": question,
-                "answer": exp_ans,
+                "answer": _wrap_ans(exp_ans),
                 "has_sufficient_context": len(chunks) > 0,
                 "sources": sources,
                 "retrieved_chunks": chunks,
@@ -495,7 +515,7 @@ class RAGService:
 
             return {
                 "question": question,
-                "answer": code_ans,
+                "answer": _wrap_ans(code_ans),
                 "has_sufficient_context": len(chunks) > 0,
                 "sources": sources,
                 "retrieved_chunks": chunks,
@@ -529,7 +549,7 @@ class RAGService:
 
             return {
                 "question": question,
-                "answer": pq_ans,
+                "answer": _wrap_ans(pq_ans),
                 "has_sufficient_context": len(chunks) > 0,
                 "sources": sources,
                 "retrieved_chunks": chunks,
@@ -563,7 +583,7 @@ class RAGService:
 
             return {
                 "question": question,
-                "answer": fu_ans,
+                "answer": _wrap_ans(fu_ans),
                 "has_sufficient_context": len(chunks) > 0,
                 "sources": sources,
                 "retrieved_chunks": chunks,
@@ -602,7 +622,7 @@ class RAGService:
 
             return {
                 "question": question,
-                "answer": mat_ans,
+                "answer": _wrap_ans(mat_ans),
                 "has_sufficient_context": len(chunks) > 0,
                 "sources": sources,
                 "retrieved_chunks": chunks,
@@ -648,7 +668,7 @@ class RAGService:
 
                 return {
                     "question": question,
-                    "answer": missing_msg,
+                    "answer": _wrap_ans(missing_msg),
                     "has_sufficient_context": False,
                     "sources": [],
                     "retrieved_chunks": [],
@@ -665,19 +685,13 @@ class RAGService:
                 )
                 return {
                     "question": question,
-                    "answer": edu_ans,
+                    "answer": _wrap_ans(edu_ans),
                     "has_sufficient_context": False,
                     "sources": [],
                     "retrieved_chunks": [],
                     "intent": "academic_question",
                     "is_conversational": False
                 }
-
-        # Check if query started with a greeting prefix (e.g. "hi explain grammar")
-        greeting_prefix = ""
-        q_lower = question.lower()
-        if any(re.match(r'^(' + tok + r')\b', q_lower) for tok in [r"hi+", r"hello", r"hey+", r"good\s+morning", r"good\s+afternoon", r"good\s+evening"]):
-            greeting_prefix = "Hello! 👋 "
 
         rag_data = cls._build_grounded_answer(question, search_res["chunks"], target_subject=target_subject)
         if not rag_data.get("has_sufficient_context", True):
@@ -688,7 +702,7 @@ class RAGService:
                     missing_msg = "I couldn't find enough information about this in the uploaded course materials."
                 return {
                     "question": question,
-                    "answer": missing_msg,
+                    "answer": _wrap_ans(missing_msg),
                     "has_sufficient_context": False,
                     "sources": [],
                     "retrieved_chunks": [],
@@ -705,7 +719,7 @@ class RAGService:
                 )
                 return {
                     "question": question,
-                    "answer": edu_ans,
+                    "answer": _wrap_ans(edu_ans),
                     "has_sufficient_context": False,
                     "sources": [],
                     "retrieved_chunks": [],
@@ -713,7 +727,7 @@ class RAGService:
                     "is_conversational": False
                 }
 
-        final_answer = f"{greeting_prefix}{rag_data['answer']}" if greeting_prefix else rag_data["answer"]
+        final_answer = _wrap_ans(rag_data["answer"])
 
         return {
             "question": question,

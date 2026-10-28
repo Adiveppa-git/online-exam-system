@@ -22,12 +22,22 @@ class SubjectResolver {
         'js' => 'JavaScript',
         'typescript' => 'JavaScript',
         'ts' => 'JavaScript',
+        'sql' => 'SQL',
         'c#' => 'C#',
         'csharp' => 'C#',
         'php' => 'PHP',
         'math' => 'Maths',
         'maths' => 'Maths',
         'mathematics' => 'Maths',
+        'physics' => 'Physics',
+        'chemistry' => 'Chemistry',
+        'biology' => 'Biology',
+        'electronics' => 'Electronics',
+        'communication systems' => 'Communication Systems',
+        'communication system' => 'Communication Systems',
+        'electrical engineering' => 'Electrical Engineering',
+        'mechanical engineering' => 'Mechanical Engineering',
+        'civil engineering' => 'Civil Engineering',
         'english' => 'English',
         'gk' => 'GK',
         'general knowledge' => 'GK',
@@ -36,17 +46,19 @@ class SubjectResolver {
         'operating systems' => 'Operating Systems',
         'db' => 'Database',
         'dbms' => 'Database',
-        'sql' => 'Database',
         'database' => 'Database',
         'cs' => 'Computer Science',
-        'computer science' => 'Computer Science'
+        'computer science' => 'Computer Science',
+        'dsa' => 'Computer Science',
+        'data structures' => 'Computer Science'
     ];
 
     /**
-     * Resolves the subject from user query, specific exam reference, or database subjects.
+     * Resolves the subject from user query, specific exam reference, database subjects, or optional user selection.
      *
      * @param mysqli $conn
      * @param string $query
+     * @param string|null $preferredSubject Optional subject selected from subject selector
      * @return array [
      *     'status' => 'resolved' | 'ambiguous' | 'none',
      *     'subject' => string|null,
@@ -56,10 +68,21 @@ class SubjectResolver {
      *     'is_comparison' => bool
      * ]
      */
-    public static function resolve(mysqli $conn, string $query): array {
+    public static function resolve(mysqli $conn, string $query, ?string $preferredSubject = null): array {
         $cleanQuery = trim($query);
+        $normPreferred = ($preferredSubject && trim($preferredSubject) !== '' && strtolower(trim($preferredSubject)) !== 'all subjects')
+            ? trim($preferredSubject)
+            : null;
+
         if ($cleanQuery === '') {
-            return ['status' => 'none', 'subject' => null, 'subjects' => [], 'exam_id' => null, 'exam_title' => null, 'is_comparison' => false];
+            return [
+                'status' => $normPreferred ? 'resolved' : 'none',
+                'subject' => $normPreferred,
+                'subjects' => $normPreferred ? [$normPreferred] : [],
+                'exam_id' => null,
+                'exam_title' => null,
+                'is_comparison' => false
+            ];
         }
 
         // 1. Fetch authoritative subjects and exams from database
@@ -130,10 +153,17 @@ class SubjectResolver {
             }
         }
 
-        // If a specific language or discipline was matched (e.g. Java, Python, C++, OS, DB),
+        // If SQL was matched alongside Database, prefer SQL unless 'database' or 'dbms' was explicitly typed
+        if (in_array('SQL', $matchedSubjects, true) && in_array('Database', $matchedSubjects, true)) {
+            if (!preg_match('/\b(database|dbms|rdbms)\b/i', $qLower)) {
+                $matchedSubjects = array_values(array_diff($matchedSubjects, ['Database']));
+            }
+        }
+
+        // If a specific language or discipline was matched (e.g. Java, Python, C++, OS, DB, SQL, Physics, etc.),
         // do not let general "Computer Science" trigger ambiguity unless "computer science" or "cs" was specifically typed
         if (count($matchedSubjects) > 1 && in_array('Computer Science', $matchedSubjects, true)) {
-            $specifics = array_intersect($matchedSubjects, ['Java', 'Python', 'C++', 'C', 'JavaScript', 'Database', 'Operating Systems']);
+            $specifics = array_intersect($matchedSubjects, ['Java', 'Python', 'C++', 'C', 'JavaScript', 'SQL', 'Database', 'Operating Systems', 'Electronics', 'Communication Systems', 'Physics', 'Chemistry', 'Biology']);
             if (!empty($specifics) && !preg_match('/\b(computer science|cs)\b/i', $qLower)) {
                 $matchedSubjects = array_values(array_diff($matchedSubjects, ['Computer Science']));
             }
@@ -143,14 +173,15 @@ class SubjectResolver {
 
         // 6. Handle Ambiguity vs Explicit Comparison
         if (count($matchedSubjects) > 1) {
-            if ($isComparison) {
+            // If user explicitly selected a preferred subject that is one of the matched subjects, use it
+            if ($normPreferred && in_array($normPreferred, $matchedSubjects, true)) {
                 return [
                     'status' => 'resolved',
-                    'subject' => implode(' and ', $matchedSubjects),
-                    'subjects' => $matchedSubjects,
-                    'exam_id' => null,
-                    'exam_title' => null,
-                    'is_comparison' => true
+                    'subject' => $normPreferred,
+                    'subjects' => [$normPreferred],
+                    'exam_id' => $matchedExam ? $matchedExam['id'] : null,
+                    'exam_title' => $matchedExam ? $matchedExam['title'] : null,
+                    'is_comparison' => $isComparison
                 ];
             }
             return [
@@ -159,7 +190,7 @@ class SubjectResolver {
                 'subjects' => $matchedSubjects,
                 'exam_id' => null,
                 'exam_title' => null,
-                'is_comparison' => false
+                'is_comparison' => $isComparison
             ];
         }
 
@@ -176,7 +207,19 @@ class SubjectResolver {
             ];
         }
 
-        // 8. No subject detected (general query)
+        // 8. If no subject detected in query, fall back to preferredSubject if provided
+        if ($normPreferred) {
+            return [
+                'status' => 'resolved',
+                'subject' => $normPreferred,
+                'subjects' => [$normPreferred],
+                'exam_id' => null,
+                'exam_title' => null,
+                'is_comparison' => $isComparison
+            ];
+        }
+
+        // 9. No subject detected (general query)
         return [
             'status' => 'none',
             'subject' => null,

@@ -25,31 +25,49 @@ class SubjectDetector:
             r"(?<!\w)(?:python|pytest|django|flask|numpy|pandas|scipy|pip|py)(?!\w)"
         ],
         "JavaScript": [
-            r"(?<!\w)(?:javascript|typescript|js|ts|nodejs|node\.js|react|express)(?!\w)"
+            r"(?<!\w)(?:javascript|typescript|js|ts|nodejs|node\.js|react|express|angular|vue)(?!\w)"
+        ],
+        "SQL": [
+            r"(?<!\w)(?:sql|plsql|t-sql|tsql|mysql|postgresql|postgres|sqlite|sqlite3|structured\s+query\s+language)(?!\w)"
         ],
         "C#": [
-            r"(?<!\w)(?:c#|csharp|\.net)(?!\w)"
+            r"(?<!\w)(?:c#|csharp|\.net|dotnet)(?!\w)"
         ],
         "PHP": [
-            r"(?<!\w)(?:php|laravel|symfony)(?!\w)"
+            r"(?<!\w)(?:php|laravel|symfony|composer|codeigniter)(?!\w)"
         ],
-        "GK": [
-            r"(?<!\w)(?:gk|general knowledge)(?!\w)"
+        "Electronics": [
+            r"(?<!\w)(?:electronics|electronic\s+devices|analog\s+circuits?|digital\s+electronics?|semiconductors?|transistors?|bjt|mosfet|diodes?|op-amp|operational\s+amplifier|logic\s+gates?|microprocessors?|microcontrollers?|vlsi|embedded\s+systems?)(?!\w)"
+        ],
+        "Communication Systems": [
+            r"(?<!\w)(?:communication\s+systems?|analog\s+communication|digital\s+communication|modulation|demodulation|amplitude\s+modulation|frequency\s+modulation|phase\s+modulation|am\s+modulation|fm\s+modulation|pcm|pulse\s+code\s+modulation|antennas?|telecommunications?)(?!\w)"
+        ],
+        "Physics": [
+            r"(?<!\w)(?:physics|mechanics|kinematics|thermodynamics|electromagnetism|electrostatics|optics|quantum\s+physics|newton's\s+laws?|gravitation|wave\s+optics|magnetism|relativity)(?!\w)"
+        ],
+        "Chemistry": [
+            r"(?<!\w)(?:chemistry|organic\s+chemistry|inorganic\s+chemistry|periodic\s+table|chemical\s+bonding|chemical\s+reactions?|stoichiometry|electrochemistry|polymers|biomolecules)(?!\w)"
+        ],
+        "Biology": [
+            r"(?<!\w)(?:biology|botany|zoology|cell\s+biology|genetics|ecology|human\s+physiology|photosynthesis|cellular\s+respiration|evolution|dna|rna|microbiology)(?!\w)"
+        ],
+        "Maths": [
+            r"(?<!\w)(?:maths|math|mathematics|calculus|algebra|geometry|trigonometry|differentiation|integration|derivatives|equations|statistics|probability|matrices|matrix|arithmetic)(?!\w)"
+        ],
+        "Operating Systems": [
+            r"(?<!\w)(?:operating\s+systems?|operating\s+system|os|process\s+management|process\s+scheduling|cpu\s+scheduling|memory\s+management|paging|deadlock|concurrency|virtual\s+memory)(?!\w)"
+        ],
+        "Database": [
+            r"(?<!\w)(?:database\s+management\s+systems?|dbms|database|relational\s+databases?|rdbms|normalization|acid\s+properties|entity\s+relationship|er\s+diagram)(?!\w)"
+        ],
+        "Computer Science": [
+            r"(?<!\w)(?:computer\s+science|cs|data\s+structures|binary\s+search\s+tree|binary\s+tree|bst|algo|algorithm|dsa|networking|tcp/ip)(?!\w)"
         ],
         "English": [
             r"(?<!\w)(?:english|grammar|punctuation|sentence|vocabulary|verbs|nouns|tenses|adjectives|adverbs|comprehension|essay|spelling|writing)(?!\w)"
         ],
-        "Maths": [
-            r"(?<!\w)(?:maths|math|mathematics|calculus|algebra|geometry|trigonometry|differentiation|integration|derivatives|equations|statistics)(?!\w)"
-        ],
-        "Operating Systems": [
-            r"(?<!\w)(?:operating systems|operating system|os|process management|process scheduling|cpu scheduling|memory management|paging|deadlock|concurrency)(?!\w)"
-        ],
-        "Database": [
-            r"(?<!\w)(?:database|dbms|sql|mysql|postgresql|sqlite|rdbms|tables|queries)(?!\w)"
-        ],
-        "Computer Science": [
-            r"(?<!\w)(?:computer science|cs|data structures|binary search tree|binary tree|bst|algo|algorithm|networking|tcp/ip)(?!\w)"
+        "GK": [
+            r"(?<!\w)(?:gk|general\s+knowledge|current\s+affairs)(?!\w)"
         ]
     }
 
@@ -60,8 +78,11 @@ class SubjectDetector:
         "Binary Search Trees": [r"\b(binary search tree|binary search trees|bst|binary tree)\b"],
         "Process Management": [r"\b(process management|process scheduling|cpu scheduling)\b"],
         "TCP/IP": [r"\b(tcp/ip|networking|tcp|ip)\b"],
-        "Pointers": [r"(?<!\w)(?:pointers?|pointer\s+arithmetic|pointer\s+syntax|referencing|dereferencing)(?!\w)"],
-        "Core Principles": [r"\b(core principles|core concepts|oop|object oriented|classes and objects)\b"]
+        "Modulation": [r"\b(modulation|demodulation|amplitude modulation|frequency modulation|am modulation|fm modulation|pulse code modulation)\b"],
+        "Semiconductors": [r"\b(semiconductors?|transistors?|bjt|mosfet|diodes?|op-amp|operational amplifier)\b"],
+        "Newton's Laws": [r"\b(newton's\s+laws?|kinematics|gravitation)\b"],
+        "Chemical Bonding": [r"\b(chemical bonding|covalent bond|ionic bond|periodic table)\b"],
+        "Cell Biology": [r"\b(cell biology|mitosis|meiosis|photosynthesis|dna|rna)\b"]
     }
 
     TOPIC_TO_SUBJECT_MAP = {
@@ -71,8 +92,11 @@ class SubjectDetector:
         "Binary Search Trees": "Computer Science",
         "Process Management": "Operating Systems",
         "TCP/IP": "Computer Science",
-        "Pointers": "C++",
-        "Core Principles": "Java"
+        "Modulation": "Communication Systems",
+        "Semiconductors": "Electronics",
+        "Newton's Laws": "Physics",
+        "Chemical Bonding": "Chemistry",
+        "Cell Biology": "Biology"
     }
 
     SUBJECT_NORMALIZATION_MAP = {
@@ -86,6 +110,7 @@ class SubjectDetector:
         "js": "JavaScript",
         "typescript": "JavaScript",
         "ts": "JavaScript",
+        "sql": "SQL",
         "c#": "C#",
         "csharp": "C#",
         "php": "PHP",
@@ -94,6 +119,12 @@ class SubjectDetector:
         "math": "Maths",
         "maths": "Maths",
         "mathematics": "Maths",
+        "physics": "Physics",
+        "chemistry": "Chemistry",
+        "biology": "Biology",
+        "electronics": "Electronics",
+        "communication systems": "Communication Systems",
+        "communication system": "Communication Systems",
         "english": "English",
         "operating systems": "Operating Systems",
         "operating system": "Operating Systems",
@@ -101,8 +132,7 @@ class SubjectDetector:
         "computer science": "Computer Science",
         "cs": "Computer Science",
         "database": "Database",
-        "dbms": "Database",
-        "sql": "Database"
+        "dbms": "Database"
     }
 
     @classmethod
@@ -157,11 +187,16 @@ class SubjectDetector:
             if not is_c_and_cpp_comp and not re.search(r"(?<!\w)(?:c\s+programming|c\s+language|language\s+c)(?!\w)", q_lower):
                 matched.remove("C")
 
+        # If SQL was matched alongside Database, prefer SQL unless 'database' or 'dbms' was explicitly typed
+        if len(matched) > 1 and "SQL" in matched and "Database" in matched:
+            if not re.search(r"\b(database|dbms|rdbms)\b", q_lower):
+                matched.remove("Database")
+
         # If a specific programming language or discipline is matched,
         # do not treat general "Computer Science" as an ambiguous secondary subject
         # unless "computer science" or "cs" was explicitly typed.
         if len(matched) > 1 and "Computer Science" in matched:
-            specific_subs = [s for s in matched if s in ("Java", "Python", "C++", "C", "JavaScript", "Database", "Operating Systems")]
+            specific_subs = [s for s in matched if s in ("Java", "Python", "C++", "C", "JavaScript", "SQL", "Database", "Operating Systems", "Electronics", "Communication Systems", "Physics", "Chemistry", "Biology")]
             if specific_subs and not re.search(r"\b(computer science|cs)\b", q_lower):
                 matched.remove("Computer Science")
 

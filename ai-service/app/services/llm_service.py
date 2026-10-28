@@ -2658,13 +2658,41 @@ Comparing **{s1}** and **{s2}** highlights distinct software engineering trade-o
                 c_subj = c.get("subject", "")
                 if not norm_subj or not c_subj or c_subj.strip().lower() == norm_subj.lower():
                     matching_chunks.append(c)
+        # External LLM check
+        if cls.is_external_configured():
+            try:
+                system_prompt = (
+                    "You are an expert academic learning assistant for students across School (Classes 1–10), "
+                    "PU / Pre-University (Classes 11–12), Engineering, Degree/University, Coding & Programming, and General Education.\n"
+                    "Provide clear, comprehensive, and well-structured answers formatted in clean Markdown with appropriate headings.\n"
+                    "- Use runnable code blocks with language labels (```python, ```java, ```sql, ```cpp) where appropriate.\n"
+                    "- For mathematical/scientific questions, show equations and step-by-step calculations.\n"
+                    "- For engineering questions, explain principles, trade-offs, and practical implementations.\n"
+                    "- For grammar or language questions, explain rules clearly with tables, examples, and correct vs incorrect comparisons.\n"
+                    "- For follow-ups, maintain seamless continuity with preceding messages."
+                )
+                messages = [{"role": "system", "content": system_prompt}]
+                conv_history = kwargs.get("conversation_history") or []
+                for m in conv_history:
+                    if isinstance(m, dict) and m.get("content"):
+                        role = m.get("role", "user")
+                        messages.append({"role": role, "content": str(m["content"])})
+                user_msg = f"Subject: {norm_subj or 'General'}\nConcept/Question: {concept}"
+                messages.append({"role": "user", "content": user_msg})
+                resp = cls.generate_chat_completion(messages)
+                if resp and len(resp.strip()) > 30:
+                    return resp.strip()
+            except Exception as e:
+                logger.warning(f"External LLM call failed in generate_concept_explanation: {e}. Falling back to domain engine.")
 
-        clean_concept = re.sub(r'^(explain|what is a|what is an|what is|what are|how does|what do you know about|tell me about)\s+', '', concept, flags=re.I).strip(" ?.")
+        clean_concept = re.sub(r'^(hi+|hello|hey+|good\s+(morning|afternoon|evening))\s*,?\s*', '', concept, flags=re.I).strip()
+        clean_concept = re.sub(r'^(please\s+)?(explain|what is a|what is an|what is|what are|how does|what do you know about|tell me about)\s+', '', clean_concept, flags=re.I).strip(" ?.")
         clean_concept_title = clean_concept.title() if clean_concept else (norm_subj or "Core Principle")
 
         CURRICULUM_SUBJECTS = {
             "c++", "c", "python", "java", "javascript", "php", "sql", "database",
-            "operating systems", "computer science", "maths", "english", "gk", "general"
+            "operating systems", "computer science", "maths", "mathematics", "english", "gk", "general",
+            "physics", "chemistry", "biology", "electronics", "communication systems"
         }
         grounding_note = ""
         if matching_chunks and len(matching_chunks) > 0:
@@ -2690,7 +2718,260 @@ Comparing **{s1}** and **{s2}** highlights distinct software engineering trade-o
                 parts = norm_subj.split(" and ")
                 return cls.generate_comparison_response(query=concept, subject1=parts[0].strip(), subject2=parts[1].strip())
 
-        # 2. Pointers in C++ / C
+        # 2. English Grammar & Language
+        if "grammar" in lower_concept or "grammar" in lower_query or (norm_subj and norm_subj.lower() == "english"):
+            detail = (
+                "**English Grammar** is the system of structural rules governing the composition of clauses, phrases, and words in the English language. "
+                "Mastering grammar ensures clarity, precision, and academic coherence in both written and spoken communication.\n\n"
+                "#### 📚 The 8 Core Parts of Speech\n\n"
+                "| Part of Speech | Function / Role | Example Words | Example Sentence |\n"
+                "| :--- | :--- | :--- | :--- |\n"
+                "| **Noun** | Names a person, place, thing, or abstract idea | *student, campus, knowledge, algorithm* | The **student** mastered the **algorithm**. |\n"
+                "| **Pronoun** | Replaces a noun to eliminate repetitive phrasing | *he, she, it, they, someone, who* | **She** submitted her assignment early. |\n"
+                "| **Verb** | Expresses action, event, or state of being | *analyze, compute, is, develop, explain* | Engineers **design** reliable systems. |\n"
+                "| **Adjective** | Describes or qualifies a noun or pronoun | *diligent, efficient, complex, concise* | We wrote an **efficient** solution. |\n"
+                "| **Adverb** | Modifies a verb, adjective, or another adverb | *rapidly, accurately, very, thoroughly* | The code runs **exceptionally** fast. |\n"
+                "| **Preposition** | Shows temporal, spatial, or logical relationships | *in, on, between, through, after* | Data moves **through** the pipeline. |\n"
+                "| **Conjunction** | Connects words, phrases, or independent clauses | *and, but, because, although, whereas* | The test was hard **but** she passed. |\n"
+                "| **Interjection** | Expresses spontaneous or emphatic emotion | *bravo, alas, eureka, oh* | **Eureka!** The program works. |\n\n"
+                "#### ⏳ Foundational Tenses & Aspects\n"
+                "1. **Present Tenses**: *Simple Present* (universal facts/habits: *\"Water boils at 100°C\"*), *Present Continuous* (ongoing actions: *\"She is revising\"*), *Present Perfect* (completed actions with present relevance: *\"I have completed the exam\"*).\n"
+                "2. **Past Tenses**: *Simple Past* (completed past events: *\"He solved the problem\"*), *Past Continuous* (past background action), *Past Perfect* (action prior to another past event: *\"The test had started before he arrived\"*).\n"
+                "3. **Future Tenses**: *Simple Future* (*\"We will review chapter 3 tomorrow\"*).\n\n"
+                "#### ⚠️ Critical Grammar Traps\n"
+                "- **Subject-Verb Agreement**: Singular subjects take singular verbs (*\"Every one of the students **is** prepared\"*, not *are*).\n"
+                "- **Active vs. Passive Voice**: Prefer active voice for direct technical clarity (*\"The compiler threw an error\"* vs *\"An error was thrown by the compiler\"*)."
+            )
+            resp = f"### 💡 Academic Guide: **English Grammar & Syntax**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like practice exercises on **Subject-Verb Agreement**, a breakdown of **Active vs. Passive Voice**, or sample exam questions?"
+            return resp.strip()
+
+        # 3. SQL & Relational Databases
+        if (norm_subj and norm_subj.lower() in ["sql", "database"]) or any(w in lower_query for w in ["sql", "select query", "inner join", "left join", "group by", "rdbms", "database query"]):
+            sql_code = (
+                "```sql\n"
+                "-- 1. Schema Definition with Constraints\n"
+                "CREATE TABLE students (\n"
+                "    student_id INT PRIMARY KEY AUTO_INCREMENT,\n"
+                "    full_name VARCHAR(100) NOT NULL,\n"
+                "    department VARCHAR(50) NOT NULL,\n"
+                "    cgpa DECIMAL(3, 2) DEFAULT 0.00\n"
+                ");\n\n"
+                "CREATE TABLE exam_scores (\n"
+                "    score_id INT PRIMARY KEY AUTO_INCREMENT,\n"
+                "    student_id INT NOT NULL,\n"
+                "    subject_name VARCHAR(50) NOT NULL,\n"
+                "    marks_obtained INT CHECK (marks_obtained >= 0 AND marks_obtained <= 100),\n"
+                "    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE\n"
+                ");\n\n"
+                "-- 2. Analytical Query with INNER JOIN, Aggregation, and Filtering\n"
+                "SELECT \n"
+                "    s.department,\n"
+                "    e.subject_name,\n"
+                "    COUNT(DISTINCT s.student_id) AS total_students,\n"
+                "    ROUND(AVG(e.marks_obtained), 2) AS average_score,\n"
+                "    MAX(e.marks_obtained) AS highest_score\n"
+                "FROM students s\n"
+                "INNER JOIN exam_scores e ON s.student_id = e.student_id\n"
+                "WHERE s.cgpa >= 6.50\n"
+                "GROUP BY s.department, e.subject_name\n"
+                "HAVING AVG(e.marks_obtained) >= 50.0\n"
+                "ORDER BY average_score DESC;\n"
+                "```"
+            )
+            detail = (
+                "**SQL (Structured Query Language)** is the standardized domain-specific language used for managing, querying, and manipulating data stored in Relational Database Management Systems (RDBMS).\n\n"
+                "#### 🎯 Logical Query Execution Order\n"
+                "While SQL queries are written starting with `SELECT`, the database query engine executes clauses in a strict mathematical sequence:\n"
+                "1. **`FROM` & `JOIN`**: Determine base tables and execute relational cartesian products/joins.\n"
+                "2. **`WHERE`**: Filters individual candidate rows before grouping.\n"
+                "3. **`GROUP BY`**: Collapses candidate rows into distinct aggregation buckets.\n"
+                "4. **`HAVING`**: Filters aggregated groups (unlike `WHERE`, can evaluate aggregate functions like `AVG()` or `COUNT()`).\n"
+                "5. **`SELECT`**: Projections, expressions, column aliases, and computed scalar values.\n"
+                "6. **`DISTINCT`**: Deduplicates projected output rows.\n"
+                "7. **`ORDER BY`**: Sorts output rows (can reference aliases defined in `SELECT`).\n"
+                "8. **`LIMIT` / `OFFSET`**: Constrains the cardinality of the returned result set.\n\n"
+                "#### 💻 Practical SQL Example\n"
+                f"{sql_code}\n\n"
+                "#### ⚡ Query Optimization & Indexing Essentials\n"
+                "- **B-Tree Indexes**: Create indexes on frequently filtered (`WHERE`) and joined (`JOIN ... ON`) columns to transform $O(N)$ full table scans into $O(\\log N)$ index lookups.\n"
+                "- **Avoid `SELECT *`**: Always explicitly name required columns to minimize network bandwidth and allow the optimizer to use covering indexes."
+            )
+            resp = f"### 💡 Concept Guide: **Structured Query Language (SQL) & Relational Queries**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to practice **Subqueries vs. CTEs (Common Table Expressions)**, review **Database Normalization (1NF to BCNF)**, or try practice SQL questions?"
+            return resp.strip()
+
+        # 4. Mathematics (Calculus, Quadratic Equations, Differentiation, Integration)
+        if (norm_subj and norm_subj.lower() in ["maths", "mathematics"]) or any(w in lower_query for w in ["math", "calculus", "derivative", "differentiation", "integral", "integration", "quadratic", "algebra", "matrix", "matrices"]):
+            if "quadratic" in lower_concept or "quadratic" in lower_query:
+                detail = (
+                    "A **Quadratic Equation** is a second-order polynomial equation in a single variable $x$, defined in standard form as:\n\n"
+                    "$$\\mathbf{ax^2 + bx + c = 0} \\quad (\\text{where } a \\neq 0)$$\n\n"
+                    "#### 🎯 The Quadratic Formula\n"
+                    "The general solution for the roots of any quadratic equation is given by:\n\n"
+                    "$$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$\n\n"
+                    "#### 🔍 Nature of Roots via the Discriminant ($\\Delta = b^2 - 4ac$)\n"
+                    "- **$\\Delta > 0$**: Two distinct real roots ($x_1 \\neq x_2$).\n"
+                    "- **$\\Delta = 0$**: Exactly one real repeated root ($x_1 = x_2 = -\\frac{b}{2a}$).\n"
+                    "- **$\\Delta < 0$**: Two complex conjugate roots ($x = \\alpha \\pm i\\beta$).\n\n"
+                    "#### 📝 Step-by-Step Worked Example\n"
+                    "**Problem**: Solve the equation $x^2 - 5x + 6 = 0$.\n\n"
+                    "1. **Identify Coefficients**: $a = 1$, $b = -5$, $c = 6$.\n"
+                    "2. **Calculate Discriminant**: $\\Delta = (-5)^2 - 4(1)(6) = 25 - 24 = 1$.\n"
+                    "3. **Apply Formula**:\n"
+                    "   $$x = \\frac{-(-5) \\pm \\sqrt{1}}{2(1)} = \\frac{5 \\pm 1}{2}$$\n"
+                    "4. **Roots**:\n"
+                    "   - $x_1 = \\frac{5 + 1}{2} = 3$\n"
+                    "   - $x_2 = \\frac{5 - 1}{2} = 2$\n\n"
+                    "**Alternative Factoring**: $(x - 2)(x - 3) = 0 \\implies x = 2 \\text{ or } x = 3$."
+                )
+                resp = f"### 💡 Mathematics: **Quadratic Equations & Roots**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to practice solving **word problems using quadratics**, learn about **vertex form of parabolas**, or try practice questions?"
+                return resp.strip()
+
+            elif any(w in lower_concept or w in lower_query for w in ["differentiat", "derivative", "calculus"]):
+                detail = (
+                    "**Differentiation** is the mathematical operation of calculating the **instantaneous rate of change** of a function with respect to an independent variable.\n\n"
+                    "#### 🎯 Formal Definition\n"
+                    "$$\\frac{df}{dx} = f'(x) = \\lim_{h \\to 0} \\frac{f(x + h) - f(x)}{h}$$\n\n"
+                    "#### 📐 Fundamental Rules of Differentiation\n"
+                    "1. **Power Rule**: $\\frac{d}{dx}[x^n] = n x^{n-1}$\n"
+                    "2. **Constant Multiple Rule**: $\\frac{d}{dx}[c \\cdot f(x)] = c \\cdot f'(x)$\n"
+                    "3. **Sum / Difference Rule**: $\\frac{d}{dx}[f(x) \\pm g(x)] = f'(x) \\pm g'(x)$\n"
+                    "4. **Product Rule**: $\\frac{d}{dx}[u \\cdot v] = u'v + uv'$\n"
+                    "5. **Quotient Rule**: $\\frac{d}{dx}\\left[\\frac{u}{v}\\right] = \\frac{u'v - uv'}{v^2}$\n"
+                    "6. **Chain Rule** (composite functions): $\\frac{d}{dx}[f(g(x))] = f'(g(x)) \\cdot g'(x)$\n\n"
+                    "#### 📝 Step-by-Step Worked Example\n"
+                    "**Problem**: Differentiate $f(x) = 3x^4 - 5x^2 + 7x - 9$ with respect to $x$.\n\n"
+                    "1. Term 1: $\\frac{d}{dx}[3x^4] = 3 \\cdot (4x^3) = 12x^3$\n"
+                    "2. Term 2: $\\frac{d}{dx}[-5x^2] = -5 \\cdot (2x) = -10x$\n"
+                    "3. Term 3: $\\frac{d}{dx}[7x] = 7 \\cdot (1) = 7$\n"
+                    "4. Term 4: $\\frac{d}{dx}[-9] = 0$\n\n"
+                    "**Result**: $f'(x) = 12x^3 - 10x + 7$."
+                )
+                resp = f"### 💡 Mathematics: **Calculus & Differentiation Rules**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to practice the **Chain Rule**, explore **Maxima and Minima applications**, or solve practice exam problems?"
+                return resp.strip()
+
+            else:
+                detail = (
+                    f"**{clean_concept_title}** is a core mathematical concept.\n\n"
+                    "#### 🎯 Mathematical Foundation\n"
+                    "Mathematics provides the rigorous quantitative framework for science, computing, and engineering by deriving universal truths from axioms through logical deduction.\n\n"
+                    "#### 📐 Problem-Solving Methodology\n"
+                    "1. **Identify the Given Quantities & Target Unknown**: State variables explicitly with units.\n"
+                    "2. **Select the Governing Formula / Theorem**: Formulate the algebraic or geometric relationship.\n"
+                    "3. **Step-by-Step Derivation**: Substitute values and perform intermediate calculations transparently.\n"
+                    "4. **Sanity Check**: Verify dimensional consistency and test edge cases."
+                )
+                resp = f"### 💡 Mathematics Guide: **{clean_concept_title}**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like a worked step-by-step numerical example or practice questions on this topic?"
+                return resp.strip()
+
+        # 5. Physics
+        if (norm_subj and norm_subj.lower() == "physics") or any(w in lower_query for w in ["physics", "newton's law", "newtons law", "kinematics", "thermodynamics", "optics", "gravity"]):
+            if "newton" in lower_concept or "newton" in lower_query:
+                detail = (
+                    "**Newton's Laws of Motion** form the foundation of classical mechanics, describing the relationship between the forces acting on a body and its motion.\n\n"
+                    "#### 🎯 The Three Laws of Motion\n"
+                    "1. **First Law (Law of Inertia)**: An object remains at rest or in uniform motion in a straight line unless acted upon by a non-zero net external force ($F_{\\text{net}} = 0 \\implies a = 0$).\n"
+                    "2. **Second Law (Fundamental Law of Dynamics)**: The rate of change of momentum of a body is directly proportional to the applied net force and takes place in the direction of the force:\n"
+                    "   $$\\mathbf{F_{\\text{net}} = m \\cdot a} \\quad \\left(F = \\frac{dp}{dt}\\right)$$\n"
+                    "3. **Third Law (Action and Reaction)**: When body A exerts a force on body B, body B simultaneously exerts an equal and opposite force on body A:\n"
+                    "   $$\\mathbf{F_{AB} = -F_{BA}}$$\n\n"
+                    "#### 📝 Step-by-Step Numerical Example\n"
+                    "**Problem**: A constant horizontal force of $50\\,\\text{N}$ is applied to a mass of $10\\,\\text{kg}$ resting on a frictionless surface. Calculate its acceleration and the velocity after $4\\,\\text{seconds}$ (starting from rest).\n\n"
+                    "1. **Given**: $m = 10\\,\\text{kg}$, $F = 50\\,\\text{N}$, $u = 0\\,\\text{m/s}$, $t = 4\\,\\text{s}$.\n"
+                    "2. **Calculate Acceleration** (Newton's 2nd Law):\n"
+                    "   $$a = \\frac{F}{m} = \\frac{50\\,\\text{N}}{10\\,\\text{kg}} = 5\\,\\text{m/s}^2$$\n"
+                    "3. **Calculate Final Velocity** (Kinematic Equation $v = u + at$):\n"
+                    "   $$v = 0 + (5\\,\\text{m/s}^2)(4\\,\\text{s}) = 20\\,\\text{m/s}$$\n"
+                    "4. **Distance Covered** ($s = ut + \\frac{1}{2}at^2$):\n"
+                    "   $$s = 0 + \\frac{1}{2}(5)(4^2) = \\frac{1}{2}(5)(16) = 40\\,\\text{meters}$$.\n\n"
+                    "#### 🚀 Engineering Applications\n"
+                    "- Rocket Propulsion: Exhaust gases expelled downward exert an equal upward thrust (3rd Law).\n"
+                    "- Automotive Safety: Airbags and crumple zones increase deceleration time $\\Delta t$, reducing impact force $F = \\frac{\\Delta p}{\\Delta t}$ (2nd Law)."
+                )
+                resp = f"### 💡 Physics: **Newton's Laws of Motion**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to practice **Free Body Diagrams**, solve a numerical problem with **friction**, or take a quick quiz?"
+                return resp.strip()
+            else:
+                detail = (
+                    f"**{clean_concept_title}** is an essential topic within **Physics**.\n\n"
+                    "#### 🎯 Physical Principles & Laws\n"
+                    "Physics investigates the fundamental constituents of the universe, their interactions, and the energy transformations that govern natural systems.\n\n"
+                    "#### 📐 Key Equations & Units\n"
+                    "- Understand the SI units and dimensional formula.\n"
+                    "- Identify conservation laws (Conservation of Energy, Momentum, Charge).\n"
+                    "- Set up coordinate axes and establish sign conventions before calculating."
+                )
+                resp = f"### 💡 Physics Guide: **{clean_concept_title}**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like a step-by-step numerical calculation or practice exam questions on this topic?"
+                return resp.strip()
+
+        # 6. Electronics & Communication Systems
+        if (norm_subj and norm_subj.lower() == "electronics") or any(w in lower_query for w in ["electronics", "semiconductor", "transistor", "bjt", "mosfet", "op-amp", "logic gate"]):
+            detail = (
+                "**Electronics Engineering** deals with electrical circuits involving active electrical components (such as transistors, diodes, and integrated circuits) and associated passive interconnection technologies.\n\n"
+                "#### 🔬 Semiconductor Fundamentals & Devices\n"
+                "1. **Semiconductors**: Silicon (Si) and Germanium (Ge) doped with donor (pentavalent $\\rightarrow$ n-type) or acceptor (trivalent $\\rightarrow$ p-type) atoms.\n"
+                "2. **P-N Junction Diode**: Allows unidirectional current flow. Barrier potential is $\\approx 0.7\\,\\text{V}$ for Silicon and $\\approx 0.3\\,\\text{V}$ for Germanium under forward bias.\n"
+                "3. **Bipolar Junction Transistor (BJT)**: Current-controlled active device operating in Active, Cutoff, or Saturation modes ($I_E = I_B + I_C, I_C = \\beta I_B$).\n"
+                "4. **Operational Amplifier (Op-Amp)**: High-gain differential amplifier. For an inverting amplifier: $V_{\\text{out}} = -\\frac{R_f}{R_{\\text{in}}} V_{\\text{in}}$. For non-inverting: $V_{\\text{out}} = \\left(1 + \\frac{R_f}{R_1}\\right) V_{\\text{in}}$.\n\n"
+                "#### 💻 Digital Logic Gates Truth Summary\n\n"
+                "| Gate | Boolean Expression | Output is HIGH (`1`) when |\n"
+                "| :--- | :--- | :--- |\n"
+                "| **AND** | $Y = A \\cdot B$ | Both inputs are `1` |\n"
+                "| **OR** | $Y = A + B$ | At least one input is `1` |\n"
+                "| **NOT** | $Y = \\overline{A}$ | Input is `0` (Inverter) |\n"
+                "| **NAND** | $Y = \\overline{A \\cdot B}$ | Universal gate; NOT AND |\n"
+                "| **NOR** | $Y = \\overline{A + B}$ | Universal gate; NOT OR |\n"
+                "| **XOR** | $Y = A \\oplus B$ | Inputs are different ($0,1$ or $1,0$) |"
+            )
+            resp = f"### 💡 Electronics Engineering: **Semiconductors & Electronic Devices**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to review **Op-Amp circuit derivations**, **BJT biasing**, or solve practice questions on logic design?"
+            return resp.strip()
+
+        if (norm_subj and norm_subj.lower() in ["communication systems", "communication system"]) or any(w in lower_query for w in ["communication system", "modulation", "am modulation", "fm modulation", "pcm"]):
+            detail = (
+                "**Communication Systems** encompass the infrastructure and techniques used to transmit information from a source to a destination across a physical channel.\n\n"
+                "#### 📡 Why is Modulation Necessary?\n"
+                "1. **Antenna Size Reduction**: The practical antenna length requires $L \\approx \\frac{\\lambda}{4} = \\frac{c}{4f}$. High-frequency carriers drastically reduce physical antenna dimensions.\n"
+                "2. **Multiplexing**: Enables multiple signals to share the same physical medium simultaneously (FDM, TDM, CDMA).\n"
+                "3. **Noise Immunity & Range**: High-frequency signals propagate through atmosphere with controlled attenuation.\n\n"
+                "#### 📊 Analog vs. Digital Modulation\n"
+                "- **Amplitude Modulation (AM)**: Carrier amplitude varies proportionally to the message: $s(t) = [A_c + m(t)]\\cos(2\\pi f_c t)$. Bandwidth: $BW = 2f_m$.\n"
+                "- **Frequency Modulation (FM)**: Carrier frequency varies with message signal. Carson's Rule Bandwidth: $BW = 2(\\Delta f + f_m)$. Highly resilient to amplitude noise.\n"
+                "- **Pulse Code Modulation (PCM)**: Converts analog signals to digital stream in three stages: **Sampling** (Nyquist rate $f_s \\ge 2f_{\\text{max}}$), **Quantization**, and **Binary Encoding**."
+            )
+            resp = f"### 💡 Engineering: **Communication Systems & Modulation**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to explore **Nyquist Sampling Theorem**, **AM vs FM performance comparison**, or practice exam questions?"
+            return resp.strip()
+
+        # 7. Chemistry & Biology
+        if (norm_subj and norm_subj.lower() == "chemistry") or any(w in lower_query for w in ["chemistry", "chemical bond", "periodic table", "organic chemistry"]):
+            detail = (
+                "**Chemistry** investigates the composition, structure, properties, and transformation of matter at atomic and molecular levels.\n\n"
+                "#### 🔬 Chemical Bonding Mechanisms\n"
+                "1. **Ionic Bonding**: Complete electrostatic transfer of one or more valence electrons from a metal (low electronegativity) to a non-metal (high electronegativity), forming a crystal lattice (e.g., $\\text{NaCl}$).\n"
+                "2. **Covalent Bonding**: Mutual sharing of electron pairs between non-metallic atoms to achieve stable noble gas octets (e.g., $\\text{H}_2\\text{O}, \\text{CH}_4$).\n"
+                "3. **Metallic Bonding**: Positive metal ions embedded in a delocalized \"sea of electrons\", accounting for electrical and thermal conductivity.\n"
+                "4. **Hydrogen Bonding**: Strong dipole-dipole attraction between hydrogen bonded to a highly electronegative atom (N, O, F) and an adjacent lone pair.\n\n"
+                "#### 📈 Periodic Trends Summary\n"
+                "- **Atomic Radius**: Decreases across a period (left to right) due to increasing effective nuclear charge; increases down a group.\n"
+                "- **Ionization Energy & Electronegativity**: Increases across a period; decreases down a group."
+            )
+            resp = f"### 💡 Chemistry Guide: **Chemical Bonding & Molecular Structure**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to practice **Balancing Chemical Equations**, review **Organic Chemistry Functional Groups**, or solve practice questions?"
+            return resp.strip()
+
+        if (norm_subj and norm_subj.lower() == "biology") or any(w in lower_query for w in ["biology", "cell", "photosynthesis", "genetics", "dna", "mitosis"]):
+            detail = (
+                "**Biology** is the scientific study of life and living organisms, from molecular biochemistry to global ecosystems.\n\n"
+                "#### 🔬 Cell Biology & Key Organelles\n"
+                "- **Prokaryotes vs. Eukaryotes**: Prokaryotic cells (e.g., bacteria) lack membrane-bound nuclei; eukaryotic cells contain organized nuclei and compartmentalized organelles.\n"
+                "- **Mitochondria**: The \"powerhouse of the cell\", generating adenosine triphosphate (ATP) through cellular respiration.\n"
+                "- **Ribosomes**: Macromolecular machines responsible for translating mRNA into polypeptide chains (protein synthesis).\n"
+                "- **Nucleus**: Houses chromatin (DNA wrapped around histone proteins) and directs cellular activity.\n\n"
+                "#### 🌿 Photosynthesis Reaction Equation\n"
+                "$$6\\text{CO}_2 + 6\\text{H}_2\\text{O} + \\text{light energy} \\xrightarrow{\\text{chlorophyll}} \\text{C}_6\\text{H}_{12}\\text{O}_6 + 6\\text{O}_2$$\n"
+                "- **Light Reactions**: Occur in thylakoid membranes, producing ATP and NADPH while releasing $\\text{O}_2$.\n"
+                "- **Calvin Cycle (Dark Reactions)**: Occurs in stroma, fixing $\\text{CO}_2$ into glucose."
+            )
+            resp = f"### 💡 Biology Guide: **Cellular Biology & Metabolic Systems**\n\n{detail}{grounding_note}\n\n💡 **Suggested Next Step:** Would you like to explore **DNA Replication and Genetics**, review **Cellular Respiration stages**, or try practice questions?"
+            return resp.strip()
+
+        # 8. Pointers in C++ / C
         if "pointer" in lower_concept or "pointer" in lower_query:
             detail = (
                 "In C++, a **pointer** is a variable that stores the **memory address** of another variable rather than the direct value itself. "

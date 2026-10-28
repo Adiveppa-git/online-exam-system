@@ -124,9 +124,11 @@ class IntentClassifier:
 
     # Specific Follow-Up Patterns referring to preceding turn
     FOLLOW_UP_PATTERNS = [
-        r"explain\s+(the\s+)?(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|last)\s+point",
-        r"explain\s+point\s+\d+",
-        r"what\s+about\s+(the\s+)?(first|second|third|1st|2nd|3rd)\s+(point|one|phase|step)",
+        r"explain\s+(the\s+)?(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|last)\s+(point|method|approach|step|phase|option|solution|part)",
+        r"explain\s+(point|method|step|approach|option|phase|part)\s+\d+",
+        r"what\s+about\s+(the\s+)?(first|second|third|1st|2nd|3rd)\s+(point|method|approach|one|phase|step|option|solution)",
+        r"can\s+you\s+(explain|show|detail|clarify)\s+(the\s+)?(second|2nd|first|1st|other)\s+(method|approach|step|solution|point)",
+        r"show\s+(code|example)\s+for\s+(the\s+)?(second|2nd|first|1st)\s+(method|approach|step|point)",
         r"can\s+you\s+give\s+(me\s+)?an\s+example\s+of\s+(that|this|it)",
         r"give\s+(me\s+)?an\s+example\s+of\s+(that|this|it)",
         r"show\s+(me\s+)?an\s+example\s+of\s+(that|this|it)",
@@ -399,16 +401,16 @@ class IntentClassifier:
             if re.search(pat, q_clean):
                 return ("coding_help", "")
 
-        # 14. Performance Analysis (Checking student results / scores)
-        for pat in cls.PERFORMANCE_ANALYSIS_PATTERNS:
-            if re.search(pat, q_clean):
-                return ("performance_analysis", "")
-
-        # 15. Personalized Recommendations (Improving marks / diagnosing weaknesses)
-        # Check this BEFORE Exam Preparation so "how can I improve my marks" goes to recommendations
+        # 14. Personalized Recommendations (Improving marks / diagnosing weaknesses)
+        # Check this BEFORE Performance Analysis so questions like "how can I improve my marks" route to recommendations
         for pat in cls.PERSONALIZED_RECOMMENDATIONS_PATTERNS:
             if re.search(pat, q_clean):
                 return ("personalized_recommendations", "")
+
+        # 15. Performance Analysis (Checking student results / scores)
+        for pat in cls.PERFORMANCE_ANALYSIS_PATTERNS:
+            if re.search(pat, q_clean):
+                return ("performance_analysis", "")
 
         # 16. Exam Preparation & Study Planning (Non-performance preparation guides)
         for pat in cls.EXAM_PREPARATION_PATTERNS:
